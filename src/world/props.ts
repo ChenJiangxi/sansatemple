@@ -8,6 +8,7 @@ import { mesh, worldBox, lathe } from './util';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
+import { buildDing } from './bronze';
 
 export interface PropsBuild {
   interactives: THREE.Object3D[];
@@ -216,56 +217,93 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     group.add(g);
   }
 
-  // —— 院中铜鼎香炉：圆鼎、立耳、三足，立在石台上；两旁是红烛架 ——
-  const burner = new THREE.Group();
-  burner.add(mesh(lathe([[0, 0.45], [0.55, 0.45], [0.72, 0.6], [0.8, 0.85], [0.76, 1.0], [0.84, 1.06], [0.8, 1.1], [0, 1.0]], 32), M.bronze));
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
-    const leg = mesh(lathe([[0.1, 0], [0.13, 0.05], [0.08, 0.2], [0.09, 0.4], [0.12, 0.55], [0, 0.55]], 8), M.bronze);
-    leg.position.set(Math.cos(a) * 0.48, 0, Math.sin(a) * 0.48);
-    burner.add(leg);
-  }
-  for (const s of [-1, 1]) {
-    const ear = mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16, Math.PI), M.bronze);
-    ear.position.set(s * 0.62, 1.12, 0);
-    burner.add(ear);
-  }
-  const sand = mesh(new THREE.CircleGeometry(0.74, 32), new THREE.MeshStandardMaterial({ color: '#8f8676', roughness: 1 }), false);
-  sand.rotation.x = -Math.PI / 2;
-  sand.position.y = 1.02;
-  burner.add(sand);
-  const pedestal = mesh(worldBox(1.8, 0.18, 1.8, 1), stoneMat);
-  pedestal.position.y = -0.09;
-  burner.add(pedestal);
+  // —— 院中铜鼎香炉：青铜三足鼎（立耳、扉棱、兽面足、铭文），立在八角石座上；两旁是阶梯烛台 ——
+  const ding = buildDing({ front: '靜山禪寺', back: '風調雨順', base: true, stoneMat, stubs: 80 });
+  const burner = ding.group;
   burner.position.set(INCENSE.x, 0.18, INCENSE.z);
   burner.traverse((o) => (o.userData.interact = { type: 'incense' }));
   group.add(burner);
   interactives.push(burner);
-  const yardIncense = new IncenseSpot(group, INCENSE.x, 0.18 + 1.02, INCENSE.z, 0.72, 24, 0.45);
+  const yardIncense = new IncenseSpot(group, INCENSE.x, 0.18 + ding.ashY, INCENSE.z, 0.68, 24, 0.45);
   const flames: THREE.Mesh[] = [];
-  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffcf7a' });
+  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffd27e' });
   const candleMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.5 });
+  const waxMat = new THREE.MeshStandardMaterial({ color: '#d0392c', roughness: 0.35, emissive: '#3a0805', emissiveIntensity: 0.4 });
+  const ironMat = new THREE.MeshStandardMaterial({ color: '#2a2420', metalness: 0.55, roughness: 0.55 });
+  const glowTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(255,214,140,0.9)');
+    grd.addColorStop(0.35, 'rgba(255,170,80,0.35)');
+    grd.addColorStop(1, 'rgba(255,140,60,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+    return new THREE.CanvasTexture(c);
+  })();
+  const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   for (const sx of [-1, 1]) {
+    // 三层阶梯式铁烛台：每层一道接蜡的铜槽，红烛高低错落，烛泪挂在烛身上
     const rack = new THREE.Group();
-    const tray = mesh(worldBox(1.6, 0.06, 0.5, 1), M.bronze);
-    tray.position.y = 0.85;
-    rack.add(tray);
-    for (const lx of [-0.7, 0.7]) {
-      const leg = mesh(worldBox(0.06, 0.85, 0.06, 1), M.bronze);
-      leg.position.set(lx, 0.42, 0);
-      rack.add(leg);
+    const frame: THREE.BufferGeometry[] = [];
+    for (const lx of [-0.86, 0.86]) {
+      const side = new THREE.Shape();
+      side.moveTo(-0.3, 0);
+      side.lineTo(0.3, 0);
+      side.lineTo(0.3, 0.12);
+      side.lineTo(0.18, 0.78);
+      side.lineTo(0.02, 0.98);
+      side.lineTo(-0.14, 1.18);
+      side.lineTo(-0.3, 1.2);
+      side.closePath();
+      const eg = new THREE.ExtrudeGeometry(side, { depth: 0.04, bevelEnabled: false });
+      eg.rotateY(-Math.PI / 2);
+      eg.translate(lx + 0.02, 0, 0);
+      frame.push(eg.toNonIndexed());
     }
-    for (let k = 0; k < 7; k++) {
-      const h = 0.18 + r() * 0.16;
-      const cd = mesh(new THREE.CylinderGeometry(0.03, 0.03, h, 8), candleMat, false);
-      cd.position.set(-0.6 + k * 0.2, 0.88 + h / 2, (k % 2) * 0.12 - 0.06);
-      rack.add(cd);
-      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.022, 6, 4), flameMat);
-      fl.scale.set(1, 2.2, 1);
-      fl.position.set(cd.position.x, 0.88 + h + 0.04, cd.position.z);
-      rack.add(fl);
-      flames.push(fl);
+    const tiers = [
+      { y: 0.76, z: 0.17 },
+      { y: 0.96, z: 0.0 },
+      { y: 1.16, z: -0.17 },
+    ];
+    for (const t of tiers) {
+      frame.push(new THREE.BoxGeometry(1.72, 0.035, 0.2).translate(0, t.y, t.z).toNonIndexed());
+      frame.push(new THREE.BoxGeometry(1.72, 0.07, 0.02).translate(0, t.y + 0.02, t.z + 0.1).toNonIndexed());
     }
+    rack.add(mesh(mergeGeometries(frame)!, ironMat));
+    const trays: THREE.BufferGeometry[] = [];
+    const candles: THREE.BufferGeometry[] = [];
+    const drips: THREE.BufferGeometry[] = [];
+    tiers.forEach((t, ti) => {
+      trays.push(new THREE.BoxGeometry(1.66, 0.012, 0.17).translate(0, t.y + 0.024, t.z).toNonIndexed());
+      for (let k = 0; k < 8; k++) {
+        const h = 0.1 + r() * 0.22 - ti * 0.02;
+        const x = -0.72 + k * 0.205 + (r() - 0.5) * 0.04;
+        const z = t.z + (r() - 0.5) * 0.06;
+        const y0 = t.y + 0.03;
+        candles.push(new THREE.CylinderGeometry(0.026, 0.028, h, 10).translate(x, y0 + h / 2, z).toNonIndexed());
+        // 顶上一圈熔开的蜡，身上两三道烛泪
+        drips.push(new THREE.TorusGeometry(0.024, 0.007, 5, 12).rotateX(Math.PI / 2).translate(x, y0 + h - 0.004, z).toNonIndexed());
+        for (let d = 0; d < 2; d++) {
+          const a = r() * Math.PI * 2, dl = 0.03 + r() * 0.06;
+          drips.push(new THREE.CapsuleGeometry(0.006, dl, 3, 5).translate(x + Math.cos(a) * 0.027, y0 + h - dl / 2 - 0.01, z + Math.sin(a) * 0.027).toNonIndexed());
+        }
+        drips.push(new THREE.CylinderGeometry(0.04, 0.045, 0.008, 10).translate(x, y0 + 0.004, z).toNonIndexed());
+        const fl = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), flameMat);
+        fl.scale.set(1, 2.2, 1);
+        fl.position.set(x, y0 + h + 0.035, z);
+        rack.add(fl);
+        flames.push(fl);
+        const glow = new THREE.Sprite(glowMat);
+        glow.scale.setScalar(0.16);
+        glow.position.copy(fl.position);
+        rack.add(glow);
+      }
+    });
+    rack.add(mesh(mergeGeometries(trays)!, M.bronze, false));
+    rack.add(mesh(mergeGeometries(candles)!, candleMat, false));
+    rack.add(mesh(mergeGeometries(drips)!, waxMat, false));
     rack.position.set(INCENSE.x + sx * 2.6, 0, INCENSE.z - 0.4);
     group.add(rack);
   }

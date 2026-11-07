@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { SIDE_HALLS, BELL, DRUM } from '../layout';
 import { plaqueTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
+import { buildTempleBell } from './bronze';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 
 const plaqueNames = ['觀音殿', '地藏殿'];
@@ -124,26 +125,9 @@ function bellTower(group: THREE.Group): StrikeBuild {
   const hanger = mesh(worldBox(BELL.size - 0.8, 0.34, 0.34, 1), M.red);
   hanger.position.set(0, colTop - 0.5, 0);
   g.add(hanger);
-  // 梵钟：钟口略外撇，钟身有纹带
+  // 梵钟：波浪钟口、莲瓣、四区佛号铭文、莲花撞座、蒲牢钮，青铜带铜锈
   const bronze = new THREE.MeshStandardMaterial({ color: '#4f5a48', metalness: 0.85, roughness: 0.42 });
-  const bell = new THREE.Group();
-  const prof: [number, number][] = [[0, 0.02], [0.95, 0], [0.98, 0.1], [0.86, 0.45], [0.78, 1.2], [0.72, 1.8], [0.6, 2.12], [0.38, 2.24], [0, 2.28]];
-  bell.add(mesh(lathe(prof.map(([r, y]) => [r, y - 2.28]), 40), bronze));
-  for (const y of [-1.85, -1.2, -0.45]) {
-    const ring = mesh(new THREE.TorusGeometry(y < -1.5 ? 0.86 : 0.74, 0.035, 8, 48), bronze);
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = y;
-    bell.add(ring);
-  }
-  for (let i = 0; i < 4; i++) {
-    const band = mesh(new THREE.BoxGeometry(0.06, 1.3, 0.06), bronze);
-    const a = (i / 4) * Math.PI * 2;
-    band.position.set(Math.cos(a) * 0.79, -1.15, Math.sin(a) * 0.79);
-    bell.add(band);
-  }
-  const knob = mesh(new THREE.TorusGeometry(0.2, 0.08, 8, 16, Math.PI), bronze);
-  knob.position.y = 0.05;
-  bell.add(knob);
+  const bell = buildTempleBell();
   bell.position.set(0, colTop - 1.2, 0);
   g.add(bell);
   const chain = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), bronze);

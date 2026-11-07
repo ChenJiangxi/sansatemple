@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { HALL, CUSHIONS, ALTAR_BURNER } from '../layout';
 import { plaqueTexture, rng, caihuaTexture, cofferTexture, thousandBuddhaTexture, altarClothTexture, geshanTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
+import { buildDing } from './bronze';
 import { pbr, loadTexture } from './pbr';
 
 export interface HallBuild {
@@ -432,6 +433,41 @@ function dragonSlabTexture() {
   return t;
 }
 
+// 蒲团的缝线：竖线是顶上的放射缝线，横线是绗线和滚边（车削的 v 方向从底到顶）
+function cushionTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#f2f2f2';
+  g.fillRect(0, 0, 512, 128);
+  // 织物纹理
+  for (let i = 0; i < 3000; i++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(150,150,150,0.18)';
+    g.fillRect(Math.random() * 512, Math.random() * 128, 2, 1);
+  }
+  g.strokeStyle = 'rgba(90,70,40,0.55)';
+  g.lineWidth = 2;
+  for (let k = 0; k < 8; k++) {
+    const x = (k / 8) * 512 + 32;
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, 48);
+    g.stroke();
+  }
+  g.setLineDash([6, 5]);
+  for (const y of [30, 50]) {
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(512, y);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
 export function buildHall(scene: THREE.Scene): HallBuild {
   const H = HALL;
   const M = chineseMats();
@@ -802,24 +838,11 @@ export function buildHall(scene: THREE.Scene): HallBuild {
       group.add(f);
     }
   }
-  // 铜鼎香炉：三足、两只立耳
-  const burner = new THREE.Group();
-  burner.add(mesh(lathe([[0, 0.08], [0.2, 0.08], [0.27, 0.14], [0.29, 0.24], [0.26, 0.31], [0.28, 0.33], [0, 0.31]], 32), M.bronze));
-  for (let i = 0; i < 3; i++) {
-    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
-    const leg = mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.14, 8), M.bronze);
-    leg.position.set(Math.cos(a) * 0.17, 0.06, Math.sin(a) * 0.17);
-    burner.add(leg);
-  }
-  for (const sx of [-1, 1]) {
-    const ear = mesh(new THREE.TorusGeometry(0.06, 0.016, 6, 12, Math.PI), M.bronze);
-    ear.position.set(sx * 0.2, 0.33, 0);
-    burner.add(ear);
-  }
-  const ash = mesh(new THREE.CircleGeometry(0.25, 28), new THREE.MeshStandardMaterial({ color: '#b9b2a4', roughness: 1 }), false);
-  ash.rotation.x = -Math.PI / 2;
-  ash.position.y = 0.3;
-  burner.add(ash);
+  // 铜鼎香炉：和院中大鼎同一造型，缩小放在供桌上
+  const ding = buildDing({ front: '佛光普照', back: '法輪常轉', stubs: 45 });
+  const DS = 0.36;
+  const burner = ding.group;
+  burner.scale.setScalar(DS);
   burner.position.set(ALTAR_BURNER.x, ttop, ALTAR_BURNER.z);
   burner.traverse((o) => (o.userData.interact = { type: 'altarIncense' }));
   group.add(burner);
@@ -829,22 +852,32 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   burnerHit.userData.interact = { type: 'altarIncense' };
   group.add(burnerHit);
   interactives.push(burnerHit);
-  const altarSandY = ttop + 0.3;
+  const altarSandY = ttop + ding.ashY * DS;
 
   // 木鱼（左）与铜磬（右），放在红架子上
   {
     const stand = mesh(worldBox(0.8, 0.45, 0.6, 1), M.red);
     stand.position.set(-3.1, H.baseH + 0.225, H.tableZ1 + 0.1);
     group.add(stand);
-    const mk = mesh(new THREE.SphereGeometry(0.32, 24, 16), new THREE.MeshPhysicalMaterial({ color: '#9a4a22', roughness: 0.35, clearcoat: 0.6 }));
-    mk.scale.set(1.1, 0.85, 1);
-    mk.position.set(-3.1, H.baseH + 0.45 + 0.27, H.tableZ1 + 0.1);
+    const mkPad = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.07, 24), new THREE.MeshStandardMaterial({ color: '#c8952f', roughness: 0.85 }));
+    mkPad.position.set(-3.1, H.baseH + 0.485, H.tableZ1 + 0.1);
+    group.add(mkPad);
+    const mk = mesh(new THREE.SphereGeometry(0.32, 32, 20), new THREE.MeshPhysicalMaterial({ color: '#8c2616', roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.2 }));
+    mk.scale.set(1.12, 0.86, 1.02);
+    mk.position.set(-3.1, H.baseH + 0.52 + 0.25, H.tableZ1 + 0.1);
     group.add(mk);
-    const slit = mesh(new THREE.TorusGeometry(0.34, 0.025, 6, 32, Math.PI * 0.8), new THREE.MeshStandardMaterial({ color: '#2a140a' }));
+    const slit = mesh(new THREE.TorusGeometry(0.335, 0.03, 8, 40, Math.PI * 0.8), new THREE.MeshStandardMaterial({ color: '#1c0b06', roughness: 0.9 }));
     slit.rotation.set(Math.PI / 2, 0, Math.PI * 0.1);
-    slit.scale.set(1.05, 0.95, 1);
-    slit.position.set(-3.1, H.baseH + 0.45 + 0.24, H.tableZ1 + 0.1);
+    slit.scale.set(1.08, 0.98, 1);
+    slit.position.set(-3.1, H.baseH + 0.52 + 0.2, H.tableZ1 + 0.1);
     group.add(slit);
+    for (const dy of [0.045, -0.045]) {
+      const lip = mesh(new THREE.TorusGeometry(0.345, 0.008, 6, 40, Math.PI * 0.8), M.gold, false);
+      lip.rotation.copy(slit.rotation);
+      lip.scale.copy(slit.scale);
+      lip.position.set(-3.1, H.baseH + 0.52 + 0.2 + dy, H.tableZ1 + 0.1);
+      group.add(lip);
+    }
     const stand2 = mesh(lathe([[0, 0], [0.3, 0], [0.3, 0.4], [0.26, 0.45], [0, 0.45]], 20), M.red);
     stand2.position.set(3.1, H.baseH, H.tableZ1 + 0.1);
     group.add(stand2);
@@ -857,8 +890,13 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   }
 
   // —— 圆蒲团：一个实例化网格，点中时用 instanceId 找回座位 ——
-  const cushionGeo = lathe([[0, 0], [0.3, 0], [0.33, 0.04], [0.33, 0.11], [0.29, 0.16], [0, 0.17]], 24);
-  const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92 });
+  // 蒲团：顶面中间略凹、四周鼓起，侧边一道滚边，顶上八道放射缝线和一圈绗线
+  const cushionGeo = mergeGeometries([
+    lathe([[0, 0], [0.3, 0], [0.335, 0.025], [0.345, 0.075], [0.34, 0.125], [0.31, 0.158], [0.22, 0.172], [0.08, 0.162], [0, 0.155]], 40),
+    new THREE.TorusGeometry(0.343, 0.012, 6, 48).rotateX(Math.PI / 2).translate(0, 0.075, 0),
+    new THREE.SphereGeometry(0.03, 10, 6).scale(1, 0.4, 1).translate(0, 0.156, 0),
+  ].map((g) => g.toNonIndexed()))!;
+  const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, map: cushionTexture() });
   const cushions = new THREE.InstancedMesh(cushionGeo, cushionMat, CUSHIONS.length);
   const cA = new THREE.Color('#c08a2c');
   const cB = cA.clone().lerp(new THREE.Color('#9b3b24'), 0.18);

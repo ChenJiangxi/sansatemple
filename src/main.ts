@@ -447,7 +447,7 @@ async function start() {
       // 镜头：从香炉的右后方回看小和尚
       const fy = heightAt(spot.x, spot.z);
       if (place === 'altar') cine.pos.set(HALL.tableX1 + 1.05, fy + 1.5, burner.z + 0.15);
-      else cine.pos.set(burner.x + 1.45, fy + 1.3, burner.z - 0.85);
+      else cine.pos.set(burner.x + 2.15, fy + 2.35, burner.z - 1.45); // 大鼎口沿高 1.4 m：镜头要高过口沿，才看得到香灰和人
       cine.look.set((burner.x + spot.x) / 2, (burner.y + fy + 0.9) / 2, (burner.z + spot.z) / 2 + 0.1);
       cine.on = true;
       ui.root.classList.add('cine');
