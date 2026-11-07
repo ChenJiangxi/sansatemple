@@ -124,6 +124,8 @@ wss.on('connection', (ws) => {
   let lastMsgs = [];
   ws.isAlive = true;
   ws.on('pong', () => (ws.isAlive = true));
+  // 超长或格式错误的帧会触发 error；没有监听时整个进程会退出
+  ws.on('error', () => ws.terminate());
 
   ws.on('message', (raw) => {
     // 简单限速：每秒最多 30 条

@@ -1,7 +1,7 @@
 // Q 版小和尚：几何体拼成，动作用关节旋转做程序动画
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { kasayaTexture } from './textures';
+
 
 export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense';
 
@@ -16,11 +16,13 @@ interface Pose {
   armLr: number; armRr: number; // 手臂外展
   bob: number;
   sway: number; // 走路时下摆左右摆
+  wrist: number; // 手腕弯曲（合十时让指尖朝上）
 }
 
-const ZERO: Pose = { drop: 0, legL: 0, legR: 0, legSpread: 0, torso: 0, head: 0, armLp: 0, armRp: 0, armLy: 0, armRy: 0, armLr: 0, armRr: 0, bob: 0, sway: 0 };
+// 默认站姿：双手交叠放在腹前，宽袖垂在身前
+const ZERO: Pose = { drop: 0, legL: 0, legR: 0, legSpread: 0, torso: 0, head: 0, armLp: -1.0, armRp: -1.0, armLy: -0.7, armRy: 0.7, armLr: 0, armRr: 0, bob: 0, sway: 0, wrist: -0.35 };
 
-const HAP: Partial<Pose> = { armLp: -1.32, armRp: -1.32, armLy: -0.95, armRy: 0.95 };
+const HAP: Partial<Pose> = { armLp: -1.32, armRp: -1.32, armLy: -0.85, armRy: 0.85, wrist: -1.65 };
 
 function lerpPose(a: Pose, b: Pose, t: number): Pose {
   const o = { ...a };
@@ -43,8 +45,8 @@ const BOW_KEYS: [number, Pose][] = [
   [0.5, mk({ ...HAP })],
   [1.0, mk({ ...HAP, torso: 0.15, head: 0.15 })],
   [1.8, mk({ ...HAP, drop: KNEEL_DROP, legL: 1.5, legR: 1.5, torso: 0.1 })],
-  [2.6, mk({ drop: KNEEL_DROP - 0.02, legL: 1.5, legR: 1.5, torso: 1.25, head: 0.35, armLp: -0.9, armRp: -0.9, armLy: -0.15, armRy: 0.15 })],
-  [3.4, mk({ drop: KNEEL_DROP - 0.02, legL: 1.5, legR: 1.5, torso: 1.3, head: 0.4, armLp: -1.2, armRp: -1.2, armLy: -0.1, armRy: 0.1 })],
+  [2.6, mk({ drop: KNEEL_DROP - 0.02, legL: 1.5, legR: 1.5, torso: 1.25, head: 0.35, armLp: -0.9, armRp: -0.9, armLy: -0.15, armRy: 0.15, wrist: 0 })],
+  [3.4, mk({ drop: KNEEL_DROP - 0.02, legL: 1.5, legR: 1.5, torso: 1.3, head: 0.4, armLp: -1.2, armRp: -1.2, armLy: -0.1, armRy: 0.1, wrist: 0 })],
   [4.2, mk({ ...HAP, drop: KNEEL_DROP, legL: 1.5, legR: 1.5, torso: 0.1 })],
   [5.0, mk({ ...HAP, torso: 0.1 })],
   [5.6, mk({})],
@@ -71,13 +73,13 @@ function hapjangPose(t: number): Pose {
 // 上香（双手持香 → 举到额前 → 俯身插香 → 合掌问讯）的时间轴
 export const INCENSE_DURATION = 6.0;
 export const INCENSE_PLANT_TIME = 2.75;
-const INC_HOLD: Partial<Pose> = { armLp: -1.18, armRp: -1.18, armLy: -0.8, armRy: 0.8 };
+const INC_HOLD: Partial<Pose> = { armLp: -1.18, armRp: -1.18, armLy: -0.75, armRy: 0.75, wrist: -1.2 };
 const INC_KEYS: [number, Pose, [number, number, number]][] = [
   // 时间, 姿势, 香在上身坐标系里的位置
   [0, mk({}), [0, 0.12, 0.18]],
   [0.8, mk({ ...INC_HOLD }), [0, 0.2, 0.22]],
-  [1.5, mk({ armLp: -1.75, armRp: -1.75, armLy: -0.72, armRy: 0.72, head: 0.12 }), [0, 0.36, 0.16]],
-  [2.7, mk({ armLp: -0.95, armRp: -0.95, armLy: -0.55, armRy: 0.55, torso: 0.55, head: 0.35 }), [0, 0.1, 0.36]],
+  [1.5, mk({ armLp: -1.75, armRp: -1.75, armLy: -0.7, armRy: 0.7, head: 0.12, wrist: -1.3 }), [0, 0.36, 0.16]],
+  [2.7, mk({ armLp: -0.95, armRp: -0.95, armLy: -0.55, armRy: 0.55, torso: 0.55, head: 0.35, wrist: -0.8 }), [0, 0.1, 0.36]],
   [3.3, mk({ ...HAP }), [0, 0.1, 0.36]],
   [4.1, mk({ ...HAP, torso: 0.5, head: 0.25 }), [0, 0.1, 0.36]],
   [4.9, mk({ ...HAP }), [0, 0.1, 0.36]],
@@ -105,14 +107,66 @@ const SKIN = '#efb487';
 const SCALP = '#cfa58d'; // 剃过的头顶，比脸色略青
 const SHOE = '#3b2a20';
 
+// 福田衣：一条条竖向布块，每条再分成长短两截、上下错开（田相），缝线细而暗，上下有一道缘边
+function fieldRobeTexture() {
+  const W = 512, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#8a3420';
+  g.fillRect(0, 0, W, H);
+  const strips = 7, sw = W / strips;
+  const seam = (x0: number, y0: number, x1: number, y1: number) => {
+    g.strokeStyle = 'rgba(70,22,10,0.85)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.moveTo(x0, y0);
+    g.lineTo(x1, y1);
+    g.stroke();
+    g.strokeStyle = 'rgba(196,110,70,0.45)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(x0 + 2, y0 + 2);
+    g.lineTo(x1 + 2, y1 + 2);
+    g.stroke();
+  };
+  for (let i = 0; i < strips; i++) {
+    const x = i * sw;
+    // 每块布颜色略有深浅
+    g.fillStyle = `rgba(${i % 2 ? '120,40,20' : '160,70,40'},0.12)`;
+    g.fillRect(x, 0, sw, H);
+    seam(x, 0, x, H);
+    const cuts = i % 2 ? [0.36, 0.7] : [0.28, 0.6];
+    for (const f of cuts) seam(x, H * f, x + sw, H * f);
+  }
+  // 布纹
+  for (let k = 0; k < 2500; k++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,200,160,0.05)' : 'rgba(40,10,0,0.06)';
+    g.fillRect(Math.random() * W, Math.random() * H, 2, 1);
+  }
+  // 缘：上下边一道暗金色的边
+  for (const y of [0, H - 16]) {
+    g.fillStyle = '#a8743a';
+    g.fillRect(0, y, W, 16);
+    g.fillStyle = 'rgba(60,20,8,0.6)';
+    g.fillRect(0, y === 0 ? 16 : H - 18, W, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
 let sharedMats: Record<string, THREE.Material> | null = null;
 function mats() {
   if (!sharedMats) {
     sharedMats = {
-      robe: new THREE.MeshStandardMaterial({ color: ROBE, roughness: 0.85 }),
+      robe: new THREE.MeshPhysicalMaterial({ color: ROBE, roughness: 0.82, sheen: 0.6, sheenRoughness: 0.55, sheenColor: new THREE.Color('#fff0c4') }),
       lining: new THREE.MeshStandardMaterial({ color: LINING, roughness: 0.9, side: THREE.BackSide }),
       legging: new THREE.MeshStandardMaterial({ color: LEGGING, roughness: 0.9 }),
-      kasaya: new THREE.MeshStandardMaterial({ map: kasayaTexture(), roughness: 0.8, side: THREE.DoubleSide }),
+      kasaya: new THREE.MeshPhysicalMaterial({ map: fieldRobeTexture(), roughness: 0.78, sheen: 0.45, sheenRoughness: 0.6, sheenColor: new THREE.Color('#ffb898'), side: THREE.DoubleSide }),
       collar: new THREE.MeshStandardMaterial({ color: COLLAR, roughness: 0.8 }),
       skin: new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.6 }),
       headSkin: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
@@ -124,7 +178,7 @@ function mats() {
       moktak: new THREE.MeshStandardMaterial({ color: '#8c2616', roughness: 0.35 }),
       dark: new THREE.MeshStandardMaterial({ color: '#1c0b06', roughness: 0.9 }),
       wood: new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.6 }),
-      bead: new THREE.MeshStandardMaterial({ color: '#5a2a16', roughness: 0.4 }),
+      bead: new THREE.MeshStandardMaterial({ color: '#4a2212', roughness: 0.35 }),
     };
   }
   return sharedMats;
@@ -132,8 +186,8 @@ function mats() {
 
 // —— 形体尺寸 ——
 // 上身（随 torso 前倾）：车削出来的上衣，前后压扁
-const ROBE_PROFILE: [number, number][] = [[0.25, -0.08], [0.27, -0.02], [0.24, 0.12], [0.2, 0.28], [0.17, 0.36], [0.1, 0.4]];
-const RZ = 0.86;
+const ROBE_PROFILE: [number, number][] = [[0.21, -0.08], [0.225, -0.02], [0.21, 0.1], [0.185, 0.22], [0.165, 0.3], [0.13, 0.36], [0.075, 0.4]];
+const RZ = 0.84;
 function robeR(y: number) {
   const P = ROBE_PROFILE;
   if (y <= P[0][1]) return P[0][0];
@@ -146,10 +200,27 @@ function robeR(y: number) {
 // 袈裟上沿：左肩最高，右腋下最低（φ 从正前方起算，+x 是人物的左边）
 const kasayaTop = (phi: number) => 0.2 + 0.17 * Math.pow((1 + Math.sin(phi)) / 2, 1.6);
 // 下摆（挂在胯上，跪坐时压扁）
-const SKIRT: [number, number][] = [[0.296, -0.235], [0.29, -0.21], [0.27, -0.12], [0.245, -0.02], [0.22, 0.04]];
+const SKIRT: [number, number][] = [[0.274, -0.235], [0.268, -0.2], [0.25, -0.12], [0.228, -0.03], [0.2, 0.04]];
+// 下摆的竖褶：越往下越明显
+function folds(g: THREE.BufferGeometry) {
+  const p = g.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const phi = Math.atan2(x, z);
+    const t = Math.min(1, Math.max(0, (0.04 - y) / 0.275)) ** 1.4;
+    const k = 1 + t * (0.045 * Math.sin(9 * phi) + 0.018 * Math.sin(17 * phi + 1.3));
+    p.setXYZ(i, x * k, y + t * 0.006 * Math.sin(9 * phi), z * k);
+  }
+  g.computeVertexNormals();
+  return g;
+}
 // 头：略扁的球
 const HEAD_C = new THREE.Vector3(0, 0.24, 0);
 const HEAD_R = new THREE.Vector3(0.28, 0.27, 0.272);
+const cheek = (y: number) => {
+  const dy = y - HEAD_C.y;
+  return dy >= 0 ? 1 : 1 + 0.05 * Math.sin(Math.min(1, -dy / 0.2) * Math.PI * 0.5);
+};
 
 const Z = new THREE.Vector3(0, 0, 1);
 function xf(g: THREE.BufferGeometry, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
@@ -161,7 +232,7 @@ function onHead(g: THREE.BufferGeometry, x: number, y: number, lift: number, rot
   const dx = x / HEAD_R.x, dy = (y - HEAD_C.y) / HEAD_R.y;
   const z = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy)) * HEAD_R.z;
   const n = new THREE.Vector3(x / HEAD_R.x ** 2, (y - HEAD_C.y) / HEAD_R.y ** 2, z / HEAD_R.z ** 2).normalize();
-  const p = new THREE.Vector3(x, y, z).addScaledVector(n, lift);
+  const p = new THREE.Vector3(x * cheek(y), y, z * cheek(y)).addScaledVector(n, lift);
   const q = new THREE.Quaternion().setFromUnitVectors(Z, n).multiply(new THREE.Quaternion().setFromAxisAngle(Z, rotZ));
   return g.applyMatrix4(new THREE.Matrix4().compose(p, q, new THREE.Vector3(...scale)));
 }
@@ -181,8 +252,6 @@ function buildGeo() {
   ]);
 
   // 下摆
-  const skirt = new THREE.LatheGeometry(SKIRT.map(([r, y]) => new THREE.Vector2(r, y)), 32);
-  skirt.scale(1, 1, 0.9);
   const skirtR = (y: number) => {
     for (let i = 0; i < SKIRT.length - 1; i++) {
       const [r0, y0] = SKIRT[i], [r1, y1] = SKIRT[i + 1];
@@ -190,7 +259,10 @@ function buildGeo() {
     }
     return SKIRT[SKIRT.length - 1][0];
   };
-  const skirtKasaya = new THREE.LatheGeometry([-0.15, -0.12, -0.07, -0.02, 0.04].map((y) => new THREE.Vector2(skirtR(y) + 0.007, y)), 32);
+  const ys = (y0: number, y1: number, n: number) => Array.from({ length: n + 1 }, (_, i) => y0 + ((y1 - y0) * i) / n);
+  const skirt = folds(new THREE.LatheGeometry(ys(-0.235, 0.04, 12).map((y) => new THREE.Vector2(skirtR(y), y)), 54));
+  skirt.scale(1, 1, 0.9);
+  const skirtKasaya = folds(new THREE.LatheGeometry(ys(-0.15, 0.04, 8).map((y) => new THREE.Vector2(skirtR(y) + 0.007, y)), 54));
   skirtKasaya.scale(1, 1, 0.9);
   const su = skirtKasaya.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < su.count; i++) su.setX(i, su.getX(i) * 2);
@@ -264,7 +336,7 @@ function buildGeo() {
   for (let i = 0; i < 64; i++) {
     const phi = (i / 64) * Math.PI * 2;
     const y = 0.395 - 0.22 * Math.pow((1 + Math.cos(phi)) / 2, 4);
-    const r = robeR(y) + 0.03;
+    const r = robeR(y) + 0.026;
     malaPts.push(new THREE.Vector3(Math.sin(phi) * r, y, Math.cos(phi) * r * RZ + 0.004));
   }
   const malaCurve = new THREE.CatmullRomCurve3(malaPts, true);
@@ -272,21 +344,31 @@ function buildGeo() {
   for (let k = 0; k < 24; k++) {
     const u = 0.04 + (k / 23) * 0.92;
     const p = malaCurve.getPointAt(u);
-    malaParts.push(xf(new THREE.SphereGeometry(0.016, 8, 6), [p.x, p.y, p.z]));
+    malaParts.push(xf(new THREE.SphereGeometry(0.013, 8, 6), [p.x, p.y, p.z]));
   }
   const g0 = malaCurve.getPointAt(0);
-  malaParts.push(xf(new THREE.SphereGeometry(0.024, 10, 8), [g0.x, g0.y - 0.004, g0.z + 0.004]));
+  malaParts.push(xf(new THREE.SphereGeometry(0.02, 10, 8), [g0.x, g0.y - 0.004, g0.z + 0.004]));
   malaParts.push(xf(new THREE.ConeGeometry(0.014, 0.05, 8), [g0.x, g0.y - 0.05, g0.z + 0.006]));
   const mala = merge(malaParts);
 
   // 头：脸、耳朵（耳垂较长）、鼻子并成一块
   const ears: THREE.BufferGeometry[] = [];
   for (const sx of [-1, 1]) {
-    ears.push(xf(new THREE.SphereGeometry(0.062, 12, 10), [sx * 0.274, 0.215, -0.01], [0.42, 1.2, 0.75]));
+    ears.push(xf(new THREE.SphereGeometry(0.06, 14, 10), [sx * 0.268, 0.215, -0.015], [0.55, 1.15, 0.8], [0, sx * 0.35, 0]));
     ears.push(xf(new THREE.SphereGeometry(0.036, 10, 8), [sx * 0.281, 0.135, 0.004], [0.6, 1, 0.85]));
   }
+  const skull = xf(new THREE.SphereGeometry(0.28, 36, 26), [HEAD_C.x, HEAD_C.y, HEAD_C.z], [1, HEAD_R.y / 0.28, HEAD_R.z / 0.28]);
+  {
+    const sp = skull.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < sp.count; i++) {
+      const k = cheek(sp.getY(i));
+      sp.setX(i, sp.getX(i) * k);
+      sp.setZ(i, sp.getZ(i) * k);
+    }
+    skull.computeVertexNormals();
+  }
   const head = merge([
-    xf(new THREE.SphereGeometry(0.28, 32, 22), [HEAD_C.x, HEAD_C.y, HEAD_C.z], [1, HEAD_R.y / 0.28, HEAD_R.z / 0.28]),
+    skull,
     ...ears,
     onHead(new THREE.SphereGeometry(0.021, 10, 8), 0, 0.172, -0.006, 0, [1, 0.8, 0.75]),
   ]);
@@ -319,23 +401,23 @@ function buildGeo() {
   const blush = merge([-1, 1].map((sx) => onHead(new THREE.CircleGeometry(0.038, 14), sx * 0.165, 0.165, 0.004)));
 
   // 宽大的袖子：袖口外张，靠背后的一侧更长，抬手时像垂下的袖兜
-  const sleeve = new THREE.CylinderGeometry(0.07, 0.15, 0.25, 18, 4, true);
+  const sleeve = new THREE.CylinderGeometry(0.062, 0.13, 0.25, 20, 4, true);
   const sp = sleeve.attributes.position as THREE.BufferAttribute;
   for (let i = 0; i < sp.count; i++) {
     const y = sp.getY(i), z = sp.getZ(i);
     const t = (0.125 - y) / 0.25;
-    const back = Math.max(0, -z / 0.15);
+    const back = Math.max(0, -z / 0.13);
     sp.setY(i, y - 0.125 - t * t * 0.085 * back);
     sp.setZ(i, z - t * t * 0.035 * back);
   }
   sleeve.computeVertexNormals();
-  const sleeveOuter = merge([sleeve.clone(), new THREE.SphereGeometry(0.07, 12, 8)]);
+  const sleeveOuter = merge([sleeve.clone(), new THREE.SphereGeometry(0.066, 14, 10)]);
   const shoulderCap = new THREE.SphereGeometry(0.077, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
-  // 手：连指手套状，拇指朝前、朝身体内侧
+  // 手：连指手套状，以手腕为轴（挂在手臂 y=-0.25 处），拇指朝前、朝身体内侧
   const hand = (sx: number) =>
     merge([
-      xf(new THREE.SphereGeometry(0.052, 12, 10), [0, -0.275, 0], [0.85, 1.15, 0.72]),
-      xf(new THREE.SphereGeometry(0.022, 8, 6), [-sx * 0.036, -0.25, 0.022], [1, 1.3, 1]),
+      xf(new THREE.SphereGeometry(0.05, 14, 10), [0, -0.03, 0], [0.75, 1.15, 0.85]),
+      xf(new THREE.SphereGeometry(0.021, 8, 6), [-sx * 0.03, -0.005, 0.024], [1, 1.3, 1]),
     ]);
 
   // 手里拿的：木鱼、木槌、念珠
@@ -365,6 +447,8 @@ export class Monk {
   private headG = new THREE.Group();
   private armL = new THREE.Group();
   private armR = new THREE.Group();
+  private handL = new THREE.Group();
+  private handR = new THREE.Group();
   private moktakProp: THREE.Group;
   private malletProp: THREE.Mesh;
   private beadsProp: THREE.Mesh;
@@ -420,9 +504,12 @@ export class Monk {
 
     // 手臂：宽袖（外黄里深）+ 手；左肩上搭着袈裟
     for (const [g, sx] of [[this.armL, 1], [this.armR, -1]] as [THREE.Group, number][]) {
-      g.position.set(sx * 0.19, 0.31, 0);
+      g.position.set(sx * 0.2, 0.3, 0);
       g.rotation.order = 'YXZ';
-      g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), mesh(sx > 0 ? G.handL : G.handR, M.skin));
+      const h = sx > 0 ? this.handL : this.handR;
+      h.position.y = -0.25;
+      h.add(mesh(sx > 0 ? G.handL : G.handR, M.skin));
+      g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), h);
       this.torso.add(g);
     }
     this.armL.add(mesh(G.shoulderCap, M.kasaya));
@@ -492,7 +579,8 @@ export class Monk {
         this.walkPhase += dt * (5 + this.speed * 2.6);
         const s = Math.sin(this.walkPhase);
         const amp = Math.min(1, this.speed / 2);
-        target = mk({ legL: s * 0.55 * amp, legR: -s * 0.55 * amp, armLp: -s * 0.4 * amp, armRp: s * 0.4 * amp, armLr: 0.12, armRr: -0.12, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, torso: 0.05, sway: s * 0.045 * amp });
+        // 走路时双手仍交叠在身前，只随步子轻轻晃
+        target = mk({ legL: s * 0.55 * amp, legR: -s * 0.55 * amp, armLp: -1.0 + s * 0.07 * amp, armRp: -1.0 - s * 0.07 * amp, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, torso: 0.05, sway: s * 0.045 * amp });
         rate = 14;
         break;
       }
@@ -532,23 +620,23 @@ export class Monk {
       case 'sit': {
         // 盘腿打坐，双手放在腿上
         const br = Math.sin(t * 1.1) * 0.01;
-        target = mk({ drop: -(HIP - 0.16), legL: -1.45, legR: -1.45, legSpread: 0.75, armLp: -0.55, armRp: -0.55, armLy: -0.55, armRy: 0.55, head: 0.18, bob: br });
+        target = mk({ drop: -(HIP - 0.16), legL: -1.45, legR: -1.45, legSpread: 0.75, armLp: -0.8, armRp: -0.8, armLy: -0.62, armRy: 0.62, wrist: -0.6, head: 0.18, bob: br });
         break;
       }
       case 'bench':
-        target = mk({ drop: 0.46 - HIP + 0.03, legL: -1.35, legR: -1.35, armLp: -0.6, armRp: -0.6, armLy: -0.45, armRy: 0.45, head: 0.1, bob: Math.sin(t * 1.1) * 0.006 });
+        target = mk({ drop: 0.46 - HIP + 0.03, legL: -1.35, legR: -1.35, armLp: -0.8, armRp: -0.8, armLy: -0.62, armRy: 0.62, wrist: -0.6, head: 0.1, bob: Math.sin(t * 1.1) * 0.006 });
         break;
       case 'moktak': {
         this.tap = Math.max(0, this.tap - dt * 6);
-        target = mk({ armLp: -1.0, armLy: -0.45, armRp: -1.15 + this.tap * 0.5, armRy: 0.5, head: 0.2, torso: 0.06 });
+        target = mk({ armLp: -1.0, armLy: -0.45, armRp: -1.15 + this.tap * 0.5, armRy: 0.5, wrist: 0, head: 0.2, torso: 0.06 });
         rate = 20;
         break;
       }
       case 'rosary':
-        target = mk({ armLp: -1.05, armRp: -1.1, armLy: -0.7, armRy: 0.75, head: 0.28, torso: 0.05, bob: Math.sin(t * 1.4) * 0.006 });
+        target = mk({ armLp: -1.05, armRp: -1.1, armLy: -0.7, armRy: 0.75, wrist: -0.4, head: 0.28, torso: 0.05, bob: Math.sin(t * 1.4) * 0.006 });
         break;
       default:
-        target = mk({ bob: Math.sin(t * 1.6) * 0.008, armLr: 0.08, armRr: -0.08 });
+        target = mk({ bob: Math.sin(t * 1.6) * 0.008 });
     }
 
     const k = 1 - Math.exp(-rate * dt);
@@ -566,5 +654,7 @@ export class Monk {
     this.headG.rotation.x = p.head;
     this.armL.rotation.set(p.armLp, p.armLy, p.armLr);
     this.armR.rotation.set(p.armRp, p.armRy, p.armRr);
+    this.handL.rotation.x = p.wrist;
+    this.handR.rotation.x = p.wrist;
   }
 }
