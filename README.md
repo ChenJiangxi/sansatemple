@@ -70,6 +70,20 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 
 署名也写在游戏「设置」面板底部。换模型时用 `node tools/prep-statue.mjs 输入.glb 输出.glb 目标三角形数` 处理。
 
+## 宣传片
+
+`tools/promo/` 用游戏本身的场景逐帧录一支竖屏宣传片（1080×1920，30 帧/秒，约 43 秒）：分镜、诗句字幕和配乐时间轴都写在 `timeline.mjs` 里。配乐全部用代码合成（`audio.mjs`：拨弦、梵钟、木鱼、磬、风声），不调用任何视频或音乐生成模型。
+
+```bash
+mkdir -p /tmp/sansa-promo/fonts   # 字体：Google Fonts 的 Zhi Mang Xing、Ma Shan Zheng（OFL）
+curl -L -o /tmp/sansa-promo/fonts/ZhiMangXing-Regular.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/zhimangxing/ZhiMangXing-Regular.ttf
+curl -L -o /tmp/sansa-promo/fonts/MaShanZheng-Regular.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/MaShanZheng-Regular.ttf
+npx vite --config tools/promo/vite.config.mjs          # 录制服务器，4327 端口
+# 浏览器打开 http://127.0.0.1:4327/tools/promo/promo.html，等页面显示“完成”，帧在 /tmp/sansa-promo/shots
+node tools/promo/audio.mjs /tmp/sansa-promo/score.wav
+node tools/promo/assemble.mjs /tmp/sansa-promo/shots /tmp/sansa-promo/score.wav 宣传片.mp4
+```
+
 ## 与原站的差别
 
 - 没做：咖啡赞助（CAFE25 / GS25）、捐款入口、定时的「共同礼佛」广播。
