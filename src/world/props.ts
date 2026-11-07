@@ -9,6 +9,7 @@ import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
 import { buildDing } from './bronze';
+import { buildNightLights } from './nightlights';
 
 export interface PropsBuild {
   interactives: THREE.Object3D[];
@@ -158,8 +159,11 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   // —— 八角七层楼阁塔：每层塔身 + 一圈出檐，顶上塔刹 ——
   const towerMat = pbr('plaster', { metersPerTile: 1.6, color: '#d8cfbf' });
   const towerRoof = pbr('roof', { metersPerTile: 1.2, color: '#6e7270' });
+  const pagodaLampMat = new THREE.MeshStandardMaterial({ color: '#d63a22', roughness: 0.6, emissive: '#ff6a2a', emissiveIntensity: 0.1 });
+  const pagodaLampGeo = new THREE.SphereGeometry(0.075, 10, 8).scale(1, 1.3, 1);
   for (const P of PAGODAS) {
     const g = new THREE.Group();
+    const lampAt: THREE.Vector3[] = [];
     const baseG = mesh(new THREE.CylinderGeometry(2.0, 2.2, 0.7, 8), stoneMat);
     baseG.position.y = 0.35;
     g.add(baseG);
@@ -188,6 +192,10 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
         }
       }
       eave.computeVertexNormals();
+      for (let c = 0; c < 8; c++) {
+        const th = (c / 8) * Math.PI * 2;
+        lampAt.push(new THREE.Vector3(Math.sin(th) * rr * 1.48, y - 0.2, Math.cos(th) * rr * 1.48));
+      }
       const em = mesh(eave, towerRoof);
       em.position.y = y + 0.1;
       g.add(em);
@@ -212,6 +220,12 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     spire.add(pearl);
     spire.position.y = y;
     g.add(spire);
+    {
+      const lamps = new THREE.InstancedMesh(pagodaLampGeo, pagodaLampMat, lampAt.length);
+      const m4 = new THREE.Matrix4();
+      lampAt.forEach((p, i) => lamps.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
+      g.add(lamps);
+    }
     g.scale.setScalar(P.s * 0.75);
     g.position.set(P.x, 0, P.z);
     group.add(g);
@@ -466,10 +480,13 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   scene.add(group);
+  const night = buildNightLights(scene);
 
   return {
     interactives,
     setLanternLevel(level) {
+      night.setLevel(level);
+      pagodaLampMat.emissiveIntensity = 0.1 + Math.max(0, (level - 0.6) / 1.8) * 2.4;
       lanternMat.emissiveIntensity = 0.25 + level * 0.9;
       silk.emissiveIntensity = 0.15 + level * 0.8;
       for (const l of pathLights) l.intensity = Math.max(0, level - 0.8) * 7;

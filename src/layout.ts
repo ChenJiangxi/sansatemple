@@ -134,6 +134,16 @@ export const STONE_LANTERNS: [number, number][] = [
   [-3.9, 20], [3.9, 20], [-3.9, 31], [3.9, 31], [-3.9, 41], [3.9, 41],
 ];
 
+// 配殿前、通往钟鼓楼的石灯（夜里点亮，照亮寺院两侧）
+export const SIDE_LAMPS: [number, number][] = [
+  [-20.6, -11], [-20.6, -4], [-20.6, 3], [-20.6, 10], [-20.6, 17],
+  [20.6, -11], [20.6, -4], [20.6, 3], [20.6, 10], [20.6, 17],
+  // 通往钟楼、鼓楼的小路两旁
+  [-11.5, 29.4], [-16.5, 29.4], [11.5, 29.4], [16.5, 29.4],
+  // 放生池两侧石凳旁
+  [-17, 52.2], [17, 52.2], [-16, 45.5], [16, 45.5],
+];
+
 // 地上的方形纸灯
 export const GROUND_LAMPS: [number, number][] = [
   [-5.8, 2.6], [5.8, 2.6], [-12, 2.6], [12, 2.6], [-3.4, 10.5], [3.4, 10.5],
@@ -151,6 +161,7 @@ for (const [x, z, s] of PINES) circles.push({ x, z, r: 0.5 * s });
 for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const [x, z] of STONE_LANTERNS) circles.push({ x, z, r: 0.45 });
 for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
+for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
 for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
 // 香炉两旁的烛台架

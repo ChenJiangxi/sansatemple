@@ -29,7 +29,7 @@ const PRESETS: Record<Exclude<TimeMode, 'auto'>, Preset> = {
   dawn: { skyTop: C('#7b8fb5'), skyHorizon: C('#f2c6a0'), fog: C('#b8a08a'), sun: C('#ffc58f'), sunI: 1.6, hemiSky: C('#b9c4dc'), hemiGround: C('#6b5a48'), hemiI: 0.9, elev: 0.18, azim: 1.9, lantern: 0.9, exposure: 1.0, stars: 0.1, envI: 0.35, bgI: 0.7 },
   day: { skyTop: C('#7fa6cf'), skyHorizon: C('#dfe7e6'), fog: C('#a39686'), sun: C('#fff1dc'), sunI: 2.9, hemiSky: C('#cfe0ef'), hemiGround: C('#7a6a50'), hemiI: 1.05, elev: 0.85, azim: 2.4, lantern: 0.25, exposure: 1.0, stars: 0, envI: 0.55, bgI: 1.0 },
   dusk: { skyTop: C('#4b5a86'), skyHorizon: C('#f0a070'), fog: C('#8a6a58'), sun: C('#ff9a5a'), sunI: 1.5, hemiSky: C('#9c8fb0'), hemiGround: C('#4e3d33'), hemiI: 0.75, elev: 0.12, azim: 3.9, lantern: 1.3, exposure: 1.05, stars: 0.15, envI: 0.25, bgI: 0.45 },
-  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 0.55, hemiSky: C('#33405e'), hemiGround: C('#1a1714'), hemiI: 0.32, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.1, stars: 1, envI: 0.05, bgI: 0.07 },
+  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 1.0, hemiSky: C('#41528a'), hemiGround: C('#221d18'), hemiI: 0.58, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.1, stars: 1, envI: 0.05, bgI: 0.07 },
 };
 
 function presetForHour(h: number): Preset {
