@@ -667,43 +667,28 @@ async function main() {
     }
     titleLine('韩国爆火的山寺', y2, tall ? 158 : 146);
     // 下方：那一句话
+    // 那一句话（封面不放网址）：一行，放在标题下面
     g.save();
     g.shadowColor = 'rgba(0,0,0,0.7)';
-    if (tall) {
-      const bw = 840, bh = 196, bx = (cw - bw) / 2, by = y2 + 190;
-      g.font = '40px "Songti SC"';
+    {
+      const quote = PROMPT_LINES[1];
+      const fs = tall ? 60 : 52;
+      g.font = `${fs}px "Songti SC"`;
+      const tw = g.measureText(quote).width;
+      const bw = tw + fs * 1.8, bh = fs * 1.9, bx = (cw - bw) / 2, by = y2 + (tall ? 170 : 134);
+      g.font = `${tall ? 40 : 34}px "Songti SC"`;
       g.fillStyle = '#fbf2de';
       g.shadowBlur = 14;
-      g.fillText('只说了一句话：', bx + 14, by - 22);
-      g.shadowBlur = 30;
-      roundRect(g, bx, by, bw, bh, 32);
+      g.fillText('只说了一句话：', bx + 8, by - 20);
+      g.shadowBlur = 28;
+      roundRect(g, bx, by, bw, bh, bh * 0.3);
       g.fillStyle = 'rgba(255,251,242,0.93)';
       g.fill();
       g.shadowColor = 'transparent';
-      g.font = '50px "Songti SC"';
-      g.fillStyle = '#2f4f6f';
-      g.fillText(PROMPT_LINES[0], bx + 48, by + 82);
+      g.font = `${fs}px "Songti SC"`;
       g.fillStyle = '#2b2420';
-      g.fillText(PROMPT_LINES[1], bx + 48, by + 158);
-    } else {
-      // 3:4 画面矮：一句话排成一行，不挡住佛像
-      g.font = '40px "Songti SC"';
-      const w0 = g.measureText(PROMPT_LINES[0] + ' ').width, w1 = g.measureText(PROMPT_LINES[1]).width;
-      const bw = w0 + w1 + 80, bh = 92, bx = (cw - bw) / 2, by = y2 + 134;
-      g.font = '34px "Songti SC"';
-      g.fillStyle = '#fbf2de';
-      g.shadowBlur = 14;
-      g.fillText('只说了一句话：', bx + 10, by - 18);
-      g.shadowBlur = 26;
-      roundRect(g, bx, by, bw, bh, 26);
-      g.fillStyle = 'rgba(255,251,242,0.93)';
-      g.fill();
-      g.shadowColor = 'transparent';
-      g.font = '40px "Songti SC"';
-      g.fillStyle = '#2f4f6f';
-      g.fillText(PROMPT_LINES[0], bx + 40, by + 60);
-      g.fillStyle = '#2b2420';
-      g.fillText(PROMPT_LINES[1], bx + 40 + w0, by + 60);
+      g.textBaseline = 'middle';
+      g.fillText(quote, bx + fs * 0.9, by + bh / 2 + 2);
     }
     g.restore();
 
