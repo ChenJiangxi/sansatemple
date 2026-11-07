@@ -363,23 +363,335 @@ export function muralTexture() {
 }
 
 // 匾额：深绿底金字，从右往左写
-export function plaqueTexture(text: string) {
-  const { c, g } = canvas(768, 256);
-  g.fillStyle = '#e9d9a8';
-  g.fillRect(0, 0, 768, 256);
-  g.fillStyle = '#1f3a32';
-  g.fillRect(14, 14, 740, 228);
-  g.strokeStyle = '#c9a85a';
-  g.lineWidth = 6;
-  g.strokeRect(28, 28, 712, 200);
-  g.fillStyle = '#efe4c2';
-  g.font = '600 150px "Songti SC","STSong","Noto Serif CJK SC","Noto Serif KR","Hiragino Mincho ProN",serif';
+// 匾额：蓝底金字，外框是金色的云纹边，字从左往右写
+export function plaqueTexture(text: string, vertical = false) {
+  const chars = [...text];
+  const W = vertical ? 300 : 260 * chars.length + 140;
+  const H = vertical ? 250 * chars.length + 140 : 340;
+  const { c, g } = canvas(W, H);
+  // 金色外框
+  const gold = g.createLinearGradient(0, 0, W, H);
+  gold.addColorStop(0, '#e3c070');
+  gold.addColorStop(0.5, '#b98a36');
+  gold.addColorStop(1, '#e0bb66');
+  g.fillStyle = gold;
+  g.fillRect(0, 0, W, H);
+  // 框上的回纹 / 云纹
+  g.strokeStyle = 'rgba(110,70,20,0.55)';
+  g.lineWidth = 3;
+  const step = 34;
+  for (let x = 10; x < W - 10; x += step) {
+    for (const y of [16, H - 40]) {
+      g.beginPath();
+      g.arc(x + 12, y + 12, 9, Math.PI * 0.2, Math.PI * 1.8);
+      g.stroke();
+    }
+  }
+  for (let y = 10; y < H - 10; y += step) {
+    for (const x of [16, W - 40]) {
+      g.beginPath();
+      g.arc(x + 12, y + 12, 9, Math.PI * 0.2, Math.PI * 1.8);
+      g.stroke();
+    }
+  }
+  // 蓝底
+  const inset = 52;
+  const bg = g.createLinearGradient(0, inset, 0, H - inset);
+  bg.addColorStop(0, '#1d3b66');
+  bg.addColorStop(1, '#142a4c');
+  g.fillStyle = bg;
+  g.fillRect(inset, inset, W - inset * 2, H - inset * 2);
+  g.strokeStyle = '#d8b35c';
+  g.lineWidth = 5;
+  g.strokeRect(inset + 10, inset + 10, W - inset * 2 - 20, H - inset * 2 - 20);
+  // 金字，带一点浮雕阴影
+  g.font = `700 ${vertical ? 200 : 210}px "Songti SC","STSong","STKaiti","Kaiti SC","Noto Serif CJK SC",serif`;
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  const chars = [...text];
-  chars.forEach((ch, i) => g.fillText(ch, 768 / 2 + (i - (chars.length - 1) / 2) * 210, 136));
+  chars.forEach((ch, i) => {
+    const x = vertical ? W / 2 : W / 2 + (i - (chars.length - 1) / 2) * 260;
+    const y = vertical ? H / 2 + (i - (chars.length - 1) / 2) * 250 : H / 2 + 8;
+    g.fillStyle = 'rgba(0,0,0,0.45)';
+    g.fillText(ch, x + 4, y + 5);
+    const tg = g.createLinearGradient(0, y - 100, 0, y + 100);
+    tg.addColorStop(0, '#f6dc8e');
+    tg.addColorStop(0.55, '#d4a23e');
+    tg.addColorStop(1, '#f0d080');
+    g.fillStyle = tg;
+    g.fillText(ch, x, y);
+  });
   const tex = finish(c, 1);
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// 旋子彩画：青绿底，金线勾边，两端是旋花，中间是锦纹
+export function caihuaTexture() {
+  const { c, g } = canvas(1024, 128);
+  g.fillStyle = '#1f5a5a';
+  g.fillRect(0, 0, 1024, 128);
+  g.fillStyle = '#244f86';
+  g.fillRect(0, 16, 1024, 96);
+  // 中间的锦纹
+  for (let x = 300; x < 724; x += 32) {
+    g.fillStyle = (x / 32) % 2 ? '#2a6f62' : '#2f4f8f';
+    g.fillRect(x, 24, 32, 80);
+    g.fillStyle = '#d9b35a';
+    g.beginPath();
+    g.moveTo(x + 16, 30);
+    g.lineTo(x + 28, 64);
+    g.lineTo(x + 16, 98);
+    g.lineTo(x + 4, 64);
+    g.closePath();
+    g.globalAlpha = 0.6;
+    g.fill();
+    g.globalAlpha = 1;
+  }
+  // 两端的旋花
+  for (const cx of [140, 884]) {
+    for (let r = 46; r > 6; r -= 10) {
+      g.fillStyle = r % 20 === 6 ? '#e8e2d0' : r % 20 === 16 ? '#2f6f63' : '#2a4f8c';
+      g.beginPath();
+      g.arc(cx, 64, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.strokeStyle = '#d9b35a';
+    g.lineWidth = 3;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      g.beginPath();
+      g.arc(cx + Math.cos(a) * 30, 64 + Math.sin(a) * 30, 16, a + 1, a + 3.6);
+      g.stroke();
+    }
+    g.fillStyle = '#c44a3a';
+    g.beginPath();
+    g.arc(cx, 64, 7, 0, Math.PI * 2);
+    g.fill();
+  }
+  // 金线分界
+  g.strokeStyle = '#d9b35a';
+  g.lineWidth = 4;
+  for (const x of [240, 300, 724, 784]) {
+    g.beginPath();
+    g.moveTo(x, 16);
+    g.lineTo(x + (x < 512 ? 20 : -20), 64);
+    g.lineTo(x, 112);
+    g.stroke();
+  }
+  g.fillStyle = '#d9b35a';
+  g.fillRect(0, 12, 1024, 4);
+  g.fillRect(0, 112, 1024, 4);
+  const tex = finish(c, 1);
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// 井口天花：方格里画莲花，青绿底金边
+export function cofferTexture() {
+  const { c, g } = canvas(256);
+  g.fillStyle = '#7a2a1e';
+  g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 2; i++)
+    for (let j = 0; j < 2; j++) {
+      const x = i * 128, y = j * 128;
+      g.fillStyle = '#d4a84a';
+      g.fillRect(x + 6, y + 6, 116, 116);
+      g.fillStyle = '#1f4f7a';
+      g.fillRect(x + 12, y + 12, 104, 104);
+      g.fillStyle = '#2b6a5c';
+      g.beginPath();
+      g.arc(x + 64, y + 64, 40, 0, Math.PI * 2);
+      g.fill();
+      for (let p = 0; p < 8; p++) {
+        const a = (p / 8) * Math.PI * 2;
+        g.fillStyle = p % 2 ? '#e7d8b4' : '#d76f5a';
+        g.beginPath();
+        g.ellipse(x + 64 + Math.cos(a) * 22, y + 64 + Math.sin(a) * 22, 16, 7, a, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = '#e8c56a';
+      g.beginPath();
+      g.arc(x + 64, y + 64, 9, 0, Math.PI * 2);
+      g.fill();
+    }
+  return finish(c, 1);
+}
+
+// 千佛壁：深红底，一格一格的小金佛
+export function thousandBuddhaTexture() {
+  const { c, g } = canvas(512);
+  g.fillStyle = '#4a1610';
+  g.fillRect(0, 0, 512, 512);
+  const n = 8;
+  const cell = 512 / n;
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++) {
+      const x = i * cell, y = j * cell;
+      g.fillStyle = '#2e0c08';
+      g.fillRect(x + 4, y + 4, cell - 8, cell - 8);
+      // 龛
+      g.fillStyle = '#6a2a1a';
+      g.beginPath();
+      g.moveTo(x + 10, y + cell - 8);
+      g.lineTo(x + 10, y + 22);
+      g.quadraticCurveTo(x + cell / 2, y + 2, x + cell - 10, y + 22);
+      g.lineTo(x + cell - 10, y + cell - 8);
+      g.closePath();
+      g.fill();
+      // 小佛：头光、头、身
+      g.fillStyle = 'rgba(230,180,80,0.35)';
+      g.beginPath();
+      g.arc(x + cell / 2, y + 26, 12, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#d9a845';
+      g.beginPath();
+      g.arc(x + cell / 2, y + 26, 6, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.ellipse(x + cell / 2, y + 44, 11, 10, 0, 0, Math.PI * 2);
+      g.fill();
+      g.beginPath();
+      g.ellipse(x + cell / 2, y + 54, 16, 5, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  return finish(c, 1);
+}
+
+// 黄色桌围：正中一朵莲花，四周回纹
+export function altarClothTexture() {
+  const { c, g } = canvas(512, 256);
+  g.fillStyle = '#d9a52e';
+  g.fillRect(0, 0, 512, 256);
+  g.fillStyle = '#a3241a';
+  g.fillRect(0, 0, 512, 28);
+  g.fillRect(0, 228, 512, 28);
+  g.strokeStyle = '#f2d48a';
+  g.lineWidth = 3;
+  for (let x = 6; x < 512; x += 26) {
+    g.strokeRect(x, 6, 16, 16);
+    g.strokeRect(x, 234, 16, 16);
+  }
+  // 莲花
+  const cx = 256, cy = 132;
+  for (let k = 0; k < 9; k++) {
+    const a = Math.PI + (k / 8) * Math.PI;
+    g.fillStyle = k % 2 ? '#c8423a' : '#e46a5a';
+    g.beginPath();
+    g.ellipse(cx + Math.cos(a) * 34, cy + Math.sin(a) * 30 + 10, 30, 13, a, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = '#f3d27a';
+  g.beginPath();
+  g.ellipse(cx, cy + 14, 26, 12, 0, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#2f7a5a';
+  g.lineWidth = 5;
+  for (const s of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(cx + s * 40, cy + 30);
+    g.bezierCurveTo(cx + s * 110, cy + 60, cx + s * 150, cy - 20, cx + s * 210, cy + 10);
+    g.stroke();
+    g.fillStyle = '#3f8a62';
+    g.beginPath();
+    g.ellipse(cx + s * 150, cy + 6, 26, 12, s * 0.4, 0, Math.PI * 2);
+    g.fill();
+  }
+  const tex = finish(c, 1);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// 格扇门：朱红门框，上半是菱花格心（糊着白纸），下半是裙板
+export function geshanTexture() {
+  const { c, g } = canvas(256, 512);
+  g.fillStyle = '#8c2418';
+  g.fillRect(0, 0, 256, 512);
+  // 格心
+  g.fillStyle = '#efe6d0';
+  g.fillRect(22, 22, 212, 300);
+  g.strokeStyle = '#8c2418';
+  g.lineWidth = 6;
+  for (let k = -12; k < 24; k++) {
+    g.beginPath();
+    g.moveTo(22 + k * 22, 22);
+    g.lineTo(22 + k * 22 + 300, 322);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(234 - k * 22, 22);
+    g.lineTo(234 - k * 22 - 300, 322);
+    g.stroke();
+  }
+  g.fillStyle = '#8c2418';
+  g.fillRect(0, 0, 22, 512);
+  g.fillRect(234, 0, 22, 512);
+  g.fillRect(0, 0, 256, 22);
+  g.fillRect(0, 322, 256, 22);
+  // 金线和裙板
+  g.strokeStyle = '#d4a84a';
+  g.lineWidth = 3;
+  g.strokeRect(22, 22, 212, 300);
+  g.fillStyle = '#7a1f15';
+  g.fillRect(34, 362, 188, 120);
+  g.strokeRect(34, 362, 188, 120);
+  g.fillStyle = '#d4a84a';
+  g.beginPath();
+  g.ellipse(128, 422, 40, 26, 0, 0, Math.PI * 2);
+  g.globalAlpha = 0.5;
+  g.fill();
+  g.globalAlpha = 1;
+  const tex = finish(c, 1);
+  tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
+// 银杏叶簇：几十片扇形小叶（白色，实例颜色再染成金黄）
+export function ginkgoClusterTexture(seed = 2) {
+  const { c, g } = canvas(256);
+  const r = rng(seed);
+  for (let i = 0; i < 80; i++) {
+    const a = r() * Math.PI * 2;
+    const d = Math.sqrt(r()) * 100;
+    const x = 128 + Math.cos(a) * d;
+    const y = 128 + Math.sin(a) * d;
+    const l = 0.75 + r() * 0.25;
+    g.fillStyle = `rgb(${Math.floor(255 * l)},${Math.floor(255 * l)},${Math.floor(240 * l)})`;
+    const s = 11 + r() * 7;
+    const rot = r() * Math.PI * 2;
+    g.save();
+    g.translate(x, y);
+    g.rotate(rot);
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.arc(0, 0, s, -Math.PI * 0.85, -Math.PI * 0.15);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// 袈裟：红褐底，金色细线分成一块块“福田”
+export function kasayaTexture() {
+  const { c, g } = canvas(256);
+  g.fillStyle = '#8a3524';
+  g.fillRect(0, 0, 256, 256);
+  g.strokeStyle = '#d9a65a';
+  g.lineWidth = 5;
+  for (let x = 0; x <= 256; x += 51) {
+    g.beginPath();
+    g.moveTo(x, 0);
+    g.lineTo(x, 256);
+    g.stroke();
+  }
+  for (let y = 0; y <= 256; y += 85) {
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(256, y);
+    g.stroke();
+  }
+  const tex = finish(c, 1);
   return tex;
 }
 

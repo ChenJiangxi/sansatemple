@@ -1,5 +1,6 @@
 // Q 版小和尚：几何体拼成，动作用关节旋转做程序动画
 import * as THREE from 'three';
+import { kasayaTexture } from './textures';
 
 export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense';
 
@@ -92,11 +93,12 @@ function incensePose(t: number): { pose: Pose; prop: [number, number, number] } 
   return { pose: mk({}), prop: [0, 0.1, 0.36] };
 }
 
-const ROBE = '#c9d2d4';
-const ROBE_DARK = '#b2bcc0';
-const KASAYA = '#ecd683';
+// 汉传僧装：黄色海青（宽袖、交领右衽），外披红褐色福田袈裟，白绑腿，深色罗汉鞋
+const ROBE = '#d8ab55';
+const ROBE_DARK = '#f1ebdd';
+const COLLAR = '#6a3a22';
 const SKIN = '#efb487';
-const SHOE = '#f3f0e9';
+const SHOE = '#3b2a20';
 
 let sharedMats: Record<string, THREE.Material> | null = null;
 function mats() {
@@ -104,7 +106,8 @@ function mats() {
     sharedMats = {
       robe: new THREE.MeshStandardMaterial({ color: ROBE, roughness: 0.85 }),
       robeDark: new THREE.MeshStandardMaterial({ color: ROBE_DARK, roughness: 0.9 }),
-      kasaya: new THREE.MeshStandardMaterial({ color: KASAYA, roughness: 0.8, side: THREE.DoubleSide }),
+      kasaya: new THREE.MeshStandardMaterial({ map: kasayaTexture(), roughness: 0.8, side: THREE.DoubleSide }),
+      collar: new THREE.MeshStandardMaterial({ color: COLLAR, roughness: 0.8 }),
       skin: new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.6 }),
       shoe: new THREE.MeshStandardMaterial({ color: SHOE, roughness: 0.7 }),
       face: new THREE.MeshBasicMaterial({ color: '#4a3226' }),
@@ -176,21 +179,43 @@ export class Monk {
     robe.scale.set(1, 1, 0.86);
     this.torso.add(robe);
     // 袈裟：斜披在左肩的一片黄色
-    const kasayaGeo = new THREE.CylinderGeometry(0.252, 0.27, 0.36, 24, 1, true, -0.3, Math.PI * 1.15);
+    const kasayaGeo = new THREE.CylinderGeometry(0.236, 0.278, 0.34, 24, 1, true, Math.PI * 0.15, Math.PI * 1.05);
     const kasaya = S(new THREE.Mesh(kasayaGeo, M.kasaya));
     kasaya.scale.set(1, 1, 0.88);
-    kasaya.position.set(0, 0.1, 0);
-    kasaya.rotation.set(0, 0.2, 0.14);
+    kasaya.position.set(0, 0.08, 0);
+    kasaya.rotation.set(0, 0.35, 0.18);
     this.torso.add(kasaya);
     const strap = S(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 6, 20, Math.PI), M.kasaya));
     strap.position.set(0.04, 0.26, 0);
     strap.rotation.set(0, Math.PI / 2, 0.5);
     strap.scale.set(1, 1, 0.9);
     this.torso.add(strap);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 6, 16), M.robeDark);
-    collar.rotation.x = Math.PI / 2;
-    collar.position.y = 0.38;
-    this.torso.add(collar);
+    const robeR = (y: number) => {
+      const prof: [number, number][] = [[0.27, -0.02], [0.24, 0.12], [0.2, 0.28], [0.17, 0.36], [0.1, 0.4]];
+      for (let i = 0; i < prof.length - 1; i++) {
+        const [r0, y0] = prof[i], [r1, y1] = prof[i + 1];
+        if (y >= y0 && y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+      }
+      return 0.2;
+    };
+    const lapel = (from: [number, number], to: [number, number]) => {
+      const pts: THREE.Vector3[] = [];
+      for (let k = 0; k <= 10; k++) {
+        const t = k / 10;
+        const x = from[0] + (to[0] - from[0]) * t;
+        const y = from[1] + (to[1] - from[1]) * t;
+        const rr = robeR(y);
+        const z = Math.sqrt(Math.max(0, rr * rr - x * x)) * 0.86 + 0.006;
+        pts.push(new THREE.Vector3(x, y, z));
+      }
+      return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.018, 5, false), M.collar);
+    };
+    this.torso.add(lapel([0.06, 0.38], [-0.16, 0.14]));
+    this.torso.add(lapel([-0.06, 0.38], [0.0, 0.3]));
+    const neckband = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 16), M.collar);
+    neckband.rotation.x = Math.PI / 2;
+    neckband.position.y = 0.385;
+    this.torso.add(neckband);
 
     // 头
     this.headG.position.y = 0.4;
@@ -223,8 +248,11 @@ export class Monk {
     for (const [g, sx] of [[this.armL, 1], [this.armR, -1]] as [THREE.Group, number][]) {
       g.position.set(sx * 0.19, 0.31, 0);
       g.rotation.order = 'YXZ';
-      const sleeve = S(new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.15, 4, 10), M.robe));
+      const sleeve = S(new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.115, 0.24, 12, 1, true), M.robe));
       sleeve.position.y = -0.12;
+      (sleeve.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
+      const shoulder = S(new THREE.Mesh(new THREE.SphereGeometry(0.068, 10, 8), M.robe));
+      g.add(shoulder);
       const hand = S(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), M.skin));
       hand.position.y = -0.255;
       g.add(sleeve, hand);

@@ -195,11 +195,13 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'bell': {
-        // 撞钟：转告房间里其他人，每人 15 秒最多一次
+        // 撞钟 / 击鼓：转告房间里其他人（钟 15 秒一次，鼓 3.5 秒一次）
         const t = Date.now();
-        if (t - (me.bellAt || 0) < 15000) return;
-        me.bellAt = t;
-        broadcast(room, { t: 'bell', from: me.id }, ws);
+        const kind = msg.kind === 'drum' ? 'drum' : 'bell';
+        const key = kind === 'drum' ? 'drumAt' : 'bellAt';
+        if (t - (me[key] || 0) < (kind === 'drum' ? 3500 : 15000)) return;
+        me[key] = t;
+        broadcast(room, { t: 'bell', from: me.id, kind }, ws);
         break;
       }
     }

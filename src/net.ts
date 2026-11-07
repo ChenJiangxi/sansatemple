@@ -36,7 +36,7 @@ type Events = {
   leave: (id: string) => void;
   incense: (list: IncenseItem[], serverNow: number) => void;
   claim: (seat: string, ok: boolean) => void;
-  bell: (from: string) => void;
+  bell: (from: string, kind: 'bell' | 'drum') => void;
 };
 
 export class Net {
@@ -137,7 +137,7 @@ export class Net {
           this.emit('claim', msg.seat, msg.ok);
           break;
         case 'bell':
-          this.emit('bell', msg.from);
+          this.emit('bell', msg.from, msg.kind === 'drum' ? 'drum' : 'bell');
           break;
       }
     };
@@ -211,7 +211,7 @@ export class Net {
     this.send({ t: 'incense', place });
   }
 
-  ringBell() {
-    this.send({ t: 'bell' });
+  ringBell(kind: 'bell' | 'drum' = 'bell') {
+    this.send({ t: 'bell', kind });
   }
 }

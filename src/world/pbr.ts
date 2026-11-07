@@ -30,7 +30,7 @@ export async function preloadTextures(onProgress?: (done: number, total: number)
   const names: PbrName[] = ['floor', 'wood', 'path', 'granite', 'stonewall', 'ground', 'roof', 'plaster'];
   const files: [string, boolean][] = [];
   for (const n of names) files.push([`${n}_color.jpg`, true], [`${n}_normal.jpg`, false], [`${n}_rough.jpg`, false]);
-  files.push(['sky.jpg', true], ['mural.jpg', true]);
+  files.push(['sky.jpg', true]);
   let done = 0;
   await Promise.all(
     files.map(async ([f, srgb]) => {

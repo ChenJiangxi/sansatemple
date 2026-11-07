@@ -18,16 +18,18 @@ export const HALL = {
   // 佛坛
   altarX0: -10.5, altarX1: 10.5, altarZ0: -22.3, altarZ1: -19.2, altarH: 0.95,
   // 供桌（上面有香炉和蜡烛）
-  tableX0: -0.6, tableX1: 0.6, tableZ0: -18.7, tableZ1: -16.95, tableH: 0.42,
+  tableX0: -1.7, tableX1: 1.7, tableZ0: -18.5, tableZ1: -17.45, tableH: 0.82,
 };
 
 // 佛前上香时站的位置
-export const ALTAR_SPOT = { x: 0, z: -16.3 };
-export const ALTAR_BURNER = { x: 0, z: HALL.tableZ1 - 0.36 };
+export const ALTAR_SPOT = { x: 0, z: -16.75 };
+export const ALTAR_BURNER = { x: 0, z: HALL.tableZ1 - 0.32 };
 
 export const COURT = { x0: -44, x1: 44, z0: -36, z1: 68, gateX: 3.2 };
 
-export const POND = { x: 25, z: 42, rx: 9.5, rz: 6.2 };
+// 放生池在中轴线上，参道从石拱桥上过
+export const POND = { x: 0, z: 52, rx: 11, rz: 5.2 };
+export const BRIDGE = { x0: -1.8, x1: 1.8, z0: 52 - 5.2 - 1.4, z1: 52 + 5.2 + 1.4, h: 1.15 };
 
 // 院中的大香炉
 export const INCENSE = { x: 0, z: 7, r: 1.2 };
@@ -44,10 +46,11 @@ export const SIDE_HALLS: { x: number; z: number; w: number; d: number; yaw: numb
   { x: 29, z: -4, w: 9, d: 17, yaw: -Math.PI / 2 },
 ];
 
-// 钟楼
-export const BELL = { x: -25, z: 34, size: 6.4, platform: 0.22 };
+// 钟楼（左）与鼓楼（右）：晨钟暮鼓
+export const BELL = { x: -24, z: 27, size: 6.4, platform: 0.22 };
+export const DRUM = { x: 24, z: 27, size: 6.4, platform: 0.22 };
 
-export const SPAWN = { x: 0, z: 30, yaw: Math.PI };
+export const SPAWN = { x: 0, z: 38, yaw: Math.PI };
 
 export interface Seat {
   id: string;
@@ -81,13 +84,13 @@ export const CUSHIONS: Seat[] = (() => {
 
 // 长椅：每张两个座位
 const BENCH_DEFS = [
-  { x: 15.2, z: 47.5, yaw: Math.PI * 0.75 },
-  { x: 25, z: 51.5, yaw: Math.PI },
-  { x: 34.8, z: 47.5, yaw: Math.PI * 1.25 },
-  { x: -15, z: 24, yaw: Math.PI * 0.5 },
+  { x: -14.8, z: 49.5, yaw: Math.PI * 0.5 },
+  { x: -14.8, z: 55, yaw: Math.PI * 0.5 },
+  { x: 14.8, z: 49.5, yaw: -Math.PI * 0.5 },
+  { x: 14.8, z: 55, yaw: -Math.PI * 0.5 },
   { x: -34, z: 14, yaw: Math.PI * 0.5 },
   { x: 34, z: 14, yaw: -Math.PI * 0.5 },
-  { x: -12, z: 50, yaw: Math.PI * 0.5 },
+  { x: -15, z: 38, yaw: Math.PI * 0.5 },
 ];
 export const BENCHES = BENCH_DEFS;
 export const BENCH_SEATS: Seat[] = BENCH_DEFS.flatMap((b, bi) =>
@@ -110,11 +113,12 @@ export const BENCH_SEATS: Seat[] = BENCH_DEFS.flatMap((b, bi) =>
 export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS];
 export const SEAT_BY_ID = new Map(ALL_SEATS.map((s) => [s.id, s]));
 
+// 院中的树（大多是银杏，少数枫树），坐标 + 大小
 export const MAPLES: [number, number, number][] = [
-  [-19, 4, 1.15], [-22, 18, 1.2], [-36, 24, 1.1], [-18, 40, 1.05], [-33, 52, 1.2], [-20, 60, 1.0],
-  [19, 4, 1.1], [21, 20, 1.25], [37, 26, 1.1], [13, 34, 0.95], [36, 58, 1.15], [17, 61, 1.0],
-  [-9, 30, 0.85], [9, 27, 0.85], [-8, 44, 0.9], [8, 52, 0.95],
-  [-24, -27, 1.3], [24, -28, 1.3], [-38, -14, 1.2], [38, -16, 1.2], [-38, 4, 1.05], [38, 6, 1.0],
+  [-19, 4, 1.2], [-22, 17, 1.25], [-37, 26, 1.1], [-18, 42, 1.1], [-33, 54, 1.2], [-21, 63, 1.0],
+  [19, 4, 1.2], [21, 17, 1.25], [37, 26, 1.1], [18, 42, 1.1], [33, 54, 1.2], [21, 63, 1.0],
+  [-9, 31, 0.9], [9, 31, 0.9],
+  [-24, -27, 1.35], [24, -28, 1.35], [-38, -14, 1.2], [38, -16, 1.2], [-38, 4, 1.05], [38, 6, 1.05],
 ];
 
 export const PINES: [number, number, number][] = [
@@ -122,17 +126,18 @@ export const PINES: [number, number, number][] = [
 ];
 
 export const ROCKS: [number, number, number][] = [
-  [15, 36, 1.0], [34.5, 44, 0.8], [17, 49.5, 0.6], [-14.5, 12, 0.7], [6.5, 40, 0.55], [-6, 50, 0.6], [-30, 30, 0.7],
+  [-13, 44, 0.8], [13.5, 45, 0.7], [-30, 42, 0.8], [31, 44, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
 ];
 
+// 参道两侧的红灯笼灯柱
 export const STONE_LANTERNS: [number, number][] = [
-  [-3.9, 21], [3.9, 21], [-3.9, 33], [3.9, 33], [-3.9, 45], [3.9, 45], [-3.9, 57], [3.9, 57],
+  [-3.9, 20], [3.9, 20], [-3.9, 31], [3.9, 31], [-3.9, 41], [3.9, 41],
 ];
 
 // 地上的方形纸灯
 export const GROUND_LAMPS: [number, number][] = [
-  [-5.8, 2.6], [5.8, 2.6], [-12, 2.6], [12, 2.6], [-3.4, 9.5], [3.4, 9.5],
-  [8, 38], [14.5, 36.5], [-14, 35.5], [-20, 37.5], [3.6, 63], [-3.6, 63],
+  [-5.8, 2.6], [5.8, 2.6], [-12, 2.6], [12, 2.6], [-3.4, 10.5], [3.4, 10.5],
+  [-2.9, 44.6], [2.9, 44.6], [-2.9, 59.6], [2.9, 59.6], [3.8, 65], [-3.8, 65],
 ];
 
 type Circle = { x: number; z: number; r: number };
@@ -147,14 +152,19 @@ for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const [x, z] of STONE_LANTERNS) circles.push({ x, z, r: 0.45 });
 for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
-for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.35 * p.s });
+for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
+// 香炉两旁的烛台架
+for (const sx of [-1, 1]) boxes.push({ x0: INCENSE.x + sx * 2.6 - 0.85, x1: INCENSE.x + sx * 2.6 + 0.85, z0: INCENSE.z - 0.7, z1: INCENSE.z - 0.1 });
 for (const x of HALL.colX) circles.push({ x, z: HALL.colZFront, r: 0.4 });
-// 钟楼：四根柱子和钟
-{
-  const h = BELL.size / 2 - 0.4;
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) circles.push({ x: BELL.x + sx * h, z: BELL.z + sz * h, r: 0.38 });
-  circles.push({ x: BELL.x, z: BELL.z, r: 1.35 });
+// 钟楼、鼓楼：四根柱子和中间的钟（鼓）
+for (const T of [BELL, DRUM]) {
+  const h = T.size / 2 - 0.4;
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) circles.push({ x: T.x + sx * h, z: T.z + sz * h, r: 0.38 });
+  circles.push({ x: T.x, z: T.z, r: 1.35 });
 }
+// 正面格扇门：中间三间开着，两侧各两间关着
+boxes.push({ x0: -HALL.wallX - 0.2, x1: -6 + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
+boxes.push({ x0: 6 - 0.2, x1: HALL.wallX + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
 // 大殿侧墙、后墙、佛坛、供桌
 boxes.push({ x0: -HALL.wallX - 0.25, x1: -HALL.wallX + 0.2, z0: HALL.backZ - 0.2, z1: HALL.colZFront - 0.45 });
 boxes.push({ x0: HALL.wallX - 0.2, x1: HALL.wallX + 0.25, z0: HALL.backZ - 0.2, z1: HALL.colZFront - 0.45 });
@@ -177,8 +187,12 @@ export function heightAt(x: number, z: number): number {
     const t = (z - h.stepZ0) / (h.stepZ1 - h.stepZ0);
     return h.baseH * (1 - t);
   }
-  const b = BELL.size / 2 + 0.6;
-  if (Math.abs(x - BELL.x) < b && Math.abs(z - BELL.z) < b) return BELL.platform;
+  for (const T of [BELL, DRUM]) {
+    const b = T.size / 2 + 0.6;
+    if (Math.abs(x - T.x) < b && Math.abs(z - T.z) < b) return T.platform;
+  }
+  // 石拱桥
+  if (x > BRIDGE.x0 && x < BRIDGE.x1 && z > BRIDGE.z0 && z < BRIDGE.z1) return BRIDGE.h * Math.sin(((z - BRIDGE.z0) / (BRIDGE.z1 - BRIDGE.z0)) * Math.PI);
   return 0;
 }
 
@@ -192,7 +206,10 @@ const R = 0.28; // 小和尚的碰撞半径
 
 export function blocked(x: number, z: number): boolean {
   if (x < COURT.x0 + 1 || x > COURT.x1 - 1 || z < COURT.z0 + 1 || z > COURT.z1 - 0.8) return true;
-  if (inPond(x, z, 0.35)) return true;
+  const onBridge = x > BRIDGE.x0 + 0.25 && x < BRIDGE.x1 - 0.25 && z > BRIDGE.z0 && z < BRIDGE.z1;
+  if (!onBridge && inPond(x, z, 0.35)) return true;
+  // 桥两侧的栏杆
+  if (z > BRIDGE.z0 && z < BRIDGE.z1 && ((x > BRIDGE.x0 - 0.3 && x < BRIDGE.x0 + 0.25) || (x > BRIDGE.x1 - 0.25 && x < BRIDGE.x1 + 0.3))) return true;
   for (const c of circles) {
     const dx = x - c.x;
     const dz = z - c.z;
@@ -257,10 +274,18 @@ function buildGrid() {
 const cx = (i: number) => GX0 + (i + 0.5) * CELL;
 const cz = (j: number) => GZ0 + (j + 0.5) * CELL;
 
-// 两点之间能不能直线走过去（每 0.2 米检查一次）
+// 两点之间能不能直线走过去：中线和左右各偏 0.15 米的两条线都要走得通，
+// 这样到达路径点时有十几厘米的偏差也不会擦着台阶边角卡住
 export function lineClear(ax: number, az: number, bx: number, bz: number) {
   const d = Math.hypot(bx - ax, bz - az);
-  const n = Math.max(1, Math.ceil(d / 0.2));
+  if (d < 1e-6) return true;
+  const nx = (-(bz - az) / d) * 0.15, nz = ((bx - ax) / d) * 0.15;
+  return lineCore(ax, az, bx, bz) && lineCore(ax + nx, az + nz, bx + nx, bz + nz) && lineCore(ax - nx, az - nz, bx - nx, bz - nz);
+}
+
+function lineCore(ax: number, az: number, bx: number, bz: number) {
+  const d = Math.hypot(bx - ax, bz - az);
+  const n = Math.max(1, Math.ceil(d / 0.08));
   let px = ax, pz = az;
   for (let k = 1; k <= n; k++) {
     const x = ax + ((bx - ax) * k) / n;

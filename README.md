@@ -1,8 +1,9 @@
 # 山寺 · sansa-clone
 
-照着 [sansatemple.com](https://sansatemple.com/) 的玩法重做的一座线上寺院：
-大家各是一个 Q 版小和尚，在同一个院子里散步、合掌、去大殿蒲团上礼拜、
-敲木鱼、拨 108 颗念珠、坐长椅、上香，彼此看得见但不聊天。
+照着 [sansatemple.com](https://sansatemple.com/) 的玩法重做的一座线上寺院，
+建筑和人物按汉传佛寺来做：大家各是一个穿黄海青、披红袈裟的 Q 版小沙弥，
+在同一座寺里散步、合十、去大雄宝殿的蒲团上礼佛、敲木鱼、拨 108 颗念珠、
+坐石凳、上香、撞钟击鼓，彼此看得见但不聊天。
 
 代码、贴图和声音全部是新写的，没有使用原站的任何素材；佛像用的是公开授权的博物馆扫描模型（见「素材来源」）。
 
@@ -28,13 +29,20 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 |---|---|---|
 | 走动 | 点地面 / WASD / 方向键 | 点地面 |
 | 环顾、缩放 | 拖动 / 滚轮 | 单指滑动 / 双指捏合 |
-| 礼拜（找空蒲团，跪拜循环计数） | 1、E、空格 | 底栏「礼拜」 |
+| 礼佛（找空蒲团，跪拜循环计数） | 1、E、空格 | 底栏「礼佛」 |
 | 念珠（上下拨，108 颗一圈） | 2，方向键或滚轮拨珠 | 上下滑 |
-| 合掌 | 3 | 底栏「合掌」 |
+| 合十 | 3 | 底栏「合十」 |
 | 木鱼（可自动敲） | 5，空格敲 | 点木鱼 |
-| 坐下 / 上香 / 撞钟 | 点蒲团、长椅 / 点院中香炉或佛前香炉 / 点钟楼的钟 | 同左 |
+| 坐下 / 上香 / 撞钟 / 击鼓 | 点蒲团、石凳 / 点院中或佛前香炉（镜头自动切到特写）/ 点钟楼的钟 / 点鼓楼的鼓 | 同左 |
 
-时间跟随本地时钟：清晨、白天、傍晚、夜晚光线不同，夜里莲花灯和石灯会亮。
+时间跟随本地时钟：清晨、白天、傍晚、夜晚光线不同，夜里红灯笼和宫灯会亮。
+
+## 寺院布局（汉传佛寺）
+
+山门（三开间，挂「靜山禪寺」）→ 放生池与石拱桥 → 钟楼、鼓楼分列左右 → 红灯笼参道 →
+双塔（八角七层）与铜鼎香炉、红烛架 → 白石须弥座上的重檐大雄宝殿，两侧观音殿、地藏殿，
+四周黄色寺墙，院中多是银杏。殿内：方砖地、千佛壁、井口天花、三尊金身佛与鎏金背光、华盖、
+经幡、朱漆供桌（黄桌围、铜鼎、红烛、莲花瓶）、木鱼与铜磬、112 个圆蒲团。
 
 ## 结构
 
@@ -44,10 +52,10 @@ server/server.mjs   静态文件 + WebSocket：5 个房间×50 人，位置快�
 src/main.ts         场景组装、玩家移动、镜头、点击交互、联机同步
 src/layout.ts       场景布局、可走区域、碰撞、网格寻路（A*，自动绕开水池石塔柱子）
 src/monk.ts         小和尚模型与程序动画（走、合掌、礼拜、打坐、木鱼、念珠）
-src/world/          环境与昼夜、大殿（七开间原木结构、玻璃窗与纸格窗、后墙佛画、112 个蒲团、佛前香案）、佛像、
-                    配殿与钟楼、树木莲池、灯与双塔香炉围墙
+src/world/          环境与昼夜、大雄宝殿（重檐、彩画斗栱、格扇门、须弥座栏杆）、佛像与背光、
+                    配殿与钟鼓楼、银杏与放生池、灯笼宫灯、双塔、香炉、寺墙山门、石拱桥
 src/overlays.ts     木鱼、念珠的特写画面
-src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、念佛
+src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、鼓、普通话「南无阿弥陀佛」念佛
 src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 ```
 
@@ -58,7 +66,6 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/buddha.glb` | [Korean Buddha Iron Statue](https://sketchfab.com/3d-models/korean-buddha-iron-statue-872b44150e12431a898d0b8057705770) by artfletch（高丽铁佛扫描） | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | 去掉贴图、改为金身、减面到 9 万三角形、meshopt 压缩 |
 | `public/models/bodhisattva.glb` | [Seated bodhisattva Guanyin, 12th C.](https://sketchfab.com/3d-models/seated-bodhisattva-guanyin-12th-c-ce-2c865894453743a49f8e82d57e4f0a8d)，Minneapolis Institute of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上，减面到 6 万三角形 |
 
-| `public/tex/mural.jpg` | [Buddha Seokgamoni Preaching to the Assembly on Vulture Peak](https://commons.wikimedia.org/wiki/File:Buddha_Seokgamoni_(Shakyamuni)_Preaching_to_the_Assembly_on_Vulture_Peak_LACMA_AC1998.268.1_(1_of_11).jpg)，朝鲜时代，LACMA 藏 | 公有领域 | 裁去装裱、缩到 2048 像素 |
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
 
@@ -67,7 +74,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 ## 与原站的差别
 
 - 没做：咖啡赞助（CAFE25 / GS25）、捐款入口、定时的「共同礼佛」广播。
-- 念佛是共振峰合成的男声齐诵「南无阿弥陀佛」加木鱼，不是真人录音。
+- 原站是韩国寺院，这里改成了汉传佛寺的形制和僧装；念佛是共振峰合成的男声齐诵，不是真人录音。
 - 建筑是代码搭的几何体，材质用照片贴图；佛像为博物馆扫描模型，比原站的模型面数低。
 
 ## 本地预览

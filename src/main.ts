@@ -111,7 +111,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives];
 
   // —— 叠加层与界面 ——
   const stage = new OverlayStage(app);
@@ -222,7 +222,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -248,6 +248,7 @@ async function start() {
     else if (claimed) ui.setStatus('walkingToSeat', 'stop');
     else if (intent === 'incense') ui.setStatus('incenseWalking');
     else if (intent === 'bell') ui.setStatus('bellWalking');
+    else if (intent === 'drum') ui.setStatus('drumWalking');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -431,7 +432,8 @@ async function start() {
       refreshStatus();
       // 镜头：从香炉的右后方回看小和尚
       const fy = heightAt(spot.x, spot.z);
-      cine.pos.set(burner.x + 1.45, fy + 1.3, burner.z - 0.85);
+      if (place === 'altar') cine.pos.set(HALL.tableX1 + 1.05, fy + 1.5, burner.z + 0.15);
+      else cine.pos.set(burner.x + 1.45, fy + 1.3, burner.z - 0.85);
       cine.look.set((burner.x + spot.x) / 2, (burner.y + fy + 0.9) / 2, (burner.z + spot.z) / 2 + 0.1);
       cine.on = true;
       ui.root.classList.add('cine');
@@ -449,35 +451,39 @@ async function start() {
 
   // —— 钟楼：撞钟 ——
   let lastBell = 0;
-  function ringBell() {
-    if (performance.now() - lastBell < 15000) {
+  // 钟楼撞钟、鼓楼击鼓（晨钟暮鼓），同房间的人也会听到
+  const lastStrike: Record<'bell' | 'drum', number> = { bell: 0, drum: 0 };
+  function strikeInstrument(kind: 'bell' | 'drum') {
+    if (performance.now() - lastStrike[kind] < (kind === 'bell' ? 15000 : 4000)) {
       ui.toast(t('bellCooldown'));
       return;
     }
     if (player.seat) standUp();
     if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
-    intent = 'bell';
+    intent = kind;
     refreshStatus();
-    const b = buildings.bell;
+    const b = kind === 'bell' ? buildings.bell : buildings.drum;
     walkTo(b.standX, b.standZ, () => {
       intent = null;
       player.yaw = b.standYaw;
-      lastBell = performance.now();
+      lastStrike[kind] = performance.now();
       me.setAction('hapjang');
       refreshStatus();
       b.strike();
       setTimeout(() => {
-        audio.templeBell();
-        net.ringBell();
-      }, 1050);
+        if (kind === 'bell') audio.templeBell();
+        else audio.drum();
+        net.ringBell(kind);
+      }, kind === 'bell' ? 1050 : 320);
       setTimeout(() => {
         if (me.action === 'hapjang') me.setAction(baseAction());
       }, HAPJANG_DURATION * 1000);
     });
   }
-  net.on('bell', () => {
-    buildings.bell.strike();
-    setTimeout(() => audio.templeBell(0.6), 1050);
+  net.on('bell', (_from, kind) => {
+    const b = kind === 'drum' ? buildings.drum : buildings.bell;
+    b.strike();
+    setTimeout(() => (kind === 'drum' ? audio.drum(0.6) : audio.templeBell(0.6)), kind === 'drum' ? 320 : 1050);
   });
 
   // —— 木鱼 ——
@@ -777,8 +783,8 @@ async function start() {
       requestIncense(p.interact.type === 'altarIncense' ? 'altar' : 'yard');
       return;
     }
-    if (p.interact?.type === 'bell') {
-      ringBell();
+    if (p.interact?.type === 'bell' || p.interact?.type === 'drum') {
+      strikeInstrument(p.interact.type);
       return;
     }
     cancelIntent();
@@ -836,6 +842,7 @@ async function start() {
       label = s && seatTaken(s) ? t('seatTaken') : t('sit');
     } else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
     else if (it?.type === 'bell') label = t('ringBell');
+    else if (it?.type === 'drum') label = t('beatDrum');
     canvas.classList.toggle('point', !!label);
     ui.showTooltip(label, e.clientX, e.clientY);
   });
@@ -1064,6 +1071,7 @@ async function start() {
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     buildings.bell.update(dt);
+    buildings.drum.update(dt);
     env.follow(player.x, player.z);
     for (const [i, f] of hall.candleFlames.entries()) f.scale.set(1, 2.2 + Math.sin(elapsed * 9 + i * 2) * 0.25, 1);
     if (markerLife > 0) {

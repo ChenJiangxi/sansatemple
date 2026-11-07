@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { MAPLES, PINES, ROCKS, POND, COURT } from '../layout';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { pbr } from './pbr';
-import { foliageClusterTexture, mapleLeafTexture, waterNormalTexture, woodTexture, rng } from '../textures';
+import { foliageClusterTexture, ginkgoClusterTexture, waterNormalTexture, woodTexture, rng } from '../textures';
 import { mesh } from './util';
 
 const windUniform = { value: 0 };
@@ -83,6 +83,17 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   const outerPines = outer.filter((_, i) => i % 3 === 2);
   const barkGeos: THREE.BufferGeometry[] = [];
   const clusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.5, 1.5), leafMat, allMaples.length * perTree);
+  // 银杏：扇形小叶，金黄色，树冠更高更收
+  const gTex = ginkgoClusterTexture(6);
+  const gMat = new THREE.MeshStandardMaterial({ map: gTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8 });
+  addSway(gMat, 0.05);
+  const gClusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.4, 1.4), gMat, allMaples.length * perTree);
+  gClusters.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: gTex, alphaTest: 0.45 });
+  gClusters.castShadow = true;
+  gClusters.receiveShadow = true;
+  const gPal = ['#e8c23a', '#f0d24e', '#d9a82a', '#e0b838', '#c9a032'].map((h) => new THREE.Color(h));
+  const isGinkgo = (i: number) => i % 4 !== 3;
+  let gi = 0;
   clusters.customDepthMaterial = leafDepth;
   clusters.castShadow = true;
   clusters.receiveShadow = true;
@@ -97,34 +108,46 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   const e = new THREE.Euler();
   let ci = 0;
   allMaples.forEach(([x, z, s], ti) => {
-    const pal = palettes[ti % 3];
-    const trunkTop = new THREE.Vector3(x + (r() - 0.5) * 0.4, 2.2 * s, z + (r() - 0.5) * 0.4);
+    const ginkgo = isGinkgo(ti);
+    const pal = ginkgo ? gPal : palettes[ti % 3];
+    const trunkTop = new THREE.Vector3(x + (r() - 0.5) * 0.2, (ginkgo ? 3.2 : 2.2) * s, z + (r() - 0.5) * 0.2);
     barkGeos.push(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + (r() - 0.5) * 0.3, 1.1 * s, z), trunkTop], 0.2 * s));
     const tips: THREE.Vector3[] = [];
     for (let b = 0; b < 5; b++) {
       const a = (b / 5) * Math.PI * 2 + r();
-      const len = (1.3 + r() * 0.9) * s;
-      const tip = new THREE.Vector3(trunkTop.x + Math.cos(a) * len, trunkTop.y + (0.9 + r() * 1.3) * s, trunkTop.z + Math.sin(a) * len);
+      const len = (ginkgo ? 0.9 + r() * 0.6 : 1.3 + r() * 0.9) * s;
+      const tip = new THREE.Vector3(trunkTop.x + Math.cos(a) * len, trunkTop.y + (ginkgo ? 0.6 + r() * 2.2 : 0.9 + r() * 1.3) * s, trunkTop.z + Math.sin(a) * len);
       const mid = trunkTop.clone().lerp(tip, 0.5).add(new THREE.Vector3(0, 0.3, 0));
       barkGeos.push(branchTube([trunkTop.clone(), mid, tip], 0.09 * s));
       tips.push(tip);
     }
-    const crownC = new THREE.Vector3(trunkTop.x, trunkTop.y + 1.5 * s, trunkTop.z);
+    const crownC = new THREE.Vector3(trunkTop.x, trunkTop.y + (ginkgo ? 2.4 : 1.5) * s, trunkTop.z);
+    if (ginkgo) tips.push(new THREE.Vector3(trunkTop.x, trunkTop.y + 3.6 * s, trunkTop.z));
     tips.push(crownC);
     if (ti < MAPLES.length) leafSpawns.push(crownC);
     for (let k = 0; k < perTree; k++) {
       const tip = tips[k % tips.length];
-      const p = tip.clone().add(new THREE.Vector3((r() - 0.5) * 2.2 * s, (r() - 0.4) * 1.4 * s, (r() - 0.5) * 2.2 * s));
+      const spread = ginkgo ? 1.5 : 2.2;
+      const p = tip.clone().add(new THREE.Vector3((r() - 0.5) * spread * s, (r() - 0.4) * 1.4 * s, (r() - 0.5) * spread * s));
       e.set(r() * Math.PI, r() * Math.PI * 2, r() * Math.PI);
       q.setFromEuler(e);
       const sc = (0.8 + r() * 0.7) * s;
       m.compose(p, q, new THREE.Vector3(sc, sc, sc));
-      clusters.setMatrixAt(ci, m);
-      clusters.setColorAt(ci, pal[Math.floor(r() * pal.length)].clone().multiplyScalar(0.85 + r() * 0.3));
-      ci++;
+      const col = pal[Math.floor(r() * pal.length)].clone().multiplyScalar(0.85 + r() * 0.3);
+      if (ginkgo) {
+        gClusters.setMatrixAt(gi, m);
+        gClusters.setColorAt(gi, col);
+        gi++;
+      } else {
+        clusters.setMatrixAt(ci, m);
+        clusters.setColorAt(ci, col);
+        ci++;
+      }
     }
   });
-  group.add(clusters);
+  clusters.count = ci;
+  gClusters.count = gi;
+  group.add(clusters, gClusters);
   group.add(mesh(mergeGeometries(barkGeos), barkMat));
 
   // 松树（伞形树冠）
@@ -230,12 +253,25 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   }
 
   // 飘落的枫叶
-  const leafTex = mapleLeafTexture();
+  const leafTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#fff';
+    g.beginPath();
+    g.moveTo(32, 58);
+    g.arc(32, 58, 46, -Math.PI * 0.82, -Math.PI * 0.18);
+    g.closePath();
+    g.fill();
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
   const fallMat = new THREE.MeshStandardMaterial({ map: leafTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 });
   const N = 150;
   const fall = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.14, 0.14), fallMat, N);
   const leaves = Array.from({ length: N }, () => ({ p: new THREE.Vector3(), v: new THREE.Vector3(), rot: new THREE.Euler(), spin: new THREE.Vector3(), life: 0 }));
-  const allColors = palettes.flat();
+  const allColors = [...gPal, ...gPal, ...palettes[1]];
   const spawn = (L: (typeof leaves)[number], initial: boolean) => {
     const c = leafSpawns[Math.floor(Math.random() * leafSpawns.length)];
     L.p.set(c.x + (Math.random() - 0.5) * 4, c.y + (Math.random() - 0.5) * 1.5, c.z + (Math.random() - 0.5) * 4);

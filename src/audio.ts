@@ -342,6 +342,40 @@ export class AudioEngine {
     n.start(t, 0, 0.3);
   }
 
+  // 鼓：低沉的一声“咚”，带一点皮面的噪声
+  drum(gain = 1) {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.9 * gain;
+    out.connect(this.buses.ambient);
+    const send = ctx.createGain();
+    send.gain.value = 0.7;
+    out.connect(send).connect(this.reverbSend);
+    for (const [f0, f1, a, d] of [[92, 58, 0.9, 1.6], [150, 96, 0.35, 0.7], [230, 160, 0.15, 0.35]] as const) {
+      const o = ctx.createOscillator();
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(f1, t + 0.25);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(a, t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0005, t + d);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + d + 0.1);
+    }
+    const n = this.noiseSource();
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.5, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    n.connect(lp).connect(ng).connect(out);
+    n.start(t, Math.random() * 3, 0.25);
+  }
+
   // 念佛：共振峰合成的男声齐诵“南无阿弥陀佛”，配木鱼
   startChant() {
     if (!this.enabled || !this.ctx || this.chanting) return;
@@ -396,12 +430,12 @@ export class AudioEngine {
     oscs.forEach((o) => o.start(now));
 
     const V: Record<string, [number, number, number]> = {
-      a: [760, 1200, 2600], u: [340, 820, 2300], i: [290, 2200, 3000], n: [280, 1300, 2600], m: [260, 1000, 2400], l: [380, 900, 2500],
+      a: [760, 1200, 2600], o: [520, 860, 2450], e: [480, 1150, 2500], u: [340, 820, 2300], i: [290, 2200, 3000], n: [280, 1300, 2600], m: [260, 1000, 2400],
     };
-    // 南无阿弥陀佛（나무아미타불）
+    // 南无阿弥陀佛（nā mó ē mí tuó fó），按普通话发音；最后一个字拖长、音高回落
     const syl: { c: string; v: string; p: number; end?: string }[] = [
-      { c: 'n', v: 'a', p: 1 }, { c: 'm', v: 'u', p: 1 }, { c: '', v: 'a', p: 1.122 }, { c: 'm', v: 'i', p: 1 },
-      { c: 't', v: 'a', p: 1 }, { c: 'b', v: 'u', p: 0.891, end: 'l' },
+      { c: 'n', v: 'a', p: 1 }, { c: 'm', v: 'o', p: 1 }, { c: '', v: 'e', p: 1.122 }, { c: 'm', v: 'i', p: 1.122 },
+      { c: 't', v: 'u', p: 1, end: 'o' }, { c: 'f', v: 'o', p: 0.891 },
     ];
     const beat = 0.48;
     let nextTime = now + 0.6;
@@ -430,6 +464,22 @@ export class AudioEngine {
           setF(V[s.c], t, 0.01);
           setF(V[s.v], t + 0.08, 0.03);
           voiceOut.gain.setTargetAtTime(1, t + 0.08, 0.03);
+        } else if (s.c === 'f') {
+          // f：先一小段气声，再接元音
+          voiceOut.gain.setTargetAtTime(0.05, t - 0.03, 0.01);
+          const n = this.noiseSource();
+          n.playbackRate.value = 4;
+          const hp = ctx.createBiquadFilter();
+          hp.type = 'highpass';
+          hp.frequency.value = 2500;
+          const ng = ctx.createGain();
+          ng.gain.setValueAtTime(0.0, t - 0.06);
+          ng.gain.linearRampToValueAtTime(0.05, t - 0.02);
+          ng.gain.linearRampToValueAtTime(0.0, t + 0.04);
+          n.connect(hp).connect(ng).connect(bus);
+          n.start(t - 0.06, Math.random() * 3, 0.12);
+          setF(V[s.v], t, 0.01);
+          voiceOut.gain.setTargetAtTime(1, t + 0.04, 0.02);
         } else if (s.c === 't' || s.c === 'b') {
           voiceOut.gain.setTargetAtTime(0.02, t - 0.03, 0.01);
           setF(V[s.v], t, 0.01);
@@ -438,10 +488,7 @@ export class AudioEngine {
           setF(V[s.v], t, 0.03);
           voiceOut.gain.setTargetAtTime(1, t, 0.03);
         }
-        if (s.end) {
-          setF(V[s.end], t + beat * 0.6, 0.06);
-          voiceOut.gain.setTargetAtTime(0.5, t + beat * 0.7, 0.08);
-        }
+        if (s.end) setF(V[s.end], t + beat * 0.35, 0.05);
         this.moktak('chant', t, 0.45);
         nextTime += beat;
         idx++;

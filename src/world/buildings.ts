@@ -1,102 +1,84 @@
-// 配殿与钟楼
+// 配殿（观音殿、地藏殿）与钟楼、鼓楼：朱红柱、格扇门、彩画梁、带鸱吻的屋顶
 import * as THREE from 'three';
-import { SIDE_HALLS, BELL } from '../layout';
-import { latticeTexture, plaqueTexture } from '../textures';
-import { pbr } from './pbr';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { SIDE_HALLS, BELL, DRUM } from '../layout';
+import { plaqueTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
-import { buildRoof } from './hall';
+import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 
-const plaqueNames = ['殿王冥', '堂香心'];
+const plaqueNames = ['觀音殿', '地藏殿'];
 
-function sideHall(def: (typeof SIDE_HALLS)[number], idx: number, mats: Record<string, THREE.Material>) {
+function plaqueMesh(text: string, width: number) {
+  const M = chineseMats();
+  const n = [...text].length;
+  const h = width * (340 / (260 * n + 140));
+  return mesh(new THREE.BoxGeometry(width, h, 0.12), [M.gold, M.gold, M.gold, M.gold, new THREE.MeshStandardMaterial({ map: plaqueTexture(text), roughness: 0.5, metalness: 0.2 }), M.redDark]);
+}
+
+function sideHall(def: (typeof SIDE_HALLS)[number], idx: number) {
+  const M = chineseMats();
   const g = new THREE.Group();
   const L = def.d; // 面阔（本地 x）
   const D = def.w; // 进深（本地 z）
   const base = 0.6;
   const colH = 4.2;
-  const plat = mesh(worldBox(L + 1.6, base, D + 1.6, 1), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
+  const plat = mesh(worldBox(L + 1.6, base, D + 1.6, 1), [M.marbleSide, M.marbleSide, M.marble, M.marble, M.marbleSide, M.marbleSide]);
   plat.position.y = base / 2;
   g.add(plat);
-  // 台阶
   for (let k = 0; k < 2; k++) {
-    const s = mesh(worldBox(3.2, base * (k + 1) / 2, 0.6 * (2 - k), 1), mats.top);
+    const s = mesh(worldBox(3.2, (base * (k + 1)) / 2, 0.6 * (2 - k), 1), M.marble);
     s.position.set(0, (base * (k + 1)) / 4, D / 2 + 0.8 + 0.3 * (2 - k));
     g.add(s);
   }
   const hx = L / 2 - 0.4;
   const hz = D / 2 - 0.4;
   const colTop = base + colH;
-  const colGeo = new THREE.CylinderGeometry(0.22, 0.25, colH, 14);
-  const xs = [-hx, -hx / 2, 0, hx / 2, hx];
-  for (const x of xs)
+  const colGeo = meterUV(new THREE.CylinderGeometry(0.24, 0.27, colH, 16), 1.6, colH);
+  for (const x of [-hx, -hx / 2, 0, hx / 2, hx])
     for (const z of [-hz, hz]) {
-      const c = mesh(colGeo, mats.col);
+      const c = mesh(colGeo, M.red);
       c.position.set(x, base + colH / 2, z);
       g.add(c);
     }
-  for (const z of [-hz / 3, hz / 3])
-    for (const x of [-hx, hx]) {
-      const c = mesh(colGeo, mats.col);
-      c.position.set(x, base + colH / 2, z);
-      g.add(c);
-    }
-  // 正面：下段白墙、上面一排格子门
+  // 正面四间格扇门
   const bay = hx / 2;
+  const leaves: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 4; i++) {
     const cx = -hx + bay / 2 + i * bay;
-    const door = mesh(new THREE.BoxGeometry(bay - 0.36, colH - 1.3, 0.12), mats.lattice);
-    door.position.set(cx, base + 0.6 + (colH - 1.3) / 2, hz);
-    const uv = door.geometry.attributes.uv as THREE.BufferAttribute;
-    for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * 2);
-    g.add(door);
-    const low = mesh(worldBox(bay - 0.36, 0.6, 0.16, 1), mats.plaster);
-    low.position.set(cx, base + 0.3, hz);
-    g.add(low);
+    for (let k = 0; k < 4; k++) {
+      const w = (bay - 0.4) / 4;
+      const leaf = new THREE.BoxGeometry(w - 0.03, colH - 1.0, 0.1);
+      leaf.translate(cx - (bay - 0.4) / 2 + w * (k + 0.5), base + (colH - 1.0) / 2, hz);
+      leaves.push(leaf);
+    }
+    const tw = new THREE.BoxGeometry(bay - 0.4, 0.6, 0.1);
+    tw.translate(cx, colTop - 0.65, hz);
+    leaves.push(tw);
   }
-  // 侧墙与后墙
-  const back = mesh(worldBox(hx * 2, colH, 0.22, 1), mats.plaster);
+  g.add(mesh(mergeGeometries(leaves), M.geshan));
+  const back = mesh(worldBox(hx * 2, colH, 0.3, 1), M.redWall);
   back.position.set(0, base + colH / 2, -hz);
   g.add(back);
   for (const sx of [-1, 1]) {
-    const w = mesh(worldBox(0.22, colH, hz * 2, 1), mats.plaster);
+    const w = mesh(worldBox(0.3, colH, hz * 2, 1), M.redWall);
     w.position.set(sx * hx, base + colH / 2, 0);
     g.add(w);
   }
-  // 门楣以上的墙板与梁
-  const top = mesh(worldBox(hx * 2, 0.7, 0.16, 1), mats.plaster);
-  top.position.set(0, colTop - 0.35, hz);
-  g.add(top);
-  for (const z of [-hz, hz]) {
-    const geo = new THREE.BoxGeometry(hx * 2 + 0.6, 0.42, 0.34);
-    const uv = geo.attributes.uv as THREE.BufferAttribute;
-    for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (hx * 2) / 3.4);
-    const b = mesh(geo, mats.dc);
-    b.position.set(0, colTop + 0.15, z);
-    g.add(b);
-  }
-  for (const x of [-hx, hx]) {
-    const geo = new THREE.BoxGeometry(0.34, 0.42, hz * 2 + 0.6);
-    const uv = geo.attributes.uv as THREE.BufferAttribute;
-    for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (hz * 2) / 3.4);
-    const b = mesh(geo, mats.dc);
-    b.position.set(x, colTop + 0.15, 0);
-    g.add(b);
-  }
-  const fill = mesh(new THREE.BoxGeometry(hx * 2 + 0.2, 0.7, hz * 2 + 0.2), mats.band);
-  fill.position.y = colTop + 0.65;
+  const fill = mesh(new THREE.BoxGeometry(hx * 2 + 0.2, 0.9, hz * 2 + 0.2), M.green);
+  fill.position.y = colTop + 0.6;
   g.add(fill);
-  const roof = buildRoof({ cx: 0, cz: 0, W: hx + 2.1, D: hz + 2.1, rx: hx * 0.55, eaveY: colTop + 0.55, ridgeY: colTop + 3.6, lift: 0.7 });
-  g.add(roof);
-  const plaque = mesh(new THREE.BoxGeometry(2.2, 0.74, 0.08), [mats.trim, mats.trim, mats.trim, mats.trim, new THREE.MeshStandardMaterial({ map: plaqueTexture(plaqueNames[idx % 2]), roughness: 0.6 }), mats.trim]);
-  plaque.position.set(0, colTop + 0.6, hz + 0.32);
-  plaque.rotation.x = -0.1;
+  beamRing(g, 0, 0, hx, hz, colTop, M, 1.0);
+  g.add(buildRoof({ cx: 0, cz: 0, W: hx + 2.2, D: hz + 2.2, rx: hx * 0.55, eaveY: colTop + 1.2, ridgeY: colTop + 4.4, lift: 0.9, ornate: true }));
+  const plaque = plaqueMesh(plaqueNames[idx % 2], 2.6);
+  plaque.position.set(0, colTop - 0.05, hz + 0.32);
+  plaque.rotation.x = -0.08;
   g.add(plaque);
   g.position.set(def.x, 0, def.z);
   g.rotation.y = def.yaw;
   return g;
 }
 
-export interface BellBuild {
+export interface StrikeBuild {
   interactives: THREE.Object3D[];
   strike(): void;
   update(dt: number): void;
@@ -105,11 +87,13 @@ export interface BellBuild {
   standYaw: number;
 }
 
-function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group): BellBuild {
+// 钟鼓楼的亭子：台基、四根红柱、彩画梁、带鸱吻的四坡顶、匾额
+function pavilion(T: { x: number; z: number; size: number; platform: number }, name: string, group: THREE.Group) {
+  const M = chineseMats();
   const g = new THREE.Group();
-  const S = BELL.size;
-  const base = BELL.platform;
-  const plat = mesh(worldBox(S + 1.2, base, S + 1.2, 1), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
+  const S = T.size;
+  const base = T.platform;
+  const plat = mesh(worldBox(S + 1.2, base, S + 1.2, 1), [M.marbleSide, M.marbleSide, M.marble, M.marble, M.marbleSide, M.marbleSide]);
   plat.position.y = base / 2;
   plat.name = 'walkable';
   g.add(plat);
@@ -117,87 +101,68 @@ function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group):
   const h = S / 2 - 0.4;
   const colTop = base + colH;
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const c = mesh(new THREE.CylinderGeometry(0.24, 0.28, colH, 14), mats.col);
+    const c = mesh(meterUV(new THREE.CylinderGeometry(0.25, 0.29, colH, 16), 1.7, colH), M.red);
     c.position.set(sx * h, base + colH / 2, sz * h);
     g.add(c);
-    const p = mesh(new THREE.CylinderGeometry(0.4, 0.46, 0.18, 12), mats.top);
-    p.position.set(sx * h, base + 0.09, sz * h);
+    const p = mesh(lathe([[0, 0], [0.45, 0], [0.45, 0.05], [0.36, 0.16], [0, 0.16]], 16), M.marble);
+    p.position.set(sx * h, base, sz * h);
     g.add(p);
   }
-  for (const z of [-h, h]) {
-    const geo = new THREE.BoxGeometry(h * 2 + 0.6, 0.4, 0.32);
-    const b = mesh(geo, mats.dc);
-    b.position.set(0, colTop, z);
-    g.add(b);
-  }
-  for (const x of [-h, h]) {
-    const b = mesh(new THREE.BoxGeometry(0.32, 0.4, h * 2 + 0.6), mats.dc);
-    b.position.set(x, colTop, 0);
-    g.add(b);
-  }
-  // 挂钟的横梁
-  const hanger = mesh(new THREE.BoxGeometry(h * 2, 0.34, 0.34), mats.col);
+  beamRing(g, 0, 0, h, h, colTop, M, 0.9, false);
+  g.add(buildRoof({ cx: 0, cz: 0, W: h + 1.9, D: h + 1.9, rx: 0.9, eaveY: colTop + 1.2, ridgeY: colTop + 3.8, lift: 0.95, ornate: true }));
+  const plaque = plaqueMesh(name, 1.7);
+  plaque.position.set(0, colTop - 0.1, h + 0.3);
+  g.add(plaque);
+  g.position.set(T.x, 0, T.z);
+  group.add(g);
+  return { g, colTop };
+}
+
+function bellTower(group: THREE.Group): StrikeBuild {
+  const { g, colTop } = pavilion(BELL, '鐘樓', group);
+  const M = chineseMats();
+  const hanger = mesh(worldBox(BELL.size - 0.8, 0.34, 0.34, 1), M.red);
   hanger.position.set(0, colTop - 0.5, 0);
   g.add(hanger);
-  const roof = buildRoof({ cx: 0, cz: 0, W: h + 1.9, D: h + 1.9, rx: 0.5, eaveY: colTop + 0.45, ridgeY: colTop + 2.9, lift: 0.75 });
-  g.add(roof);
-
-  // 梵钟
-  const bronze = new THREE.MeshStandardMaterial({ color: '#56604c', metalness: 0.85, roughness: 0.42 });
+  // 梵钟：钟口略外撇，钟身有纹带
+  const bronze = new THREE.MeshStandardMaterial({ color: '#4f5a48', metalness: 0.85, roughness: 0.42 });
   const bell = new THREE.Group();
-  const prof: [number, number][] = [[0, 0.02], [0.88, 0], [0.92, 0.12], [0.86, 0.5], [0.78, 1.2], [0.72, 1.8], [0.62, 2.12], [0.4, 2.25], [0, 2.28]];
-  const body = mesh(lathe(prof.map(([r, y]) => [r, y - 2.28]), 40), bronze);
-  bell.add(body);
-  for (const y of [-2.05, -1.6, -0.6, -0.25]) {
-    const ring = mesh(new THREE.TorusGeometry(y < -1 ? 0.9 : 0.66, 0.035, 8, 48), bronze);
+  const prof: [number, number][] = [[0, 0.02], [0.95, 0], [0.98, 0.1], [0.86, 0.45], [0.78, 1.2], [0.72, 1.8], [0.6, 2.12], [0.38, 2.24], [0, 2.28]];
+  bell.add(mesh(lathe(prof.map(([r, y]) => [r, y - 2.28]), 40), bronze));
+  for (const y of [-1.85, -1.2, -0.45]) {
+    const ring = mesh(new THREE.TorusGeometry(y < -1.5 ? 0.86 : 0.74, 0.035, 8, 48), bronze);
     ring.rotation.x = Math.PI / 2;
     ring.position.y = y;
     bell.add(ring);
   }
-  // 乳头状的小凸起
   for (let i = 0; i < 4; i++) {
-    const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-    for (let r = 0; r < 3; r++)
-      for (let c = 0; c < 3; c++) {
-        const n = mesh(new THREE.SphereGeometry(0.04, 6, 4), bronze, false);
-        const aa = a + (c - 1) * 0.12;
-        const y = -0.5 - r * 0.14;
-        const rr = 0.7 + r * 0.02;
-        n.position.set(Math.cos(aa) * rr, y, Math.sin(aa) * rr);
-        bell.add(n);
-      }
+    const band = mesh(new THREE.BoxGeometry(0.06, 1.3, 0.06), bronze);
+    const a = (i / 4) * Math.PI * 2;
+    band.position.set(Math.cos(a) * 0.79, -1.15, Math.sin(a) * 0.79);
+    bell.add(band);
   }
-  const hook = mesh(new THREE.TorusGeometry(0.16, 0.06, 8, 16), bronze);
-  hook.position.y = 0.12;
-  bell.add(hook);
+  const knob = mesh(new THREE.TorusGeometry(0.2, 0.08, 8, 16, Math.PI), bronze);
+  knob.position.y = 0.05;
+  bell.add(knob);
   bell.position.set(0, colTop - 1.2, 0);
   g.add(bell);
   const chain = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), bronze);
   chain.position.set(0, colTop - 0.92, 0);
   g.add(chain);
-
-  // 撞木：用绳子吊着的一根圆木
+  // 撞木
   const logPivot = new THREE.Group();
   logPivot.position.set(-1.25, colTop - 0.5, 0);
-  const log = mesh(new THREE.CylinderGeometry(0.15, 0.15, 2.0, 12), mats.log);
+  const log = mesh(new THREE.CylinderGeometry(0.15, 0.15, 2.0, 12), M.red);
   log.rotation.z = Math.PI / 2;
   log.position.set(-0.9, -2.27, 0);
   logPivot.add(log);
-  const ropeMat = new THREE.LineBasicMaterial({ color: '#4a3a2a' });
-  for (const x of [-1.6, -0.2]) {
-    const pts = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, -2.27, 0)];
-    logPivot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), ropeMat));
-  }
+  const ropeMat = new THREE.LineBasicMaterial({ color: '#c9302a' });
+  for (const x of [-1.6, -0.2]) logPivot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, -2.27, 0)]), ropeMat));
   g.add(logPivot);
-
-  // 方便点中的透明区域
   const hit = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(-0.8, colTop - 2.2, 0);
   hit.userData.interact = { type: 'bell' };
   g.add(hit);
-
-  g.position.set(BELL.x, 0, BELL.z);
-  group.add(g);
 
   let swing = 0;
   let sway = 0;
@@ -213,13 +178,9 @@ function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group):
     update(dt) {
       if (swing > 0) {
         swing = Math.max(0, swing - dt * 0.9);
-        // 先往后拉，再撞向钟
         const t = 1 - swing;
-        const a = t < 0.45 ? -Math.sin((t / 0.45) * Math.PI * 0.5) * 0.35 : -0.35 + Math.sin(((t - 0.45) / 0.55) * Math.PI * 0.5) * 0.47;
-        logPivot.rotation.z = a;
-        if (t > 0.98 && sway <= 0) {
-          sway = 1;
-        }
+        logPivot.rotation.z = t < 0.45 ? -Math.sin((t / 0.45) * Math.PI * 0.5) * 0.35 : -0.35 + Math.sin(((t - 0.45) / 0.55) * Math.PI * 0.5) * 0.47;
+        if (t > 0.98 && sway <= 0) sway = 1;
       } else logPivot.rotation.z *= Math.pow(0.1, dt);
       if (sway > 0) {
         sway = Math.max(0, sway - dt * 0.12);
@@ -230,21 +191,83 @@ function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group):
   };
 }
 
+function drumTower(group: THREE.Group): StrikeBuild {
+  const { g } = pavilion(DRUM, '鼓樓', group);
+  const M = chineseMats();
+  // 大鼓：红色鼓身、一圈金色鼓钉，鼓面朝左右，架在红木鼓架上
+  const drum = new THREE.Group();
+  const body = mesh(lathe([[0, -0.62], [0.95, -0.62], [1.1, -0.3], [1.15, 0], [1.1, 0.3], [0.95, 0.62], [0, 0.62]], 36), M.red);
+  body.rotation.z = Math.PI / 2;
+  drum.add(body);
+  const headMat = new THREE.MeshStandardMaterial({ color: '#d8c49a', roughness: 0.7 });
+  for (const s of [-1, 1]) {
+    const head = mesh(new THREE.CircleGeometry(0.94, 32), headMat);
+    head.rotation.y = (s * Math.PI) / 2;
+    head.position.x = s * 0.625;
+    drum.add(head);
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      const nail = mesh(new THREE.SphereGeometry(0.035, 6, 4), M.gold, false);
+      nail.position.set(s * 0.56, Math.cos(a) * 0.98, Math.sin(a) * 0.98);
+      drum.add(nail);
+    }
+  }
+  drum.position.set(0, DRUM.platform + 1.55, 0);
+  g.add(drum);
+  const frame: THREE.BufferGeometry[] = [];
+  for (const sz of [-1, 1]) {
+    for (const sx of [-0.5, 0.5]) {
+      const leg = worldBox(0.12, 1.7, 0.12, 1);
+      leg.translate(sx, DRUM.platform + 0.85, sz * 0.95);
+      frame.push(leg);
+    }
+    const bar = worldBox(1.2, 0.12, 0.12, 1);
+    bar.translate(0, DRUM.platform + 1.2, sz * 0.95);
+    frame.push(bar);
+  }
+  g.add(mesh(mergeGeometries(frame), M.redDark));
+  // 鼓槌
+  const stickPivot = new THREE.Group();
+  stickPivot.position.set(1.15, DRUM.platform + 1.55, 0.25);
+  const stick = mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.7, 8), M.redDark);
+  stick.rotation.z = Math.PI / 2;
+  stick.position.x = 0.35;
+  stickPivot.add(stick);
+  g.add(stickPivot);
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.set(0, DRUM.platform + 1.4, 0);
+  hit.userData.interact = { type: 'drum' };
+  g.add(hit);
+  let t = 0;
+  let shake = 0;
+  return {
+    interactives: [hit],
+    standX: DRUM.x + 1.9,
+    standZ: DRUM.z + 0.3,
+    standYaw: -Math.PI / 2,
+    strike() {
+      t = 1;
+    },
+    update(dt) {
+      if (t > 0) {
+        t = Math.max(0, t - dt * 1.6);
+        const k = 1 - t;
+        stickPivot.rotation.y = k < 0.5 ? -k * 1.4 : -(1 - k) * 1.4;
+        if (k > 0.48 && shake <= 0) shake = 1;
+      }
+      if (shake > 0) {
+        shake = Math.max(0, shake - dt * 2);
+        drum.position.x = Math.sin(shake * 40) * 0.01 * shake;
+      }
+    },
+  };
+}
+
 export function buildBuildings(scene: THREE.Scene) {
   const group = new THREE.Group();
-  const mats: Record<string, THREE.Material> = {
-    top: pbr('granite', { metersPerTile: 2.4, color: '#a9a49a' }),
-    side: pbr('stonewall', { metersPerTile: 3, color: '#b0aaa0' }),
-    col: pbr('wood', { metersPerTile: 1.8, color: '#6e5a4c', rotate: true }),
-    log: pbr('wood', { metersPerTile: 1.2, color: '#8a7462' }),
-    plaster: pbr('plaster', { metersPerTile: 2.5, color: '#e6dfd2' }),
-    lattice: new THREE.MeshStandardMaterial({ map: latticeTexture(), roughness: 0.9, emissive: '#f4ead2', emissiveIntensity: 0.12 }),
-    dc: pbr('wood', { metersPerTile: 2.2, color: '#5e4c40' }),
-    band: pbr('plaster', { metersPerTile: 2.5, color: '#ddd5c6' }),
-    trim: new THREE.MeshStandardMaterial({ color: '#b08d4a', metalness: 0.6, roughness: 0.4 }),
-  };
-  SIDE_HALLS.forEach((d, i) => group.add(sideHall(d, i, mats)));
-  const bell = bellPavilion(mats, group);
+  SIDE_HALLS.forEach((d, i) => group.add(sideHall(d, i)));
+  const bell = bellTower(group);
+  const drum = drumTower(group);
   scene.add(group);
-  return { group, bell };
+  return { group, bell, drum };
 }
