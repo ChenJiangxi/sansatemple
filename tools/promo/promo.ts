@@ -666,12 +666,16 @@ function inkTitle(g: CanvasRenderingContext2D, text: string, cx: number, cy: num
   g.restore();
 }
 
-// 朱红印章：白字，边缘有些斑驳
-function seal(g: CanvasRenderingContext2D, cx: number, cy: number, size: number, text: string, alpha: number, scale: number) {
-  g.save();
-  g.translate(cx, cy);
-  g.scale(scale, scale);
-  g.globalAlpha = alpha;
+// 朱红印章：白字，边缘有些斑驳（先画在单独的小画布上，斑驳只抠印章本身）
+const sealCache = new Map<string, HTMLCanvasElement>();
+function sealCanvas(size: number, text: string) {
+  const key = size + text;
+  const hit = sealCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = c.height = Math.ceil(size * 1.1);
+  const g = c.getContext('2d')!;
+  g.translate(c.width / 2, c.height / 2);
   g.fillStyle = '#b52a1f';
   roundRect(g, -size / 2, -size / 2, size, size, size * 0.08);
   g.fill();
@@ -690,7 +694,6 @@ function seal(g: CanvasRenderingContext2D, cx: number, cy: number, size: number,
     g.font = `${size * 0.36}px ZMX`;
     chars.forEach((ch, i) => g.fillText(ch, 0, (i - (chars.length - 1) / 2) * size * 0.36));
   }
-  // 斑驳
   g.globalCompositeOperation = 'destination-out';
   let s = text.charCodeAt(0);
   for (let i = 0; i < 40; i++) {
@@ -702,6 +705,16 @@ function seal(g: CanvasRenderingContext2D, cx: number, cy: number, size: number,
     g.arc(x, y, size * 0.012 + (i % 3) * size * 0.006, 0, Math.PI * 2);
     g.fill();
   }
+  sealCache.set(key, c);
+  return c;
+}
+function seal(g: CanvasRenderingContext2D, cx: number, cy: number, size: number, text: string, alpha: number, scale: number) {
+  const c = sealCanvas(size, text);
+  g.save();
+  g.globalAlpha = alpha;
+  g.translate(cx, cy);
+  g.scale(scale, scale);
+  g.drawImage(c, -c.width / 2, -c.height / 2);
   g.restore();
 }
 
