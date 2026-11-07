@@ -1,0 +1,22 @@
+{
+  "name": "sansa-clone",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4317",
+    "server": "node server/server.mjs",
+    "build": "tsc --noEmit && vite build",
+    "start": "node server/server.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.7"
+  }
+}

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#24251f">
+<meta name="description" content="静静同坐的线上寺院：散步、合掌、礼拜、敲木鱼、拨念珠。">
+<title>山寺 · 静静同坐的线上寺院</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8068' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 11c5-1 8-4 10-7 2 3 5 6 10 7M4 12h16M7 13v7m10-7v7M4 20h16M10 15h4v5'/%3E%3C/svg%3E">
+<style>
+  html,body{margin:0;height:100%;background:#eeece3;overflow:hidden}
+  .boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;padding:24px;background:#eeece3;color:#4d5144;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans","Apple SD Gothic Neo","Noto Sans CJK SC",sans-serif;text-align:center;z-index:50;transition:opacity .8s ease}
+  .boot.gone{opacity:0;pointer-events:none}
+  .boot-mark{color:#8a8068;margin-bottom:6px}
+  .boot h1{margin:0;padding-left:5px;font-size:27px;font-weight:500;letter-spacing:5px}
+  .boot p{margin:0;color:#838677;font-size:12px;line-height:1.7}
+  .boot-dot{width:4px;height:4px;margin-top:18px;background:#a99a7b;border-radius:50%;animation:breathe 1.8s ease-in-out infinite}
+  .boot.err .boot-dot{display:none}
+  .boot a{color:#64664f;font-size:13px}
+  @keyframes breathe{50%{opacity:.25}}
+  @media (prefers-reduced-motion:reduce){.boot-dot{animation:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<main id="boot" class="boot" role="status">
+  <span class="boot-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M2 11c5-1 8-4 10-7 2 3 5 6 10 7M4 12h16M7 13v7m10-7v7M4 20h16M10 15h4v5"/></svg></span>
+  <h1 id="boot-title">山寺</h1>
+  <p id="boot-msg">正在打开法堂</p>
+  <span class="boot-dot" aria-hidden="true"></span>
+</main>
+<noscript><p style="padding:2rem;font-family:sans-serif">请打开浏览器的 JavaScript 以进入山寺。</p></noscript>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
