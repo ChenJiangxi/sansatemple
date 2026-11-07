@@ -1,9 +1,12 @@
 // 院中陈设：莲花灯、石灯、石塔、香炉与香烟、长椅、围墙、山门
 import * as THREE from 'three';
-import { HALL, COURT, INCENSE, PAGODAS, STONE_LANTERNS, BENCHES, BENCH_SEATS } from '../layout';
+import { HALL, COURT, INCENSE, PAGODAS, STONE_LANTERNS, BENCHES, BENCH_SEATS, GROUND_LAMPS } from '../layout';
 import { IncenseSpot, type IncenseView } from './incense';
+import { pbr } from './pbr';
 import { stoneTexture, woodTexture, roofTexture, lanternTexture, rng } from '../textures';
 import { mesh, worldBox, lathe } from './util';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
 import { buildRoof } from './hall';
 
 const LANTERN_COLORS = ['#f4a3b5', '#f7c1a0', '#fbe3b0', '#f6f0e6', '#f29aa8', '#e9b5d2'];
@@ -30,10 +33,10 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const group = new THREE.Group();
   const r = rng(202);
   const interactives: THREE.Object3D[] = [];
-  const stoneMat = new THREE.MeshStandardMaterial({ map: stoneTexture(61, '#a19c90'), roughness: 0.92 });
-  const woodMat = new THREE.MeshStandardMaterial({ map: woodTexture(21, ['#6b4a32', '#57391f', '#7d5a3d']), roughness: 0.8 });
-  const darkWood = new THREE.MeshStandardMaterial({ map: woodTexture(22, ['#3a2a20', '#2a1d16', '#4a3527']), roughness: 0.8 });
-  const redWood = new THREE.MeshStandardMaterial({ map: woodTexture(23, ['#7a2c20', '#5e1f18', '#8e3a28']), roughness: 0.7 });
+  const stoneMat = pbr('granite', { metersPerTile: 1.5, color: '#b7b2a8' });
+  const woodMat = pbr('wood', { metersPerTile: 1.2, color: '#8a7462' });
+  const darkWood = pbr('wood', { metersPerTile: 1.2, color: '#4a3b31' });
+  const redWood = pbr('wood', { metersPerTile: 1.6, color: '#5a463a', rotate: true });
 
   // —— 莲花灯：沿参道两侧的灯绳 + 屋檐下一排 + 殿内几盏 ——
   const lanternPos: THREE.Vector3[] = [];
@@ -92,6 +95,32 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   pathLights[1].position.set(0, 3.4, 40);
   group.add(...pathLights);
 
+  // —— 地上的方形纸灯（木框 + 白纸，夜里发光）——
+  const paperGlow = new THREE.MeshStandardMaterial({ color: '#f2ead8', roughness: 0.9, emissive: '#ffd9a0', emissiveIntensity: 0.2 });
+  const lampFrame: THREE.BufferGeometry[] = [];
+  const lampPaper: THREE.BufferGeometry[] = [];
+  const LAMPS = GROUND_LAMPS;
+
+  for (const [x, z] of LAMPS) {
+    const post = worldBox(0.1, 0.55, 0.1, 1);
+    post.translate(x, 0.275, z);
+    lampFrame.push(post);
+    const box = worldBox(0.34, 0.46, 0.34, 1);
+    box.translate(x, 0.55 + 0.23, z);
+    lampPaper.push(box);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const bar = worldBox(0.04, 0.5, 0.04, 1);
+      bar.translate(x + dx * 0.17, 0.55 + 0.25, z + dz * 0.17);
+      lampFrame.push(bar);
+    }
+    const cap = worldBox(0.46, 0.06, 0.46, 1);
+    cap.translate(x, 1.05, z);
+    lampFrame.push(cap);
+  }
+  group.add(mesh(mergeGeometries(lampFrame), darkWood));
+  const paperMesh = mesh(mergeGeometries(lampPaper), paperGlow, false);
+  group.add(paperMesh);
+
   // —— 石灯 ——
   const fireMat = new THREE.MeshStandardMaterial({ color: '#3a2a1a', emissive: '#ffb066', emissiveIntensity: 0.3 });
   for (const [x, z] of STONE_LANTERNS) {
@@ -114,12 +143,12 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   // —— 双塔（三层石塔）——
-  const pm = new THREE.MeshStandardMaterial({ map: stoneTexture(71, '#9d988b'), roughness: 0.95 });
+  const pm = pbr('granite', { metersPerTile: 1.6, color: '#b3ada2' });
   for (const P of PAGODAS) {
     const g = new THREE.Group();
     let y = 0;
     const tier = (w: number, h: number) => {
-      const b = mesh(worldBox(w, h, w, 1.5), pm);
+      const b = mesh(worldBox(w, h, w, 1), pm);
       b.position.y = y + h / 2;
       g.add(b);
       y += h;
@@ -179,8 +208,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const pedestal = mesh(worldBox(1.6, 0.18, 1.6, 1.5), stoneMat);
   pedestal.position.y = -0.09;
   burner.add(pedestal);
-  burner.scale.setScalar(1.35);
-  burner.position.set(INCENSE.x, 0.24, INCENSE.z);
+  burner.position.set(INCENSE.x, 0.18, INCENSE.z);
   burner.traverse((o) => {
     o.userData.interact = { type: 'incense' };
   });
@@ -188,7 +216,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   interactives.push(burner);
 
   // 香和烟
-  const yardIncense = new IncenseSpot(group, INCENSE.x, 0.24 + 1.02 * 1.35, INCENSE.z, 0.72 * 1.35, 24, 0.5);
+  const yardIncense = new IncenseSpot(group, INCENSE.x, 0.18 + 1.02, INCENSE.z, 0.72, 24, 0.45);
 
   // —— 长椅 ——
   for (const b of BENCHES) {
@@ -227,12 +255,12 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   // —— 围墙（石墙 + 瓦顶）——
-  const wallStone = new THREE.MeshStandardMaterial({ map: stoneTexture(81, '#8f887a'), roughness: 0.95 });
-  const capMat = new THREE.MeshStandardMaterial({ map: roofTexture(), roughness: 0.85 });
+  const wallStone = pbr('stonewall', { metersPerTile: 2.6, color: '#b5afa4' });
+  const capMat = pbr('roof', { metersPerTile: 1.6, color: '#8a8c8a' });
   const addWall = (x0: number, z0: number, x1: number, z1: number) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
     const ang = Math.atan2(z1 - z0, x1 - x0);
-    const w = mesh(worldBox(len, 1.25, 0.5, 1.6), wallStone);
+    const w = mesh(worldBox(len, 1.25, 0.5, 1), wallStone);
     w.position.set((x0 + x1) / 2, 0.62, (z0 + z1) / 2);
     w.rotation.y = -ang;
     group.add(w);
@@ -281,6 +309,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       lanternLevel = level;
       lanternMat.emissiveIntensity = level;
       fireMat.emissiveIntensity = 0.2 + level * 0.8;
+      paperGlow.emissiveIntensity = 0.15 + level * 0.9;
       for (const l of pathLights) l.intensity = Math.max(0, level - 0.8) * 6;
     },
     setIncense(list) {

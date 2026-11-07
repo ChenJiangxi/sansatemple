@@ -10,7 +10,8 @@ import { buildProps } from './world/props';
 import { buildBuildings } from './world/buildings';
 import { IncenseSpot } from './world/incense';
 import { placeStatues } from './world/statues';
-import { Monk, type Action, HAPJANG_DURATION } from './monk';
+import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
+import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION } from './monk';
 import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, type Seat, heightAt, canStep, planRoute } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace } from './net';
@@ -73,10 +74,16 @@ async function start() {
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   app.appendChild(renderer.domElement);
 
+  setMaxAnisotropy(renderer.capabilities.getMaxAnisotropy());
+  const bootMsg = document.getElementById('boot-msg')!;
+  await preloadTextures((d, n) => (bootMsg.textContent = `${t('opening')} · ${Math.round((d / n) * 100)}%`));
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   const roomEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  scene.environment = roomEnv;
+  // 室外反射用森林全景照片
+  const skyTex = loadTexture('sky.jpg');
+  skyTex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = pmrem.fromEquirectangular(skyTex).texture;
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 900);
 
   const env = new Environment(scene, renderer);
@@ -386,6 +393,14 @@ async function start() {
   });
   setInterval(refreshIncense, 2000);
 
+  // 上香时的特写镜头：在香炉斜前方，略高于小和尚，看向双手与香炉之间
+  const cine = { on: false, blend: 0, pos: new THREE.Vector3(), look: new THREE.Vector3() };
+  function endIncenseScene() {
+    cine.on = false;
+    ui.showCaption(null);
+    ui.root.classList.remove('cine');
+  }
+
   function requestIncense(place: IncensePlace) {
     const now = Date.now() + serverOffset;
     if (incenseList.some((i) => i.owner === myIncenseOwner() && (i.place ?? 'yard') === place && i.until > now)) {
@@ -397,26 +412,39 @@ async function start() {
     intent = 'incense';
     refreshStatus();
     const spot = place === 'altar' ? ALTAR_SPOT : { x: INCENSE.x, z: INCENSE.z + 1.9 };
+    const burner = place === 'altar' ? { x: ALTAR_BURNER.x, y: hall.altarSandY, z: ALTAR_BURNER.z } : { x: INCENSE.x, y: 1.2, z: INCENSE.z };
     walkTo(spot.x, spot.z, () => {
       intent = null;
+      player.x = spot.x;
+      player.z = spot.z;
       player.yaw = Math.PI;
-      me.setAction('incense');
-      refreshStatus();
-      setTimeout(() => {
-        if (me.action !== 'incense') return;
+      me.onIncensePlant = () => {
         if (net.online) net.offerIncense(place);
         else {
           const t0 = Date.now();
           incenseList.push({ id: 'local' + t0, by: name, owner: 'me', start: t0, until: t0 + 180000, place });
           refreshIncense();
         }
-        audio.bell(0.5);
-        ui.toast(t('incenseOffered'), 4200);
-      }, 1200);
-      setTimeout(() => {
-        if (me.action === 'incense') me.setAction(baseAction());
-      }, (1.2 + HAPJANG_DURATION) * 1000);
+        audio.bell(0.45);
+      };
+      me.setAction('incense');
+      refreshStatus();
+      // 镜头：从香炉的右后方回看小和尚
+      const fy = heightAt(spot.x, spot.z);
+      cine.pos.set(burner.x + 1.45, fy + 1.3, burner.z - 0.85);
+      cine.look.set((burner.x + spot.x) / 2, (burner.y + fy + 0.9) / 2, (burner.z + spot.z) / 2 + 0.1);
+      cine.on = true;
+      ui.root.classList.add('cine');
+      ui.showCaption(t('incenseTitle'), t('incenseSub'));
     });
+  }
+  // 上香动作做完：回到原来的状态、镜头拉回
+  function checkIncenseDone() {
+    if (me.action === 'incense' && me.actionTime >= INCENSE_DURATION) {
+      me.setAction(baseAction());
+      endIncenseScene();
+      ui.toast(t('incenseOffered'), 3600);
+    }
   }
 
   // —— 钟楼：撞钟 ——
@@ -658,6 +686,8 @@ async function start() {
     }
     const cv = sp.get('cam')?.split(',').map(Number);
     if (cv && cv.length === 3 && cv.every(Number.isFinite)) [cam.yaw, cam.pitch, cam.dist] = cv;
+    const inc = sp.get('incense');
+    if (inc === 'altar' || inc === 'yard') setTimeout(() => requestIncense(inc), 1200);
   }
   const camRay = new THREE.Raycaster();
   const tmpV = new THREE.Vector3();
@@ -681,6 +711,13 @@ async function start() {
     const inside = pos.x > -HALL.wallX && pos.x < HALL.wallX && pos.z > HALL.backZ && pos.z < HALL.colZFront;
     if (inside) pos.y = Math.min(pos.y, HALL.baseH + HALL.colH + 0.6);
     pos.y = Math.max(pos.y, heightAt(pos.x, pos.z) + 0.3);
+    if (cine.on && me.action !== 'incense') endIncenseScene();
+    cine.blend = Math.max(0, Math.min(1, cine.blend + (cine.on ? dt / 1.1 : -dt / 0.9)));
+    if (cine.blend > 0) {
+      const e = cine.blend * cine.blend * (3 - 2 * cine.blend);
+      pos.lerp(cine.pos, e);
+      tmpT.lerp(cine.look, e);
+    }
     camera.position.copy(pos);
     camera.lookAt(tmpT);
   }
@@ -1009,15 +1046,18 @@ async function start() {
   });
 
   const clock = new THREE.Clock();
+  // 调试：?debugview&slowmo=0.2 慢放
+  const slowmo = new URL(location.href).searchParams.has('debugview') ? Number(new URL(location.href).searchParams.get('slowmo')) || 1 : 1;
   let elapsed = 0;
   let envTimer = 0;
   let booted = false;
   function frame() {
     requestAnimationFrame(frame);
     if (!running) return;
-    const dt = Math.min(0.05, clock.getDelta());
+    const dt = Math.min(0.05, clock.getDelta()) * slowmo;
     elapsed += dt;
     updatePlayer(dt);
+    checkIncenseDone();
     updateRemotes(dt);
     updateCamera(dt);
     nature.update(dt, elapsed);

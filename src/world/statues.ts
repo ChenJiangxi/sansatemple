@@ -13,7 +13,8 @@ interface Slot {
   kind: 'main' | 'left' | 'right';
 }
 
-// 背光：菩提叶形的木板，红底金边，中间一圈圈光环
+// 背光（目前后墙挂了佛画，不再使用，保留以便以后换场景）
+// 菩提叶形的木板，红底金边，中间一圈圈光环
 function mandorlaTexture() {
   const c = document.createElement('canvas');
   c.width = 512;
@@ -68,7 +69,7 @@ function mandorlaTexture() {
   return t;
 }
 
-function mandorla(w: number, h: number) {
+export function mandorla(w: number, h: number) {
   const s = new THREE.Shape();
   s.moveTo(0, 0);
   s.bezierCurveTo(w * 0.55, 0, w * 0.55, h * 0.55, w * 0.42, h * 0.72);
@@ -91,9 +92,9 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
   const pedestalMat = new THREE.MeshStandardMaterial({ color: '#c99642', metalness: 0.9, roughness: 0.38, envMap: env, envMapIntensity: 1.2 });
 
   const spec = {
-    main: { h: 3.5, pr: 1.5, ph: 0.85, mw: 4.4, mh: 6.0, file: 'buddha.glb', mat: goldA },
-    left: { h: 2.45, pr: 0.95, ph: 0.6, mw: 2.8, mh: 4.0, file: 'bodhisattva.glb', mat: goldB },
-    right: { h: 2.45, pr: 0.95, ph: 0.6, mw: 2.8, mh: 4.0, file: 'bodhisattva.glb', mat: goldB },
+    main: { h: 3.2, pr: 1.25, ph: 0.75, mw: 4.4, mh: 6.0, file: 'buddha.glb', mat: goldA },
+    left: { h: 2.3, pr: 0.9, ph: 0.55, mw: 2.8, mh: 4.0, file: 'bodhisattva.glb', mat: goldB },
+    right: { h: 2.3, pr: 0.9, ph: 0.55, mw: 2.8, mh: 4.0, file: 'bodhisattva.glb', mat: goldB },
   } as const;
 
   const holders = slots.map((s) => {
@@ -102,9 +103,6 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
     holder.position.set(s.x, s.y, s.z);
     const ped = lotusPedestal(pedestalMat, sp.pr, sp.ph);
     holder.add(ped);
-    const back = mandorla(sp.mw, sp.mh);
-    back.position.set(0, -0.1, s.kind === 'main' ? -1.42 : -sp.pr - 0.12);
-    holder.add(back);
     group.add(holder);
     return { slot: s, holder, sp };
   });

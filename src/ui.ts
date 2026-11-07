@@ -95,6 +95,7 @@ export class UI {
   private scrim!: HTMLElement;
   private farewell!: HTMLElement;
   private tooltip!: HTMLElement;
+  private caption!: HTMLElement;
   private visitors: Visitor[] = [];
   private room = 0;
   private count = 1;
@@ -201,6 +202,9 @@ export class UI {
 
     this.tooltip = el('div', 'tooltip');
     this.tooltip.hidden = true;
+    this.caption = el('div', 'caption');
+    this.caption.setAttribute('role', 'status');
+    this.caption.innerHTML = '<strong></strong><small></small>';
 
     // 离开后的告别页
     this.farewell = el('main', 'farewell');
@@ -208,7 +212,7 @@ export class UI {
     this.farewell.innerHTML = `<span class="mark">${ICON.temple}</span><h1></h1><p></p><button class="stay-btn"></button>`;
     (this.farewell.querySelector('.stay-btn') as HTMLButtonElement).onclick = () => this.h.stay();
 
-    r.append(left, right, this.chantBtn, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.farewell);
+    r.append(left, right, this.chantBtn, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.caption, this.farewell);
 
     // 模糊层要在主场景之上、特写画布之下
     const parent = r.parentElement!;
@@ -531,6 +535,17 @@ export class UI {
     const round = Math.floor(count / 108) + 1;
     this.rosaryNum.innerHTML = `<b>${count && inRound === 0 ? 108 : inRound}</b><span>${t('rosaryCount')}</span>`;
     this.rosaryRound.textContent = t('rosaryRound', { n: count && inRound === 0 ? round - 1 : round });
+  }
+
+  // 上香等时刻的字幕卡
+  showCaption(title: string | null, sub = '') {
+    if (!title) {
+      this.caption.classList.remove('show');
+      return;
+    }
+    (this.caption.querySelector('strong') as HTMLElement).textContent = title;
+    (this.caption.querySelector('small') as HTMLElement).textContent = sub;
+    this.caption.classList.add('show');
   }
 
   showFarewell(on: boolean) {

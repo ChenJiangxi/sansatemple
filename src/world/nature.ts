@@ -1,7 +1,9 @@
 // 枫树、松树、莲池、石头、飘落的枫叶
 import * as THREE from 'three';
-import { MAPLES, PINES, ROCKS, POND } from '../layout';
-import { foliageClusterTexture, mapleLeafTexture, waterNormalTexture, woodTexture, stoneTexture, rng } from '../textures';
+import { MAPLES, PINES, ROCKS, POND, COURT } from '../layout';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { pbr } from './pbr';
+import { foliageClusterTexture, mapleLeafTexture, waterNormalTexture, woodTexture, rng } from '../textures';
 import { mesh } from './util';
 
 const windUniform = { value: 0 };
@@ -25,7 +27,7 @@ function addSway(mat: THREE.Material, amount = 0.06) {
   };
 }
 
-function branchTube(points: THREE.Vector3[], r0: number, mat: THREE.Material) {
+function branchTube(points: THREE.Vector3[], r0: number) {
   const curve = new THREE.CatmullRomCurve3(points);
   const geo = new THREE.TubeGeometry(curve, 10, r0, 7, false);
   // 越往上越细
@@ -39,7 +41,7 @@ function branchTube(points: THREE.Vector3[], r0: number, mat: THREE.Material) {
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   geo.computeVertexNormals();
-  return mesh(geo, mat);
+  return geo;
 }
 
 export interface NatureBuild {
@@ -58,7 +60,29 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   addSway(leafMat, 0.05);
   const leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: clusterTex, alphaTest: 0.45 });
   const perTree = 70;
-  const clusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.5, 1.5), leafMat, MAPLES.length * perTree);
+  const outer: [number, number, number][] = [];
+  {
+    const rr = rng(77);
+    const ring = (x0: number, z0: number, x1: number, z1: number, n: number) => {
+      for (let i = 0; i < n; i++) {
+        const t = (i + rr() * 0.6) / n;
+        const out = 4 + rr() * 10;
+        let x = x0 + (x1 - x0) * t, z = z0 + (z1 - z0) * t;
+        if (x0 === x1) x += Math.sign(x0) * out;
+        else z += Math.sign(z0) * out;
+        outer.push([x, z, 1.1 + rr() * 0.6]);
+      }
+    };
+    ring(COURT.x0, COURT.z0, COURT.x0, COURT.z1, 14);
+    ring(COURT.x1, COURT.z0, COURT.x1, COURT.z1, 14);
+    ring(COURT.x0, COURT.z0, COURT.x1, COURT.z0, 12);
+    ring(COURT.x0, COURT.z1, -6, COURT.z1, 5);
+    ring(6, COURT.z1, COURT.x1, COURT.z1, 5);
+  }
+  const allMaples = [...MAPLES, ...outer.filter((_, i) => i % 3 !== 2)];
+  const outerPines = outer.filter((_, i) => i % 3 === 2);
+  const barkGeos: THREE.BufferGeometry[] = [];
+  const clusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.5, 1.5), leafMat, allMaples.length * perTree);
   clusters.customDepthMaterial = leafDepth;
   clusters.castShadow = true;
   clusters.receiveShadow = true;
@@ -72,22 +96,22 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
   let ci = 0;
-  MAPLES.forEach(([x, z, s], ti) => {
+  allMaples.forEach(([x, z, s], ti) => {
     const pal = palettes[ti % 3];
     const trunkTop = new THREE.Vector3(x + (r() - 0.5) * 0.4, 2.2 * s, z + (r() - 0.5) * 0.4);
-    group.add(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + (r() - 0.5) * 0.3, 1.1 * s, z), trunkTop], 0.2 * s, barkMat));
+    barkGeos.push(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + (r() - 0.5) * 0.3, 1.1 * s, z), trunkTop], 0.2 * s));
     const tips: THREE.Vector3[] = [];
     for (let b = 0; b < 5; b++) {
       const a = (b / 5) * Math.PI * 2 + r();
       const len = (1.3 + r() * 0.9) * s;
       const tip = new THREE.Vector3(trunkTop.x + Math.cos(a) * len, trunkTop.y + (0.9 + r() * 1.3) * s, trunkTop.z + Math.sin(a) * len);
       const mid = trunkTop.clone().lerp(tip, 0.5).add(new THREE.Vector3(0, 0.3, 0));
-      group.add(branchTube([trunkTop.clone(), mid, tip], 0.09 * s, barkMat));
+      barkGeos.push(branchTube([trunkTop.clone(), mid, tip], 0.09 * s));
       tips.push(tip);
     }
     const crownC = new THREE.Vector3(trunkTop.x, trunkTop.y + 1.5 * s, trunkTop.z);
     tips.push(crownC);
-    leafSpawns.push(crownC);
+    if (ti < MAPLES.length) leafSpawns.push(crownC);
     for (let k = 0; k < perTree; k++) {
       const tip = tips[k % tips.length];
       const p = tip.clone().add(new THREE.Vector3((r() - 0.5) * 2.2 * s, (r() - 0.4) * 1.4 * s, (r() - 0.5) * 2.2 * s));
@@ -101,25 +125,30 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
     }
   });
   group.add(clusters);
+  group.add(mesh(mergeGeometries(barkGeos), barkMat));
 
   // 松树（伞形树冠）
   const pineMat = new THREE.MeshStandardMaterial({ color: '#2f4a2c', roughness: 0.95, flatShading: true });
   const pineBark = new THREE.MeshStandardMaterial({ map: woodTexture(12, ['#6b3a26', '#4f2a1c', '#7a4a30']), roughness: 0.9 });
   const blob = new THREE.IcosahedronGeometry(1, 1);
-  for (const [x, z, s] of PINES) {
+  const pineBarkGeos: THREE.BufferGeometry[] = [];
+  const pineCrowns: THREE.BufferGeometry[] = [];
+  for (const [x, z, s] of [...PINES, ...outerPines]) {
     const lean = (r() - 0.5) * 1.2;
     const top = new THREE.Vector3(x + lean, 6.5 * s, z + (r() - 0.5) * 1.2);
-    group.add(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + lean * 0.3, 3 * s, z), top], 0.26 * s, pineBark));
+    pineBarkGeos.push(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + lean * 0.3, 3 * s, z), top], 0.26 * s));
     for (let k = 0; k < 6; k++) {
-      const b = mesh(blob, pineMat);
-      b.scale.set((1.6 + r()) * s, (0.55 + r() * 0.3) * s, (1.6 + r()) * s);
-      b.position.set(top.x + (r() - 0.5) * 2.6 * s, top.y + (r() - 0.6) * 1.6 * s, top.z + (r() - 0.5) * 2.6 * s);
-      group.add(b);
+      const b = blob.clone();
+      b.scale((1.6 + r()) * s, (0.55 + r() * 0.3) * s, (1.6 + r()) * s);
+      b.translate(top.x + (r() - 0.5) * 2.6 * s, top.y + (r() - 0.6) * 1.6 * s, top.z + (r() - 0.5) * 2.6 * s);
+      pineCrowns.push(b);
     }
   }
+  group.add(mesh(mergeGeometries(pineBarkGeos), pineBark));
+  group.add(mesh(mergeGeometries(pineCrowns), pineMat));
 
   // 石头
-  const rockMat = new THREE.MeshStandardMaterial({ map: stoneTexture(31, '#8a877c'), roughness: 0.95, flatShading: true });
+  const rockMat = pbr('stonewall', { metersPerTile: 1.2, color: '#a8a296' });
   const rockGeo = (seed: number) => {
     const g = new THREE.IcosahedronGeometry(1, 1);
     const rr = rng(seed);
@@ -155,7 +184,7 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   water.position.set(POND.x, -0.16, POND.z);
   water.receiveShadow = true;
   group.add(water);
-  const edgeMat = new THREE.MeshStandardMaterial({ map: stoneTexture(44, '#6f6c63'), roughness: 0.95, flatShading: true, color: '#b9b4a8' });
+  const edgeMat = pbr('stonewall', { metersPerTile: 0.9, color: '#9d988d' });
   const edgeN = 46;
   for (let i = 0; i < edgeN; i++) {
     const a = (i / edgeN) * Math.PI * 2;

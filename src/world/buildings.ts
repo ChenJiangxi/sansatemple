@@ -1,7 +1,8 @@
 // 配殿与钟楼
 import * as THREE from 'three';
 import { SIDE_HALLS, BELL } from '../layout';
-import { stoneTexture, stoneBlockTexture, woodTexture, plasterTexture, dancheongTexture, latticeTexture, plaqueTexture } from '../textures';
+import { latticeTexture, plaqueTexture } from '../textures';
+import { pbr } from './pbr';
 import { worldBox, mesh, lathe } from './util';
 import { buildRoof } from './hall';
 
@@ -13,12 +14,12 @@ function sideHall(def: (typeof SIDE_HALLS)[number], idx: number, mats: Record<st
   const D = def.w; // 进深（本地 z）
   const base = 0.6;
   const colH = 4.2;
-  const plat = mesh(worldBox(L + 1.6, base, D + 1.6, 2.4), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
+  const plat = mesh(worldBox(L + 1.6, base, D + 1.6, 1), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
   plat.position.y = base / 2;
   g.add(plat);
   // 台阶
   for (let k = 0; k < 2; k++) {
-    const s = mesh(worldBox(3.2, base * (k + 1) / 2, 0.6 * (2 - k), 2), mats.top);
+    const s = mesh(worldBox(3.2, base * (k + 1) / 2, 0.6 * (2 - k), 1), mats.top);
     s.position.set(0, (base * (k + 1)) / 4, D / 2 + 0.8 + 0.3 * (2 - k));
     g.add(s);
   }
@@ -48,21 +49,21 @@ function sideHall(def: (typeof SIDE_HALLS)[number], idx: number, mats: Record<st
     const uv = door.geometry.attributes.uv as THREE.BufferAttribute;
     for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * 2);
     g.add(door);
-    const low = mesh(worldBox(bay - 0.36, 0.6, 0.16, 1.5), mats.plaster);
+    const low = mesh(worldBox(bay - 0.36, 0.6, 0.16, 1), mats.plaster);
     low.position.set(cx, base + 0.3, hz);
     g.add(low);
   }
   // 侧墙与后墙
-  const back = mesh(worldBox(hx * 2, colH, 0.22, 2), mats.plaster);
+  const back = mesh(worldBox(hx * 2, colH, 0.22, 1), mats.plaster);
   back.position.set(0, base + colH / 2, -hz);
   g.add(back);
   for (const sx of [-1, 1]) {
-    const w = mesh(worldBox(0.22, colH, hz * 2, 2), mats.plaster);
+    const w = mesh(worldBox(0.22, colH, hz * 2, 1), mats.plaster);
     w.position.set(sx * hx, base + colH / 2, 0);
     g.add(w);
   }
   // 门楣以上的墙板与梁
-  const top = mesh(worldBox(hx * 2, 0.7, 0.16, 2), mats.plaster);
+  const top = mesh(worldBox(hx * 2, 0.7, 0.16, 1), mats.plaster);
   top.position.set(0, colTop - 0.35, hz);
   g.add(top);
   for (const z of [-hz, hz]) {
@@ -108,7 +109,7 @@ function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group):
   const g = new THREE.Group();
   const S = BELL.size;
   const base = BELL.platform;
-  const plat = mesh(worldBox(S + 1.2, base, S + 1.2, 2), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
+  const plat = mesh(worldBox(S + 1.2, base, S + 1.2, 1), [mats.side, mats.side, mats.top, mats.top, mats.side, mats.side]);
   plat.position.y = base / 2;
   plat.name = 'walkable';
   g.add(plat);
@@ -232,17 +233,16 @@ function bellPavilion(mats: Record<string, THREE.Material>, group: THREE.Group):
 export function buildBuildings(scene: THREE.Scene) {
   const group = new THREE.Group();
   const mats: Record<string, THREE.Material> = {
-    top: new THREE.MeshStandardMaterial({ map: stoneTexture(55, '#a39e92'), roughness: 0.9 }),
-    side: new THREE.MeshStandardMaterial({ map: stoneBlockTexture(), roughness: 0.92 }),
-    col: new THREE.MeshStandardMaterial({ map: woodTexture(33, ['#5c2c20', '#47201a', '#6e3829']), roughness: 0.75 }),
-    log: new THREE.MeshStandardMaterial({ map: woodTexture(34, ['#7a5a3a', '#5e4128', '#8a6a48']), roughness: 0.8 }),
-    plaster: new THREE.MeshStandardMaterial({ map: plasterTexture(), roughness: 0.95 }),
-    lattice: new THREE.MeshStandardMaterial({ map: latticeTexture(), roughness: 0.9 }),
-    dc: new THREE.MeshStandardMaterial({ map: dancheongTexture(), roughness: 0.8 }),
-    band: new THREE.MeshStandardMaterial({ color: '#2a5a4d', roughness: 0.9 }),
-    trim: new THREE.MeshStandardMaterial({ color: '#c9a85a', roughness: 0.6 }),
+    top: pbr('granite', { metersPerTile: 2.4, color: '#a9a49a' }),
+    side: pbr('stonewall', { metersPerTile: 3, color: '#b0aaa0' }),
+    col: pbr('wood', { metersPerTile: 1.8, color: '#6e5a4c', rotate: true }),
+    log: pbr('wood', { metersPerTile: 1.2, color: '#8a7462' }),
+    plaster: pbr('plaster', { metersPerTile: 2.5, color: '#e6dfd2' }),
+    lattice: new THREE.MeshStandardMaterial({ map: latticeTexture(), roughness: 0.9, emissive: '#f4ead2', emissiveIntensity: 0.12 }),
+    dc: pbr('wood', { metersPerTile: 2.2, color: '#5e4c40' }),
+    band: pbr('plaster', { metersPerTile: 2.5, color: '#ddd5c6' }),
+    trim: new THREE.MeshStandardMaterial({ color: '#b08d4a', metalness: 0.6, roughness: 0.4 }),
   };
-  (mats.dc as THREE.MeshStandardMaterial).map!.wrapS = THREE.RepeatWrapping;
   SIDE_HALLS.forEach((d, i) => group.add(sideHall(d, i, mats)));
   const bell = bellPavilion(mats, group);
   scene.add(group);

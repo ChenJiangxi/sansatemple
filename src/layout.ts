@@ -16,14 +16,14 @@ export const HALL = {
   wallX: 14,
   backZ: -22.5,
   // 佛坛
-  altarX0: -10, altarX1: 10, altarZ0: -22.3, altarZ1: -18.9, altarH: 1.25,
+  altarX0: -10.5, altarX1: 10.5, altarZ0: -22.3, altarZ1: -19.2, altarH: 0.95,
   // 供桌（上面有香炉和蜡烛）
-  tableX0: -3.6, tableX1: 3.6, tableZ0: -18.4, tableZ1: -17.3, tableH: 0.95,
+  tableX0: -0.6, tableX1: 0.6, tableZ0: -18.7, tableZ1: -16.95, tableH: 0.42,
 };
 
 // 佛前上香时站的位置
-export const ALTAR_SPOT = { x: 0, z: -16.4 };
-export const ALTAR_BURNER = { x: 0, z: (HALL.tableZ0 + HALL.tableZ1) / 2 };
+export const ALTAR_SPOT = { x: 0, z: -16.3 };
+export const ALTAR_BURNER = { x: 0, z: HALL.tableZ1 - 0.36 };
 
 export const COURT = { x0: -44, x1: 44, z0: -36, z1: 68, gateX: 3.2 };
 
@@ -129,6 +129,12 @@ export const STONE_LANTERNS: [number, number][] = [
   [-3.9, 21], [3.9, 21], [-3.9, 33], [3.9, 33], [-3.9, 45], [3.9, 45], [-3.9, 57], [3.9, 57],
 ];
 
+// 地上的方形纸灯
+export const GROUND_LAMPS: [number, number][] = [
+  [-5.8, 2.6], [5.8, 2.6], [-12, 2.6], [12, 2.6], [-3.4, 9.5], [3.4, 9.5],
+  [8, 38], [14.5, 36.5], [-14, 35.5], [-20, 37.5], [3.6, 63], [-3.6, 63],
+];
+
 type Circle = { x: number; z: number; r: number };
 type Box = { x0: number; x1: number; z0: number; z1: number };
 
@@ -139,6 +145,7 @@ for (const [x, z, s] of MAPLES) circles.push({ x, z, r: 0.45 * s });
 for (const [x, z, s] of PINES) circles.push({ x, z, r: 0.5 * s });
 for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const [x, z] of STONE_LANTERNS) circles.push({ x, z, r: 0.45 });
+for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
 for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.35 * p.s });
 for (const x of HALL.colX) circles.push({ x, z: HALL.colZFront, r: 0.4 });

@@ -65,6 +65,33 @@ function hapjangPose(t: number): Pose {
   return lerpPose(mk(HAP), mk({}), ease(Math.min(1, (t - 1.8) / 0.6)));
 }
 
+// 上香（双手持香 → 举到额前 → 俯身插香 → 合掌问讯）的时间轴
+export const INCENSE_DURATION = 6.0;
+export const INCENSE_PLANT_TIME = 2.75;
+const INC_HOLD: Partial<Pose> = { armLp: -1.18, armRp: -1.18, armLy: -0.8, armRy: 0.8 };
+const INC_KEYS: [number, Pose, [number, number, number]][] = [
+  // 时间, 姿势, 香在上身坐标系里的位置
+  [0, mk({}), [0, 0.12, 0.18]],
+  [0.8, mk({ ...INC_HOLD }), [0, 0.2, 0.22]],
+  [1.5, mk({ armLp: -1.75, armRp: -1.75, armLy: -0.72, armRy: 0.72, head: 0.12 }), [0, 0.36, 0.16]],
+  [2.7, mk({ armLp: -0.95, armRp: -0.95, armLy: -0.55, armRy: 0.55, torso: 0.55, head: 0.35 }), [0, 0.1, 0.36]],
+  [3.3, mk({ ...HAP }), [0, 0.1, 0.36]],
+  [4.1, mk({ ...HAP, torso: 0.5, head: 0.25 }), [0, 0.1, 0.36]],
+  [4.9, mk({ ...HAP }), [0, 0.1, 0.36]],
+  [6.0, mk({}), [0, 0.1, 0.36]],
+];
+function incensePose(t: number): { pose: Pose; prop: [number, number, number] } {
+  for (let i = 0; i < INC_KEYS.length - 1; i++) {
+    const [t0, p0, a0] = INC_KEYS[i];
+    const [t1, p1, a1] = INC_KEYS[i + 1];
+    if (t >= t0 && t <= t1) {
+      const k = ease((t - t0) / (t1 - t0));
+      return { pose: lerpPose(p0, p1, k), prop: [a0[0] + (a1[0] - a0[0]) * k, a0[1] + (a1[1] - a0[1]) * k, a0[2] + (a1[2] - a0[2]) * k] };
+    }
+  }
+  return { pose: mk({}), prop: [0, 0.1, 0.36] };
+}
+
 const ROBE = '#c9d2d4';
 const ROBE_DARK = '#b2bcc0';
 const KASAYA = '#ecd683';
@@ -101,6 +128,9 @@ export class Monk {
   private armR = new THREE.Group();
   private moktakProp: THREE.Group;
   private beadsProp: THREE.Group;
+  private incenseProp: THREE.Group;
+  private planted = false;
+  onIncensePlant?: () => void;
   private pose: Pose = mk({});
   private walkPhase = Math.random() * 6;
   private tap = 0;
@@ -221,6 +251,20 @@ export class Monk {
     this.beadsProp.visible = false;
     this.armR.add(this.beadsProp);
 
+    // 手里的两支香（上香时显示）
+    this.incenseProp = new THREE.Group();
+    const stickMat = new THREE.MeshStandardMaterial({ color: '#7a3f22', roughness: 0.8 });
+    const emberMat = new THREE.MeshBasicMaterial({ color: '#ff8a40' });
+    for (const dx of [-0.018, 0.018]) {
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.42, 5), stickMat);
+      st.position.set(dx, 0.17, 0);
+      const em = new THREE.Mesh(new THREE.SphereGeometry(0.01, 6, 4), emberMat);
+      em.position.set(dx, 0.385, 0);
+      this.incenseProp.add(st, em);
+    }
+    this.incenseProp.visible = false;
+    this.torso.add(this.incenseProp);
+
     // 脚下的圆形软阴影（让角色不显得飘）
     const blob = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), M.shadow);
     blob.rotation.x = -Math.PI / 2;
@@ -235,6 +279,7 @@ export class Monk {
     this.actionTime = 0;
     this.lastBowCycle = -1;
     this.touchedThisCycle = false;
+    this.planted = false;
   }
 
   strike() {
@@ -249,6 +294,7 @@ export class Monk {
 
     this.moktakProp.visible = this.action === 'moktak';
     this.beadsProp.visible = this.action === 'rosary';
+    this.incenseProp.visible = this.action === 'incense' && this.actionTime < INCENSE_PLANT_TIME;
 
     switch (this.action) {
       case 'walk': {
@@ -279,9 +325,19 @@ export class Monk {
         target = hapjangPose(Math.min(t, HAPJANG_DURATION));
         rate = 16;
         break;
-      case 'incense':
-        target = t < 1.2 ? mk({ armRp: -1.1, armRy: 0.3, torso: 0.15 }) : hapjangPose(Math.min(t - 1.2, HAPJANG_DURATION));
+      case 'incense': {
+        const r = incensePose(Math.min(t, INCENSE_DURATION));
+        target = r.pose;
+        this.incenseProp.position.set(...r.prop);
+        // 香始终竖直：抵消上身的前倾
+        this.incenseProp.rotation.x = -this.pose.torso;
+        if (!this.planted && t >= INCENSE_PLANT_TIME) {
+          this.planted = true;
+          this.onIncensePlant?.();
+        }
+        rate = 14;
         break;
+      }
       case 'sit': {
         // 盘腿打坐，双手放在腿上
         const br = Math.sin(t * 1.1) * 0.01;
