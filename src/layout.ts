@@ -6,8 +6,8 @@ export const HALL = {
   baseX0: -17.5, baseX1: 17.5, baseZ0: -25.5, baseZ1: -1.5, baseH: 1.2,
   // 前台阶
   stepX0: -5, stepX1: 5, stepZ0: -1.5, stepZ1: 2,
-  // 柱网：正面七开间，进深四间
-  colX: [-14, -10, -6, -2, 2, 6, 10, 14],
+  // 柱网：正面七开间，进深四间。明间最宽（5.6 m），次间、梢间、尽间依次收窄（4.2 / 3.8 / 3.2 m）
+  colX: [-14, -10.8, -7, -2.8, 2.8, 7, 10.8, 14],
   colZFront: -4,
   colZBack: -22.5,
   colZSide: [-8.6, -13.25, -17.9],
@@ -163,8 +163,8 @@ for (const T of [BELL, DRUM]) {
   circles.push({ x: T.x, z: T.z, r: 1.35 });
 }
 // 正面格扇门：中间三间开着，两侧各两间关着
-boxes.push({ x0: -HALL.wallX - 0.2, x1: -6 + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
-boxes.push({ x0: 6 - 0.2, x1: HALL.wallX + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
+boxes.push({ x0: -HALL.wallX - 0.2, x1: HALL.colX[2] + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
+boxes.push({ x0: HALL.colX[5] - 0.2, x1: HALL.wallX + 0.2, z0: HALL.colZFront - 0.18, z1: HALL.colZFront + 0.18 });
 // 大殿侧墙、后墙、佛坛、供桌
 boxes.push({ x0: -HALL.wallX - 0.25, x1: -HALL.wallX + 0.2, z0: HALL.backZ - 0.2, z1: HALL.colZFront - 0.45 });
 boxes.push({ x0: HALL.wallX - 0.2, x1: HALL.wallX + 0.25, z0: HALL.backZ - 0.2, z1: HALL.colZFront - 0.45 });

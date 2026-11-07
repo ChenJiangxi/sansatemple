@@ -538,14 +538,30 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   group.add(floor);
   walkables.push(floor);
 
-  // —— 朱红柱子与覆盆柱础 ——
+  // —— 朱红柱子与柱础：方形柱顶石上起一圈覆盆（雕一圈莲瓣），青灰石料 ——
   const colGeo = meterUV(new THREE.CylinderGeometry(0.37, 0.42, H.colH - 0.22, 24), 2.5, H.colH);
-  const plinthGeo = lathe([[0, 0], [0.62, 0], [0.62, 0.06], [0.55, 0.14], [0.45, 0.22], [0, 0.22]], 24);
+  const basin = lathe([[0, 0.1], [0.56, 0.1], [0.56, 0.125], [0.52, 0.17], [0.46, 0.205], [0.44, 0.22], [0, 0.22]], 32);
+  {
+    // 覆盆表面起伏出 16 瓣莲瓣
+    const bp = basin.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < bp.count; i++) {
+      const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+      const r = Math.hypot(x, z);
+      if (r < 0.45 || y < 0.12) continue;
+      const k = 1 + 0.06 * Math.abs(Math.cos(Math.atan2(z, x) * 8));
+      bp.setXYZ(i, x * k, y, z * k);
+    }
+    basin.computeVertexNormals();
+  }
+  const slab = new THREE.BoxGeometry(1.3, 0.1, 1.3);
+  slab.translate(0, 0.05, 0);
+  const plinthGeo = mergeGeometries([slab.toNonIndexed(), basin.toNonIndexed()]);
+  const plinthMat = new THREE.MeshStandardMaterial({ color: '#6f6b64', roughness: 0.9, normalMap: (M.marble as THREE.MeshStandardMaterial).normalMap, normalScale: new THREE.Vector2(0.7, 0.7) });
   const columns: [number, number][] = [];
   for (const x of H.colX) columns.push([x, H.colZFront], [x, H.colZBack]);
   for (const z of H.colZSide) columns.push([-H.wallX, z], [H.wallX, z]);
   for (const [x, z] of columns) {
-    const p = mesh(plinthGeo, M.marble);
+    const p = mesh(plinthGeo, plinthMat);
     p.position.set(x, H.baseH, z);
     group.add(p);
     const c = mesh(colGeo, M.red);
@@ -562,7 +578,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const gs: THREE.BufferGeometry[] = [];
   for (let i = 0; i < H.colX.length - 1; i++) {
     const x0 = H.colX[i] + 0.38, x1 = H.colX[i + 1] - 0.38;
-    const open = x1 < 6.5 && x0 > -6.5;
+    const open = x0 > H.colX[2] && x1 < H.colX[5]; // 明间和两个次间开门
     const tw = new THREE.BoxGeometry(x1 - x0, 0.75, 0.1);
     tw.translate((x0 + x1) / 2, doorTop + 0.5, H.colZFront);
     gs.push(tw);
