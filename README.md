@@ -41,7 +41,7 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 山门（三开间，挂「靜山禪寺」）→ 放生池与石拱桥 → 钟楼、鼓楼分列左右 → 红灯笼参道 →
 双塔（八角七层）与铜鼎香炉、红烛架 → 白石须弥座上的重檐大雄宝殿，两侧观音殿、地藏殿，
-四周黄色寺墙，院中多是银杏。殿内：方砖地、千佛壁、井口天花、三尊金身佛与鎏金背光、华盖、
+四周黄色寺墙，院中多是银杏。殿内：方砖地、千佛壁、井口天花、一佛二弟子（主尊释迦牟尼佛带鎏金背光，两侧迦叶、阿难立像带圆形头光）、华盖、
 经幡、朱漆供桌（黄桌围、铜鼎、红烛、莲花瓶）、木鱼与铜磬、112 个圆蒲团。
 
 ## 结构
@@ -51,10 +51,10 @@ server/server.mjs   静态文件 + WebSocket：5 个房间×50 人，位置快�
                     座位占用由服务器裁决，两处香炉的香 3 分钟后燃尽，撞钟同房间都听得到
 src/main.ts         场景组装、玩家移动、镜头、点击交互、联机同步
 src/layout.ts       场景布局、可走区域、碰撞、网格寻路（A*，自动绕开水池石塔柱子）
-src/monk.ts         小和尚模型与程序动画（走、合掌、礼拜、打坐、木鱼、念珠）
+src/monk.ts         小和尚模型（海青长袍、宽袖、搭左肩的袈裟和钩环、颈挂念珠）与程序动画（走、合十、礼拜、打坐、木鱼、念珠、上香）
 src/world/          环境与昼夜、大雄宝殿（重檐、彩画斗栱、格扇门、须弥座栏杆）、佛像与背光、
                     配殿与钟鼓楼、银杏与放生池、灯笼宫灯、双塔、香炉、寺墙山门、石拱桥
-src/overlays.ts     木鱼、念珠的特写画面
+src/overlays.ts     木鱼（红漆鳞纹、木槌真实落点）、念珠（佛头、佛塔、流苏）的特写画面
 src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、鼓、普通话「南无阿弥陀佛」念佛
 src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 ```
@@ -64,8 +64,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | 文件 | 来源 | 许可 | 处理 |
 |---|---|---|---|
 | `public/models/buddha.glb` | [Korean Buddha Iron Statue](https://sketchfab.com/3d-models/korean-buddha-iron-statue-872b44150e12431a898d0b8057705770) by artfletch（高丽铁佛扫描） | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | 去掉贴图、改为金身、减面到 9 万三角形、meshopt 压缩 |
-| `public/models/bodhisattva.glb` | [Seated bodhisattva Guanyin, 12th C.](https://sketchfab.com/3d-models/seated-bodhisattva-guanyin-12th-c-ce-2c865894453743a49f8e82d57e4f0a8d)，Minneapolis Institute of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上，减面到 6 万三角形 |
-
+| `public/models/disciple.glb` | [1997.11 Standing Bodhisattva](https://sketchfab.com/3d-models/199711-standing-bodhisattva-1a57a0d6609145b486ed5b1d3e9ec7fb)，Cleveland Museum of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上；作迦叶、阿难二尊者用，右侧一尊镜像 |
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
 

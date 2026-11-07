@@ -64,6 +64,20 @@ async function start() {
 
   // —— 渲染器与场景 ——
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  // 调试：?debugview 时把着色器编译错误写进页面，便于排查
+  if (new URL(location.href).searchParams.has('debugview')) {
+    renderer.debug.onShaderError = (gl, program, vs, fs) => {
+      let box = document.querySelector<HTMLPreElement>('[data-testid="shader-error"]');
+      if (!box) {
+        box = document.createElement('pre');
+        box.dataset.testid = 'shader-error';
+        box.hidden = true;
+        document.body.appendChild(box);
+      }
+      if (box.textContent) return;
+      box.textContent = [gl.getProgramInfoLog(program), gl.getShaderInfoLog(vs), gl.getShaderInfoLog(fs), (gl.getShaderSource(fs) || '').split('\n').map((l, i) => i + 1 + ': ' + l).join('\n').slice(-6000)].join('\n----\n');
+    };
+  }
   renderer.domElement.className = 'main';
   renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 1.75));
   renderer.setSize(innerWidth, innerHeight);

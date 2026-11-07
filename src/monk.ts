@@ -1,5 +1,6 @@
 // Q 版小和尚：几何体拼成，动作用关节旋转做程序动画
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { kasayaTexture } from './textures';
 
 export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense';
@@ -14,9 +15,10 @@ interface Pose {
   armLy: number; armRy: number; // 手臂向内收
   armLr: number; armRr: number; // 手臂外展
   bob: number;
+  sway: number; // 走路时下摆左右摆
 }
 
-const ZERO: Pose = { drop: 0, legL: 0, legR: 0, legSpread: 0, torso: 0, head: 0, armLp: 0, armRp: 0, armLy: 0, armRy: 0, armLr: 0, armRr: 0, bob: 0 };
+const ZERO: Pose = { drop: 0, legL: 0, legR: 0, legSpread: 0, torso: 0, head: 0, armLp: 0, armRp: 0, armLy: 0, armRy: 0, armLr: 0, armRr: 0, bob: 0, sway: 0 };
 
 const HAP: Partial<Pose> = { armLp: -1.32, armRp: -1.32, armLy: -0.95, armRy: 0.95 };
 
@@ -93,11 +95,14 @@ function incensePose(t: number): { pose: Pose; prop: [number, number, number] } 
   return { pose: mk({}), prop: [0, 0.1, 0.36] };
 }
 
-// 汉传僧装：黄色海青（宽袖、交领右衽），外披红褐色福田袈裟，白绑腿，深色罗汉鞋
+// 汉传僧装：黄色海青（宽袖、交领右衽、长及脚面），外披红褐色福田袈裟（搭左肩、斜过右腋，左胸有钩环），
+// 颈挂念珠，白绑腿，深色僧鞋
 const ROBE = '#d8ab55';
-const ROBE_DARK = '#f1ebdd';
-const COLLAR = '#6a3a22';
+const LINING = '#8e6a32';
+const LEGGING = '#f1ebdd';
+const COLLAR = '#5a3020';
 const SKIN = '#efb487';
+const SCALP = '#cfa58d'; // 剃过的头顶，比脸色略青
 const SHOE = '#3b2a20';
 
 let sharedMats: Record<string, THREE.Material> | null = null;
@@ -105,24 +110,255 @@ function mats() {
   if (!sharedMats) {
     sharedMats = {
       robe: new THREE.MeshStandardMaterial({ color: ROBE, roughness: 0.85 }),
-      robeDark: new THREE.MeshStandardMaterial({ color: ROBE_DARK, roughness: 0.9 }),
+      lining: new THREE.MeshStandardMaterial({ color: LINING, roughness: 0.9, side: THREE.BackSide }),
+      legging: new THREE.MeshStandardMaterial({ color: LEGGING, roughness: 0.9 }),
       kasaya: new THREE.MeshStandardMaterial({ map: kasayaTexture(), roughness: 0.8, side: THREE.DoubleSide }),
       collar: new THREE.MeshStandardMaterial({ color: COLLAR, roughness: 0.8 }),
       skin: new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.6 }),
+      headSkin: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
       shoe: new THREE.MeshStandardMaterial({ color: SHOE, roughness: 0.7 }),
+      gold: new THREE.MeshStandardMaterial({ color: '#d9ab52', metalness: 0.8, roughness: 0.3 }),
       face: new THREE.MeshBasicMaterial({ color: '#4a3226' }),
-      blush: new THREE.MeshBasicMaterial({ color: '#f08f80', transparent: true, opacity: 0.45 }),
+      blush: new THREE.MeshBasicMaterial({ color: '#f08f80', transparent: true, opacity: 0.45, depthWrite: false }),
       shadow: new THREE.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.22, depthWrite: false }),
-      moktak: new THREE.MeshStandardMaterial({ color: '#a4592a', roughness: 0.45 }),
-      bead: new THREE.MeshStandardMaterial({ color: '#8a4a26', roughness: 0.4 }),
+      moktak: new THREE.MeshStandardMaterial({ color: '#8c2616', roughness: 0.35 }),
+      dark: new THREE.MeshStandardMaterial({ color: '#1c0b06', roughness: 0.9 }),
+      wood: new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.6 }),
+      bead: new THREE.MeshStandardMaterial({ color: '#5a2a16', roughness: 0.4 }),
     };
   }
   return sharedMats;
 }
 
+// —— 形体尺寸 ——
+// 上身（随 torso 前倾）：车削出来的上衣，前后压扁
+const ROBE_PROFILE: [number, number][] = [[0.25, -0.08], [0.27, -0.02], [0.24, 0.12], [0.2, 0.28], [0.17, 0.36], [0.1, 0.4]];
+const RZ = 0.86;
+function robeR(y: number) {
+  const P = ROBE_PROFILE;
+  if (y <= P[0][1]) return P[0][0];
+  for (let i = 0; i < P.length - 1; i++) {
+    const [r0, y0] = P[i], [r1, y1] = P[i + 1];
+    if (y >= y0 && y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+  }
+  return 0.1;
+}
+// 袈裟上沿：左肩最高，右腋下最低（φ 从正前方起算，+x 是人物的左边）
+const kasayaTop = (phi: number) => 0.2 + 0.17 * Math.pow((1 + Math.sin(phi)) / 2, 1.6);
+// 下摆（挂在胯上，跪坐时压扁）
+const SKIRT: [number, number][] = [[0.296, -0.235], [0.29, -0.21], [0.27, -0.12], [0.245, -0.02], [0.22, 0.04]];
+// 头：略扁的球
+const HEAD_C = new THREE.Vector3(0, 0.24, 0);
+const HEAD_R = new THREE.Vector3(0.28, 0.27, 0.272);
+
+const Z = new THREE.Vector3(0, 0, 1);
+function xf(g: THREE.BufferGeometry, pos: [number, number, number], scale: [number, number, number] = [1, 1, 1], rot: [number, number, number] = [0, 0, 0]) {
+  const m = new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot, 'YXZ')), new THREE.Vector3(...scale));
+  return g.applyMatrix4(m);
+}
+// 贴在头表面上的小部件（五官）
+function onHead(g: THREE.BufferGeometry, x: number, y: number, lift: number, rotZ = 0, scale: [number, number, number] = [1, 1, 1]) {
+  const dx = x / HEAD_R.x, dy = (y - HEAD_C.y) / HEAD_R.y;
+  const z = Math.sqrt(Math.max(0, 1 - dx * dx - dy * dy)) * HEAD_R.z;
+  const n = new THREE.Vector3(x / HEAD_R.x ** 2, (y - HEAD_C.y) / HEAD_R.y ** 2, z / HEAD_R.z ** 2).normalize();
+  const p = new THREE.Vector3(x, y, z).addScaledVector(n, lift);
+  const q = new THREE.Quaternion().setFromUnitVectors(Z, n).multiply(new THREE.Quaternion().setFromAxisAngle(Z, rotZ));
+  return g.applyMatrix4(new THREE.Matrix4().compose(p, q, new THREE.Vector3(...scale)));
+}
+const merge = (gs: THREE.BufferGeometry[]) => mergeGeometries(gs)!;
+function tube(pts: THREE.Vector3[], r: number, closed = false) {
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), Math.max(8, pts.length * 2), r, 5, closed);
+}
+
+// 所有小和尚共用同一套几何体
+let sharedGeo: ReturnType<typeof buildGeo> | null = null;
+function buildGeo() {
+  // 腿与鞋（鞋头微微上翘）
+  const leg = xf(new THREE.CapsuleGeometry(0.08, 0.14, 4, 10), [0, -0.14, 0]);
+  const shoe = merge([
+    xf(new THREE.SphereGeometry(0.085, 14, 10), [0, -0.29, 0.04], [0.95, 0.56, 1.45]),
+    xf(new THREE.SphereGeometry(0.032, 10, 8), [0, -0.268, 0.15], [1, 0.85, 1.25], [-0.5, 0, 0]),
+  ]);
+
+  // 下摆
+  const skirt = new THREE.LatheGeometry(SKIRT.map(([r, y]) => new THREE.Vector2(r, y)), 32);
+  skirt.scale(1, 1, 0.9);
+  const skirtR = (y: number) => {
+    for (let i = 0; i < SKIRT.length - 1; i++) {
+      const [r0, y0] = SKIRT[i], [r1, y1] = SKIRT[i + 1];
+      if (y >= y0 && y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
+    }
+    return SKIRT[SKIRT.length - 1][0];
+  };
+  const skirtKasaya = new THREE.LatheGeometry([-0.15, -0.12, -0.07, -0.02, 0.04].map((y) => new THREE.Vector2(skirtR(y) + 0.007, y)), 32);
+  skirtKasaya.scale(1, 1, 0.9);
+  const su = skirtKasaya.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < su.count; i++) su.setX(i, su.getX(i) * 2);
+
+  // 上衣
+  const robe = new THREE.LatheGeometry([[0, -0.08], ...ROBE_PROFILE, [0, 0.41]].map(([x, y]) => new THREE.Vector2(x, y)), 32);
+  robe.scale(1, 1, RZ);
+
+  // 袈裟：绕身一圈，上沿从左肩斜到右腋下
+  const SEG = 48, ROWS = 8, Y0 = -0.07;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (let i = 0; i <= SEG; i++) {
+    const phi = (i / SEG) * Math.PI * 2;
+    const top = kasayaTop(phi);
+    for (let j = 0; j <= ROWS; j++) {
+      const y = Y0 + ((top - Y0) * j) / ROWS;
+      const r = robeR(y) + 0.008;
+      pos.push(Math.sin(phi) * r, y, Math.cos(phi) * r * RZ);
+      uv.push((i / SEG) * 2, j / ROWS);
+    }
+  }
+  for (let i = 0; i < SEG; i++)
+    for (let j = 0; j < ROWS; j++) {
+      const a = i * (ROWS + 1) + j, b = (i + 1) * (ROWS + 1) + j;
+      idx.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  const kasaya = new THREE.BufferGeometry();
+  kasaya.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  kasaya.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  kasaya.setIndex(idx);
+  kasaya.computeVertexNormals();
+
+  // 交领（深色）+ 袈裟上沿的缘边
+  const surf = (x: number, y: number, out: number) => {
+    const r = robeR(y) + out;
+    return new THREE.Vector3(x, y, Math.sqrt(Math.max(0, r * r - x * x)) * RZ);
+  };
+  const lapel = (from: [number, number], to: [number, number], out: number, r: number) => {
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 10; k++) {
+      const t = k / 10;
+      pts.push(surf(from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, out));
+    }
+    return tube(pts, r);
+  };
+  const edgePts: THREE.Vector3[] = [];
+  for (let i = 0; i < 64; i++) {
+    const phi = (i / 64) * Math.PI * 2;
+    const y = kasayaTop(phi);
+    const r = robeR(y) + 0.012;
+    edgePts.push(new THREE.Vector3(Math.sin(phi) * r, y, Math.cos(phi) * r * RZ));
+  }
+  const collar = merge([
+    lapel([0.07, 0.385], [-0.16, 0.15], 0.006, 0.02),
+    lapel([-0.07, 0.385], [0.0, 0.3], 0.006, 0.02),
+    xf(new THREE.TorusGeometry(0.1, 0.02, 6, 20), [0, 0.38, 0], [1, 1, 1], [Math.PI / 2, 0, 0]),
+    tube(edgePts, 0.011, true),
+  ]);
+  // 白色护领：露在领口
+  const inner = merge([
+    xf(new THREE.TorusGeometry(0.086, 0.016, 6, 20), [0, 0.4, 0], [1, 1, 1], [Math.PI / 2, 0, 0]),
+    lapel([0.035, 0.392], [-0.025, 0.335], 0.004, 0.013),
+  ]);
+
+  // 钩环：左胸前的金环
+  const phiR = 0.55, yR = kasayaTop(phiR) - 0.04, rR = robeR(yR) + 0.022;
+  const ring = xf(new THREE.TorusGeometry(0.028, 0.008, 8, 18), [Math.sin(phiR) * rR, yR, Math.cos(phiR) * rR * RZ], [1, 1, 1], [0, phiR, 0]);
+
+  // 颈上的念珠：绕颈后、垂到胸前，24 颗 + 一颗大的佛头和小穗
+  const malaPts: THREE.Vector3[] = [];
+  for (let i = 0; i < 64; i++) {
+    const phi = (i / 64) * Math.PI * 2;
+    const y = 0.395 - 0.22 * Math.pow((1 + Math.cos(phi)) / 2, 4);
+    const r = robeR(y) + 0.03;
+    malaPts.push(new THREE.Vector3(Math.sin(phi) * r, y, Math.cos(phi) * r * RZ + 0.004));
+  }
+  const malaCurve = new THREE.CatmullRomCurve3(malaPts, true);
+  const malaParts: THREE.BufferGeometry[] = [];
+  for (let k = 0; k < 24; k++) {
+    const u = 0.04 + (k / 23) * 0.92;
+    const p = malaCurve.getPointAt(u);
+    malaParts.push(xf(new THREE.SphereGeometry(0.016, 8, 6), [p.x, p.y, p.z]));
+  }
+  const g0 = malaCurve.getPointAt(0);
+  malaParts.push(xf(new THREE.SphereGeometry(0.024, 10, 8), [g0.x, g0.y - 0.004, g0.z + 0.004]));
+  malaParts.push(xf(new THREE.ConeGeometry(0.014, 0.05, 8), [g0.x, g0.y - 0.05, g0.z + 0.006]));
+  const mala = merge(malaParts);
+
+  // 头：脸、耳朵（耳垂较长）、鼻子并成一块
+  const ears: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) {
+    ears.push(xf(new THREE.SphereGeometry(0.062, 12, 10), [sx * 0.274, 0.215, -0.01], [0.42, 1.2, 0.75]));
+    ears.push(xf(new THREE.SphereGeometry(0.036, 10, 8), [sx * 0.281, 0.135, 0.004], [0.6, 1, 0.85]));
+  }
+  const head = merge([
+    xf(new THREE.SphereGeometry(0.28, 32, 22), [HEAD_C.x, HEAD_C.y, HEAD_C.z], [1, HEAD_R.y / 0.28, HEAD_R.z / 0.28]),
+    ...ears,
+    onHead(new THREE.SphereGeometry(0.021, 10, 8), 0, 0.172, -0.006, 0, [1, 0.8, 0.75]),
+  ]);
+  // 剃过的头顶比脸色略青：按顶点渐变上色，发际线是柔和过渡，不是一道硬边
+  {
+    const skin = new THREE.Color(SKIN), scalp = new THREE.Color(SCALP), c = new THREE.Color();
+    const axis = new THREE.Vector3(0, Math.cos(0.45), -Math.sin(0.45));
+    const hp = head.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(hp.count * 3);
+    const v = new THREE.Vector3();
+    const edge = Math.cos(Math.PI * 0.42);
+    for (let i = 0; i < hp.count; i++) {
+      v.fromBufferAttribute(hp, i).sub(HEAD_C).normalize();
+      const f = THREE.MathUtils.smoothstep(v.dot(axis), edge - 0.12, edge + 0.2);
+      c.copy(skin).lerp(scalp, f);
+      col[i * 3] = c.r;
+      col[i * 3 + 1] = c.g;
+      col[i * 3 + 2] = c.b;
+    }
+    head.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  }
+  // 五官：闭着的弯眼、细眉、微笑
+  const faceParts: THREE.BufferGeometry[] = [];
+  for (const sx of [-1, 1]) {
+    faceParts.push(onHead(new THREE.TorusGeometry(0.04, 0.008, 4, 12, Math.PI * 0.7), sx * 0.096, 0.235, 0.003, Math.PI * 1.15));
+    faceParts.push(onHead(new THREE.TorusGeometry(0.05, 0.0062, 4, 10, Math.PI * 0.5), sx * 0.1, 0.25, 0.004, Math.PI * 0.25 + sx * 0.12));
+  }
+  faceParts.push(onHead(new THREE.TorusGeometry(0.03, 0.007, 4, 10, Math.PI * 0.6), 0, 0.152, 0.003, Math.PI * 1.2));
+  const face = merge(faceParts);
+  const blush = merge([-1, 1].map((sx) => onHead(new THREE.CircleGeometry(0.038, 14), sx * 0.165, 0.165, 0.004)));
+
+  // 宽大的袖子：袖口外张，靠背后的一侧更长，抬手时像垂下的袖兜
+  const sleeve = new THREE.CylinderGeometry(0.07, 0.15, 0.25, 18, 4, true);
+  const sp = sleeve.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < sp.count; i++) {
+    const y = sp.getY(i), z = sp.getZ(i);
+    const t = (0.125 - y) / 0.25;
+    const back = Math.max(0, -z / 0.15);
+    sp.setY(i, y - 0.125 - t * t * 0.085 * back);
+    sp.setZ(i, z - t * t * 0.035 * back);
+  }
+  sleeve.computeVertexNormals();
+  const sleeveOuter = merge([sleeve.clone(), new THREE.SphereGeometry(0.07, 12, 8)]);
+  const shoulderCap = new THREE.SphereGeometry(0.077, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55);
+  // 手：连指手套状，拇指朝前、朝身体内侧
+  const hand = (sx: number) =>
+    merge([
+      xf(new THREE.SphereGeometry(0.052, 12, 10), [0, -0.275, 0], [0.85, 1.15, 0.72]),
+      xf(new THREE.SphereGeometry(0.022, 8, 6), [-sx * 0.036, -0.25, 0.022], [1, 1.3, 1]),
+    ]);
+
+  // 手里拿的：木鱼、木槌、念珠
+  const moktak = xf(new THREE.SphereGeometry(0.07, 16, 12), [0, 0, 0], [1.15, 0.8, 0.95]);
+  const moktakSlit = xf(new THREE.TorusGeometry(0.075, 0.009, 6, 20, Math.PI * 0.8), [0, -0.012, 0], [1.13, 0.95, 1], [Math.PI / 2, Math.PI * 0.1, 0]);
+  const mallet = merge([xf(new THREE.CylinderGeometry(0.008, 0.009, 0.17, 6), [0, -0.33, 0.02]), xf(new THREE.SphereGeometry(0.024, 10, 8), [0, -0.415, 0.02])]);
+  const beads: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    beads.push(xf(new THREE.SphereGeometry(0.014, 6, 4), [Math.cos(a) * 0.06, -0.06 + Math.sin(a) * 0.08, 0]));
+  }
+  const handBeads = merge(beads);
+
+  return { leg, shoe, skirt, skirtKasaya, robe, kasaya, collar, inner, ring, mala, head, face, blush, sleeve, sleeveOuter, shoulderCap, handL: hand(1), handR: hand(-1), moktak, moktakSlit, mallet, handBeads };
+}
+function geo() {
+  return (sharedGeo ??= buildGeo());
+}
+
 export class Monk {
   root = new THREE.Group();
   private hips = new THREE.Group();
+  private skirt = new THREE.Group();
   private legL = new THREE.Group();
   private legR = new THREE.Group();
   private torso = new THREE.Group();
@@ -130,7 +366,8 @@ export class Monk {
   private armL = new THREE.Group();
   private armR = new THREE.Group();
   private moktakProp: THREE.Group;
-  private beadsProp: THREE.Group;
+  private malletProp: THREE.Mesh;
+  private beadsProp: THREE.Mesh;
   private incenseProp: THREE.Group;
   private planted = false;
   onIncensePlant?: () => void;
@@ -147,134 +384,59 @@ export class Monk {
 
   constructor() {
     const M = mats();
-    const S = (o: THREE.Mesh) => {
-      o.castShadow = true;
-      o.receiveShadow = false;
+    const G = geo();
+    const mesh = (g: THREE.BufferGeometry, m: THREE.Material, shadow = true) => {
+      const o = new THREE.Mesh(g, m);
+      o.castShadow = shadow;
       return o;
     };
 
     this.hips.position.y = HIP;
     this.root.add(this.hips);
 
-    // 腿
+    // 腿：白绑腿 + 僧鞋
     for (const [g, sx] of [[this.legL, 1], [this.legR, -1]] as [THREE.Group, number][]) {
       g.position.set(sx * 0.1, 0, 0);
       g.rotation.order = 'YXZ';
-      const leg = S(new THREE.Mesh(new THREE.CapsuleGeometry(0.085, 0.14, 4, 10), M.robeDark));
-      leg.position.y = -0.14;
-      const foot = S(new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 8), M.shoe));
-      foot.scale.set(1, 0.6, 1.4);
-      foot.position.set(0, -0.29, 0.035);
-      g.add(leg, foot);
+      g.add(mesh(G.leg, M.legging), mesh(G.shoe, M.shoe));
       this.hips.add(g);
     }
 
-    // 上身：裙摆状的僧袍
+    // 下摆：海青长到脚面，袈裟盖到小腿
+    this.skirt.add(mesh(G.skirt, M.robe), mesh(G.skirtKasaya, M.kasaya));
+    this.hips.add(this.skirt);
+
+    // 上身
     this.hips.add(this.torso);
-    const robeGeo = new THREE.LatheGeometry(
-      [[0.0, -0.08], [0.25, -0.08], [0.27, -0.02], [0.24, 0.12], [0.2, 0.28], [0.17, 0.36], [0.1, 0.4], [0, 0.41]].map(([x, y]) => new THREE.Vector2(x, y)),
-      28
-    );
-    const robe = S(new THREE.Mesh(robeGeo, M.robe));
-    robe.scale.set(1, 1, 0.86);
-    this.torso.add(robe);
-    // 袈裟：斜披在左肩的一片黄色
-    const kasayaGeo = new THREE.CylinderGeometry(0.236, 0.278, 0.34, 24, 1, true, Math.PI * 0.15, Math.PI * 1.05);
-    const kasaya = S(new THREE.Mesh(kasayaGeo, M.kasaya));
-    kasaya.scale.set(1, 1, 0.88);
-    kasaya.position.set(0, 0.08, 0);
-    kasaya.rotation.set(0, 0.35, 0.18);
-    this.torso.add(kasaya);
-    const strap = S(new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.03, 6, 20, Math.PI), M.kasaya));
-    strap.position.set(0.04, 0.26, 0);
-    strap.rotation.set(0, Math.PI / 2, 0.5);
-    strap.scale.set(1, 1, 0.9);
-    this.torso.add(strap);
-    const robeR = (y: number) => {
-      const prof: [number, number][] = [[0.27, -0.02], [0.24, 0.12], [0.2, 0.28], [0.17, 0.36], [0.1, 0.4]];
-      for (let i = 0; i < prof.length - 1; i++) {
-        const [r0, y0] = prof[i], [r1, y1] = prof[i + 1];
-        if (y >= y0 && y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0);
-      }
-      return 0.2;
-    };
-    const lapel = (from: [number, number], to: [number, number]) => {
-      const pts: THREE.Vector3[] = [];
-      for (let k = 0; k <= 10; k++) {
-        const t = k / 10;
-        const x = from[0] + (to[0] - from[0]) * t;
-        const y = from[1] + (to[1] - from[1]) * t;
-        const rr = robeR(y);
-        const z = Math.sqrt(Math.max(0, rr * rr - x * x)) * 0.86 + 0.006;
-        pts.push(new THREE.Vector3(x, y, z));
-      }
-      return new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.018, 5, false), M.collar);
-    };
-    this.torso.add(lapel([0.06, 0.38], [-0.16, 0.14]));
-    this.torso.add(lapel([-0.06, 0.38], [0.0, 0.3]));
-    const neckband = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 16), M.collar);
-    neckband.rotation.x = Math.PI / 2;
-    neckband.position.y = 0.385;
-    this.torso.add(neckband);
+    this.torso.add(mesh(G.robe, M.robe), mesh(G.kasaya, M.kasaya), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.ring, M.gold, false), mesh(G.mala, M.bead, false));
 
     // 头
-    this.headG.position.y = 0.4;
+    this.headG.position.y = 0.42;
     this.torso.add(this.headG);
-    const head = S(new THREE.Mesh(new THREE.SphereGeometry(0.29, 28, 20), M.skin));
-    head.scale.set(1, 0.95, 0.97);
-    head.position.y = 0.25;
-    this.headG.add(head);
-    for (const sx of [-1, 1]) {
-      const ear = S(new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), M.skin));
-      ear.scale.set(0.5, 1, 0.8);
-      ear.position.set(sx * 0.285, 0.23, 0);
-      this.headG.add(ear);
-      // 闭着的眼睛：弯弯的弧线
-      const eye = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 4, 10, Math.PI), M.face);
-      eye.position.set(sx * 0.1, 0.22, 0.266);
-      eye.rotation.set(0.15, sx * 0.3, Math.PI);
-      this.headG.add(eye);
-      const blush = new THREE.Mesh(new THREE.CircleGeometry(0.036, 12), M.blush);
-      blush.position.set(sx * 0.17, 0.16, 0.214);
-      blush.rotation.y = sx * 0.66;
-      this.headG.add(blush);
-    }
-    const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.007, 4, 10, Math.PI), M.face);
-    mouth.position.set(0, 0.13, 0.26);
-    mouth.rotation.set(0.25, 0, Math.PI);
-    this.headG.add(mouth);
+    this.headG.add(mesh(G.head, M.headSkin), mesh(G.face, M.face, false));
+    const blush = mesh(G.blush, M.blush, false);
+    blush.renderOrder = 2;
+    this.headG.add(blush);
 
-    // 手臂
+    // 手臂：宽袖（外黄里深）+ 手；左肩上搭着袈裟
     for (const [g, sx] of [[this.armL, 1], [this.armR, -1]] as [THREE.Group, number][]) {
       g.position.set(sx * 0.19, 0.31, 0);
       g.rotation.order = 'YXZ';
-      const sleeve = S(new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.115, 0.24, 12, 1, true), M.robe));
-      sleeve.position.y = -0.12;
-      (sleeve.material as THREE.MeshStandardMaterial).side = THREE.DoubleSide;
-      const shoulder = S(new THREE.Mesh(new THREE.SphereGeometry(0.068, 10, 8), M.robe));
-      g.add(shoulder);
-      const hand = S(new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), M.skin));
-      hand.position.y = -0.255;
-      g.add(sleeve, hand);
+      g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), mesh(sx > 0 ? G.handL : G.handR, M.skin));
       this.torso.add(g);
     }
+    this.armL.add(mesh(G.shoulderCap, M.kasaya));
 
-    // 手里的木鱼与念珠（只在对应动作时显示）
+    // 手里的木鱼、木槌与念珠（只在对应动作时显示）
     this.moktakProp = new THREE.Group();
-    const mk1 = new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), M.moktak);
-    mk1.scale.set(1, 0.85, 0.9);
-    this.moktakProp.add(mk1);
-    this.moktakProp.position.set(0, -0.27, 0.02);
+    this.moktakProp.add(mesh(G.moktak, M.moktak), mesh(G.moktakSlit, M.dark, false));
+    this.moktakProp.position.set(0, -0.3, 0.03);
     this.moktakProp.visible = false;
     this.armL.add(this.moktakProp);
-    this.beadsProp = new THREE.Group();
-    const bgeo = new THREE.SphereGeometry(0.014, 6, 4);
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2;
-      const b = new THREE.Mesh(bgeo, M.bead);
-      b.position.set(Math.cos(a) * 0.06, -0.06 + Math.sin(a) * 0.08, 0);
-      this.beadsProp.add(b);
-    }
+    this.malletProp = mesh(G.mallet, M.wood, false);
+    this.malletProp.visible = false;
+    this.armR.add(this.malletProp);
+    this.beadsProp = mesh(G.handBeads, M.bead, false);
     this.beadsProp.position.set(0, -0.27, 0.03);
     this.beadsProp.visible = false;
     this.armR.add(this.beadsProp);
@@ -294,7 +456,7 @@ export class Monk {
     this.torso.add(this.incenseProp);
 
     // 脚下的圆形软阴影（让角色不显得飘）
-    const blob = new THREE.Mesh(new THREE.CircleGeometry(0.3, 20), M.shadow);
+    const blob = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), M.shadow);
     blob.rotation.x = -Math.PI / 2;
     blob.position.y = 0.02;
     blob.renderOrder = 1;
@@ -321,6 +483,7 @@ export class Monk {
     let rate = 10;
 
     this.moktakProp.visible = this.action === 'moktak';
+    this.malletProp.visible = this.action === 'moktak';
     this.beadsProp.visible = this.action === 'rosary';
     this.incenseProp.visible = this.action === 'incense' && this.actionTime < INCENSE_PLANT_TIME;
 
@@ -329,7 +492,7 @@ export class Monk {
         this.walkPhase += dt * (5 + this.speed * 2.6);
         const s = Math.sin(this.walkPhase);
         const amp = Math.min(1, this.speed / 2);
-        target = mk({ legL: s * 0.55 * amp, legR: -s * 0.55 * amp, armLp: -s * 0.4 * amp, armRp: s * 0.4 * amp, armLr: 0.12, armRr: -0.12, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, torso: 0.05 });
+        target = mk({ legL: s * 0.55 * amp, legR: -s * 0.55 * amp, armLp: -s * 0.4 * amp, armRp: s * 0.4 * amp, armLr: 0.12, armRr: -0.12, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, torso: 0.05, sway: s * 0.045 * amp });
         rate = 14;
         break;
       }
@@ -391,7 +554,12 @@ export class Monk {
     const k = 1 - Math.exp(-rate * dt);
     this.pose = lerpPose(this.pose, target, k);
     const p = this.pose;
-    this.hips.position.y = HIP + p.drop + p.bob;
+    const hipY = HIP + p.drop + p.bob;
+    this.hips.position.y = hipY;
+    // 下摆随胯部高度压扁（跪下、坐下时不穿进地面），腿向前伸时也收起来
+    const fwd = Math.min(1, Math.max(0, (-(p.legL + p.legR) / 2 - 0.6) / 0.8));
+    this.skirt.scale.y = Math.min(1, Math.max(0.18, hipY / HIP)) * (1 - 0.7 * fwd);
+    this.skirt.rotation.z = p.sway;
     this.legL.rotation.set(p.legL, -p.legSpread, 0);
     this.legR.rotation.set(p.legR, p.legSpread, 0);
     this.torso.rotation.x = p.torso;

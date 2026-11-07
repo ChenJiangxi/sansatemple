@@ -1,4 +1,5 @@
-// 佛坛上的三尊像：中间主尊（高丽铁佛扫描）、两侧戴冠菩萨（彩绘木雕观音扫描），统一做成金身
+// 佛坛上「一佛二弟子」：中间释迦牟尼佛（高丽铁佛扫描，降魔印），两侧迦叶、阿难二尊者立像
+// （克利夫兰艺术博物馆光头立像扫描），统一做成金身
 // 模型来源见 README 的「素材来源」。加载失败时保留空佛坛，不影响其他功能。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -84,8 +85,8 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
 
   const spec = {
     main: { h: 3.2, pr: 1.25, ph: 0.75, mw: 4.0, mh: 5.4, file: 'buddha.glb', mat: goldA },
-    left: { h: 2.3, pr: 0.9, ph: 0.55, mw: 2.7, mh: 3.8, file: 'bodhisattva.glb', mat: goldB },
-    right: { h: 2.3, pr: 0.9, ph: 0.55, mw: 2.7, mh: 3.8, file: 'bodhisattva.glb', mat: goldB },
+    left: { h: 2.55, pr: 0.62, ph: 0.4, mw: 0, mh: 0, file: 'disciple.glb', mat: goldB },
+    right: { h: 2.55, pr: 0.62, ph: 0.4, mw: 0, mh: 0, file: 'disciple.glb', mat: goldB },
   } as const;
 
   const holders = slots.map((s) => {
@@ -94,11 +95,22 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
     holder.position.set(s.x, s.y, s.z);
     const ped = lotusPedestal(pedestalMat, sp.pr, sp.ph);
     holder.add(ped);
-    // 鎏金背光
-    const back = mandorla(sp.mw, sp.mh);
-    back.position.set(0, -0.05, s.kind === 'main' ? -1.4 : -sp.pr - 0.12);
-    (back.material as THREE.Material[]).forEach((m) => ((m as THREE.MeshStandardMaterial).envMap = env));
-    holder.add(back);
+    if (s.kind === 'main') {
+      // 主尊：鎏金背光（头光 + 身光）
+      const back = mandorla(sp.mw, sp.mh);
+      back.position.set(0, -0.05, -1.4);
+      (back.material as THREE.Material[]).forEach((m) => ((m as THREE.MeshStandardMaterial).envMap = env));
+      holder.add(back);
+    } else {
+      // 弟子：只有圆形头光
+      const haloY = sp.ph + sp.h * 0.88;
+      const disc = mesh(new THREE.CircleGeometry(0.42, 40), new THREE.MeshStandardMaterial({ color: '#b98a3a', metalness: 0.8, roughness: 0.45, envMap: env, side: THREE.DoubleSide }), false);
+      disc.position.set(0, haloY, -0.52);
+      holder.add(disc);
+      const ring = mesh(new THREE.TorusGeometry(0.44, 0.03, 8, 48), goldA, false);
+      ring.position.set(0, haloY, -0.5);
+      holder.add(ring);
+    }
     group.add(holder);
     return { slot: s, holder, sp };
   });
@@ -138,7 +150,8 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
       // 右侧那尊左右镜像，让两尊菩萨对称地朝向中间
       if (slot.kind === 'right') obj.scale.x *= -1;
       obj.position.y = sp.ph - 0.04;
-      obj.rotation.y = slot.kind === 'left' ? 0.12 : slot.kind === 'right' ? -0.12 : 0;
+      // 两位弟子略微侧身，朝向中间的佛
+      obj.rotation.y = slot.kind === 'left' ? 0.28 : slot.kind === 'right' ? -0.28 : 0;
       holder.add(obj);
     })
   ).catch((e) => console.warn('佛像模型加载失败', e));

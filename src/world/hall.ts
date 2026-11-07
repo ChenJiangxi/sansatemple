@@ -675,8 +675,8 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const altarTop = H.baseH + H.altarH;
   const statueSlots = [
     { x: 0, y: altarTop, z: az + 0.2, kind: 'main' as const },
-    { x: -6.4, y: altarTop, z: az + 0.15, kind: 'left' as const },
-    { x: 6.4, y: altarTop, z: az + 0.15, kind: 'right' as const },
+    { x: -3.5, y: altarTop, z: az + 0.35, kind: 'left' as const },
+    { x: 3.5, y: altarTop, z: az + 0.35, kind: 'right' as const },
   ];
 
   // 华盖：主尊头顶的八角宝盖，垂着流苏
@@ -703,7 +703,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   // 经幡：佛坛前左右各三条
   const banMat = new THREE.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.8, side: THREE.DoubleSide });
   const fringeMat = new THREE.MeshStandardMaterial({ color: '#e0b23c', side: THREE.DoubleSide, roughness: 0.8 });
-  for (const x of [-11.5, -8.6, -3.9, 3.9, 8.6, 11.5]) {
+  for (const x of [-11.5, -8.6, -6.0, 6.0, 8.6, 11.5]) {
     const ban = mesh(new THREE.CylinderGeometry(0.26, 0.26, 3.0, 12, 1, true), banMat, false);
     ban.position.set(x, ceilY - 1.9, H.altarZ1 + 1.3);
     group.add(ban);
@@ -747,7 +747,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     candleFlames.push(flame);
   };
   for (const x of [-1.35, 1.35]) addCandle(x, ttop, tz - 0.12);
-  for (const x of [-3.2, 3.2]) addCandle(x, altarTop, H.altarZ1 - 0.35, 0.7, 0.4);
+  for (const x of [-5.2, 5.2]) addCandle(x, altarTop, H.altarZ1 - 0.35, 0.7, 0.4);
   const lampGlass = new THREE.MeshStandardMaterial({ color: '#f2c86a', roughness: 0.2, transparent: true, opacity: 0.85, emissive: '#ffb44a', emissiveIntensity: 0.6 });
   for (const x of [-1.7, 1.7]) {
     const lamp = mesh(lathe([[0, 0], [0.06, 0], [0.04, 0.12], [0.16, 0.2], [0.18, 0.3], [0, 0.26]], 16), lampGlass, false);
