@@ -84,6 +84,10 @@ node tools/promo/audio.mjs /tmp/sansa-promo/score.wav
 node tools/promo/assemble.mjs /tmp/sansa-promo/shots /tmp/sansa-promo/score.wav 宣传片.mp4
 ```
 
+封面：打开 `promo.html?cover`，会生成 9:16 和 3:4 两张（`/tmp/sansa-promo/shots/cover*/00000.jpg`）。
+
+成片放到 `PROMO_DIR`（默认项目下的 `promo/`，不进 Git），文件名 `promo.mp4`、`cover.jpg`、`cover-3x4.jpg`，服务器会在 `…/promo/` 提供播放页（支持拖动进度）。本机启动方式：`PROMO_DIR=/Users/macmini003/chatcut-dev/projects/sansa-promo npm start`。
+
 ## 与原站的差别
 
 - 没做：咖啡赞助（CAFE25 / GS25）、捐款入口、定时的「共同礼佛」广播。

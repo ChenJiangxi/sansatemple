@@ -498,6 +498,154 @@ async function main() {
   let struck = false;
   let mk = 0;
 
+  // —— 封面：黄昏的大殿前，一位小和尚合十；上方大字标题，下方那一句话 ——
+  async function renderCover(cw: number, ch: number, id: string) {
+    renderer.setSize(cw, ch, false);
+    camera.aspect = cw / ch;
+    camera.fov = ch / cw > 1.5 ? 54 : 46;
+    camera.updateProjectionMatrix();
+    env.setMode('dusk');
+    props.setLanternLevel(env.lanternLevel);
+    renderer.toneMappingExposure *= 1.12;
+    const fill = new THREE.PointLight('#ffd7a8', 14, 7, 2);
+    fill.position.set(0.9, 2.4, 13.8);
+    scene.add(fill);
+    const ms = cast(3);
+    place(ms[0], -2.4, 9.0, Math.PI);
+    place(ms[1], 2.4, 9.0, Math.PI);
+    place(ms[2], -1.0, 2.6, Math.PI);
+    ms[0].setAction('hapjang');
+    ms[1].setAction('hapjang');
+    ms[2].setAction('walk');
+    ms[2].speed = 1;
+    me.root.visible = true;
+    place(me, 0, 11.4, 0.06);
+    me.setAction('idle');
+    env.follow(0, 6);
+    const tallShot = ch / cw > 1.5;
+    camera.position.set(0.3, 1.25, 15.8);
+    camera.lookAt(0, tallShot ? 2.6 : 2.0, 4);
+    for (let k = 0; k < 60; k++) tickWorld(1 / 30);
+    ms[0].setAction('hapjang');
+    ms[1].setAction('hapjang');
+    me.setAction('hapjang');
+    for (let k = 0; k < 13; k++) tickWorld(1 / 30);
+    render3d();
+
+    const oc = document.createElement('canvas');
+    oc.width = cw;
+    oc.height = ch;
+    const g = oc.getContext('2d')!;
+    g.drawImage(renderer.domElement, 0, 0);
+    // 调色：暖、压暗四角、细颗粒
+    g.save();
+    g.globalCompositeOperation = 'soft-light';
+    g.fillStyle = 'rgba(240,200,140,0.25)';
+    g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'multiply';
+    const vg = g.createRadialGradient(cw / 2, ch * 0.55, ch * 0.25, cw / 2, ch * 0.55, ch * 0.75);
+    vg.addColorStop(0, '#fff');
+    vg.addColorStop(1, 'rgb(110,90,70)');
+    g.fillStyle = vg;
+    g.fillRect(0, 0, cw, ch);
+    g.globalCompositeOperation = 'overlay';
+    g.globalAlpha = 0.07;
+    g.drawImage(grain[0], 0, 0, cw, ch);
+    g.restore();
+    // 标题底下压一层墨色，字更醒目
+    const band = g.createLinearGradient(0, 0, 0, ch * 0.42);
+    band.addColorStop(0, 'rgba(10,6,4,0.75)');
+    band.addColorStop(1, 'rgba(10,6,4,0)');
+    g.fillStyle = band;
+    g.fillRect(0, 0, cw, ch * 0.42);
+    const tall = ch / cw > 1.5;
+    const y1 = tall ? 230 : 175, y2 = y1 + (tall ? 200 : 180);
+    const titleLine = (text: string, y: number, size: number, cx = cw / 2) => {
+      g.save();
+      g.font = `${size}px ZMX`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.lineJoin = 'round';
+      g.shadowColor = 'rgba(0,0,0,0.55)';
+      g.shadowBlur = 24;
+      g.lineWidth = size * 0.09;
+      g.strokeStyle = 'rgba(22,12,6,0.92)';
+      g.strokeText(text, cx, y);
+      g.shadowColor = 'transparent';
+      const fg = g.createLinearGradient(0, y - size / 2, 0, y + size / 2);
+      fg.addColorStop(0, '#fff8e6');
+      fg.addColorStop(1, '#f0c983');
+      g.fillStyle = fg;
+      g.fillText(text, cx, y);
+      g.restore();
+    };
+    {
+      // 「一句话复刻」和印章作为一组居中，印章盖在这行字的末尾
+      const size = tall ? 184 : 172, sealS = tall ? 100 : 90;
+      g.font = `${size}px ZMX`;
+      const w1 = g.measureText('一句话复刻').width;
+      const gx = (cw - (w1 + 26 + sealS)) / 2;
+      titleLine('一句话复刻', y1, size, gx + w1 / 2);
+      seal(g, gx + w1 + 26 + sealS / 2, y1 + 8, sealS, '山寺', 1, 1);
+    }
+    titleLine('韩国爆火的山寺', y2, tall ? 158 : 146);
+    // 下方：那一句话
+    g.save();
+    g.shadowColor = 'rgba(0,0,0,0.7)';
+    if (tall) {
+      const bw = 840, bh = 196, bx = (cw - bw) / 2, by = y2 + 190;
+      g.font = '40px "Songti SC"';
+      g.fillStyle = '#fbf2de';
+      g.shadowBlur = 14;
+      g.fillText('只说了一句话：', bx + 14, by - 22);
+      g.shadowBlur = 30;
+      roundRect(g, bx, by, bw, bh, 32);
+      g.fillStyle = 'rgba(255,251,242,0.93)';
+      g.fill();
+      g.shadowColor = 'transparent';
+      g.font = '50px "Songti SC"';
+      g.fillStyle = '#2f4f6f';
+      g.fillText(PROMPT_LINES[0], bx + 48, by + 82);
+      g.fillStyle = '#2b2420';
+      g.fillText(PROMPT_LINES[1], bx + 48, by + 158);
+    } else {
+      // 3:4 画面矮：一句话排成一行，不挡住佛像
+      g.font = '40px "Songti SC"';
+      const w0 = g.measureText(PROMPT_LINES[0] + ' ').width, w1 = g.measureText(PROMPT_LINES[1]).width;
+      const bw = w0 + w1 + 80, bh = 92, bx = (cw - bw) / 2, by = y2 + 134;
+      g.font = '34px "Songti SC"';
+      g.fillStyle = '#fbf2de';
+      g.shadowBlur = 14;
+      g.fillText('只说了一句话：', bx + 10, by - 18);
+      g.shadowBlur = 26;
+      roundRect(g, bx, by, bw, bh, 26);
+      g.fillStyle = 'rgba(255,251,242,0.93)';
+      g.fill();
+      g.shadowColor = 'transparent';
+      g.font = '40px "Songti SC"';
+      g.fillStyle = '#2f4f6f';
+      g.fillText(PROMPT_LINES[0], bx + 40, by + 60);
+      g.fillStyle = '#2b2420';
+      g.fillText(PROMPT_LINES[1], bx + 40 + w0, by + 60);
+    }
+    g.restore();
+
+    const blob: Blob = await new Promise((r) => oc.toBlob((b) => r(b!), 'image/jpeg', 0.95));
+    await fetch(`/__promo/frame?shot=${id}&i=0`, { method: 'POST', body: blob });
+    scene.remove(fill);
+    renderer.setSize(W, H, false);
+  }
+  if (new URL(location.href).searchParams.has('cover')) {
+    status('封面');
+    await renderCover(1080, 1920, 'cover');
+    await renderCover(1080, 1440, 'cover34');
+    const done = document.createElement('div');
+    done.dataset.testid = 'promo-done';
+    document.body.appendChild(done);
+    status('完成');
+    return;
+  }
+
   // —— 逐帧录制 ——
   const want = new URL(location.href).searchParams.get('shots')?.split(',') ?? SHOTS.map((s: Shot) => s.id);
   for (const shot of SHOTS as Shot[]) {

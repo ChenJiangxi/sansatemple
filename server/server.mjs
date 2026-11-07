@@ -9,6 +9,8 @@ import { WebSocketServer } from 'ws';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, '../dist');
+// 宣传片目录（视频和封面），不进 Git；用 PROMO_DIR 指定，默认项目下的 promo/
+const PROMO_DIR = path.resolve(process.env.PROMO_DIR || path.join(__dirname, '../promo'));
 const PORT = Number(process.env.PORT || 4318);
 const ROOMS = 5;
 const CAPACITY = 50;
@@ -24,6 +26,8 @@ const MIME = {
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.mp4': 'video/mp4',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
@@ -43,6 +47,55 @@ function cleanName(s) {
     .replace(/[\u0000-\u001f\u007f<>]/g, '')
     .trim()
     .slice(0, 16) || '…';
+}
+
+// 发送文件，支持 Range（手机浏览器播放视频、拖动进度都要靠它）
+function sendFile(req, res, file, extra = {}) {
+  let st;
+  try {
+    st = fs.statSync(file);
+    if (!st.isFile()) throw new Error('not file');
+  } catch {
+    res.writeHead(404);
+    res.end('not found');
+    return;
+  }
+  const head = { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'accept-ranges': 'bytes', 'last-modified': st.mtime.toUTCString(), ...extra };
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (m && (m[1] || m[2])) {
+    let start = m[1] ? Number(m[1]) : Math.max(0, st.size - Number(m[2]));
+    const end = m[1] && m[2] ? Math.min(Number(m[2]), st.size - 1) : st.size - 1;
+    if (start > end) {
+      res.writeHead(416, { 'content-range': `bytes */${st.size}` });
+      res.end();
+      return;
+    }
+    res.writeHead(206, { ...head, 'content-range': `bytes ${start}-${end}/${st.size}`, 'content-length': end - start + 1 });
+    if (req.method === 'HEAD') return res.end();
+    fs.createReadStream(file, { start, end }).pipe(res);
+    return;
+  }
+  res.writeHead(200, { ...head, 'content-length': st.size });
+  if (req.method === 'HEAD') return res.end();
+  fs.createReadStream(file).pipe(res);
+}
+
+function promoPage() {
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>一句话复刻韩国爆火的山寺</title>
+<meta property="og:title" content="一句话复刻韩国爆火的山寺"><meta property="og:image" content="cover.jpg"><meta property="og:type" content="video.other">
+<style>
+html,body{margin:0;min-height:100%;background:#1b1714;color:#efe5d0;font-family:"Songti SC","Noto Serif CJK SC",serif}
+main{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px 16px 28px;box-sizing:border-box}
+h1{margin:0;font-size:22px;font-weight:600;letter-spacing:3px}
+video{display:block;height:min(78vh,calc((100vw - 32px)*16/9));aspect-ratio:9/16;max-width:100%;background:#000;border-radius:10px;box-shadow:0 10px 40px #0008}
+nav{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;font-size:15px}
+a{color:#e2c48a;text-decoration:none;border-bottom:1px solid #e2c48a55;padding-bottom:2px}
+</style></head><body><main>
+<h1>一句话复刻韩国爆火的山寺</h1>
+<video src="promo.mp4" poster="cover.jpg" controls playsinline preload="metadata"></video>
+<nav><a href="promo.mp4" download="一句话复刻韩国爆火的山寺.mp4">下载视频</a><a href="cover.jpg" download="封面-9比16.jpg">封面 9:16</a><a href="cover-3x4.jpg" download="封面-3比4.jpg">封面 3:4</a><a href="../">进山寺</a></nav>
+</main></body></html>`;
 }
 
 const num = (v, lo, hi) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : 0);
@@ -68,9 +121,26 @@ const server = http.createServer((req, res) => {
     res.end('bad request');
     return;
   }
+  const parts = rel.split('/').filter(Boolean);
+  // 宣传片：任意前缀下的 promo/（页面）和 promo/文件名
+  const pi = parts.lastIndexOf('promo');
+  if (pi >= 0 && pi >= parts.length - 2) {
+    const name = parts[pi + 1];
+    if (!name) {
+      if (!rel.endsWith('/')) {
+        res.writeHead(301, { location: 'promo/' });
+        res.end();
+        return;
+      }
+      res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' });
+      res.end(promoPage());
+      return;
+    }
+    sendFile(req, res, path.join(PROMO_DIR, path.basename(name)), { 'cache-control': 'public, max-age=600' });
+    return;
+  }
   // 去掉可能的子路径前缀，只要能在 dist 里找到文件即可
   const tryFiles = [];
-  const parts = rel.split('/').filter(Boolean);
   for (let i = 0; i <= parts.length; i++) tryFiles.push(parts.slice(i).join('/'));
   for (const p of tryFiles) {
     const file = path.join(DIST, p || 'index.html');
