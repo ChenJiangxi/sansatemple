@@ -12,7 +12,7 @@ import { placeStatues } from '../../src/world/statues';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from '../../src/world/pbr';
 import { Monk, BOW_DURATION } from '../../src/monk';
 import { MoktakView } from '../../src/overlays';
-import { HALL, ALTAR_BURNER, INCENSE, BELL, CUSHIONS, heightAt } from '../../src/layout';
+import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, CUSHIONS, CUSHION_ROWS, heightAt } from '../../src/layout';
 // @ts-ignore 共用的分镜表
 import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES } from './timeline.mjs';
 
@@ -133,6 +133,19 @@ async function main() {
   const me = new Monk();
   scene.add(me.root);
   me.root.visible = false;
+  const hallSeats = CUSHIONS.filter((_, i) => (i * 7) % 10 < 6);
+  let heroSeat: (typeof CUSHIONS)[number] | null = null;
+  function fillHall(phase: number) {
+    me.root.visible = false;
+    const ms = cast(hallSeats.length);
+    ms.forEach((m, i) => {
+      const st = hallSeats[i];
+      place(m, st.x, st.z, st.yaw, st.y);
+      m.setAction('bow');
+      m.actionTime = ((i * 0.37 + phase) % 1) * BOW_DURATION;
+    });
+    return ms;
+  }
 
   // —— 合成画布：3D 画面 + 调色 + 字幕 ——
   const out = document.createElement('canvas');
@@ -380,24 +393,95 @@ async function main() {
         ])(u, camera);
       },
     },
-    hall: {
+    // —— 殿内：进殿 → 满殿礼拜 → 佛像 → 一佛二弟子 → 佛前供养 → 五体投地 ——
+    hallEnter: {
       setup() {
-        me.root.visible = false;
-        const seats = CUSHIONS.filter((_, i) => (i * 7) % 10 < 6);
-        const ms = cast(seats.length);
-        ms.forEach((m, i) => {
-          const s = seats[i];
-          place(m, s.x, s.z, s.yaw, s.y);
-          m.setAction('bow');
-          m.actionTime = ((i * 0.37) % 1) * BOW_DURATION;
-        });
+        fillHall(0);
         env.follow(0, -12);
       },
       update(_t, u) {
-        camera.fov = 58;
+        camera.fov = 60;
         camPath([
-          { p: [0, 2.8, -3.2], l: [0, 3.2, -20] },
-          { p: [0, 2.1, -8.2], l: [0, 3.5, -20] },
+          { p: [0, 2.85, 0.1], l: [0, 3.5, -20] },
+          { p: [0, 2.65, -3.2], l: [0, 3.5, -20] },
+          { p: [0, 2.4, -6.2], l: [0, 3.6, -20] },
+        ])(u, camera);
+      },
+    },
+    rows: {
+      setup() {
+        fillHall(0.3);
+        env.follow(0, -12);
+      },
+      update(_t, u) {
+        camera.fov = 62;
+        camPath([
+          { p: [-11.2, 5.7, -4.8], l: [-1.0, 1.6, -13.5] },
+          { p: [-8.6, 5.1, -6.4], l: [0.5, 1.8, -14.5] },
+        ])(u, camera);
+      },
+    },
+    buddha: {
+      setup() {
+        fillHall(0.55);
+        env.follow(0, -16);
+      },
+      update(_t, u) {
+        camera.fov = 46;
+        camPath([
+          { p: [0, 2.7, -11.8], l: [0, 4.2, -20.6] },
+          { p: [0, 3.3, -15.0], l: [0, 5.0, -20.6] },
+        ])(u, camera);
+      },
+    },
+    triad: {
+      setup() {
+        fillHall(0.7);
+        env.follow(0, -18);
+      },
+      update(_t, u) {
+        // 从左到右平移，迦叶、主尊、阿难依次经过
+        camera.fov = 44;
+        const x = -3.4 + 6.8 * glide(u);
+        camera.position.set(x, 3.15, -16.0);
+        camera.lookAt(x * 1.05, 3.9, -20.5);
+      },
+    },
+    altar: {
+      setup() {
+        fillHall(0.15);
+        me.root.visible = true;
+        place(me, ALTAR_SPOT.x, ALTAR_SPOT.z, Math.PI);
+        me.setAction('incense');
+        me.actionTime = 0.4;
+        me.onIncensePlant = () => altarIncense.set([...sticks(9, 2), { id: 'mine', mine: true, remain: 1 }]);
+        altarIncense.set(sticks(9, 2));
+        env.follow(0, -17);
+      },
+      update(_t, u) {
+        camera.fov = 50;
+        camPath([
+          { p: [3.7, 2.7, -15.6], l: [-0.35, 2.0, -17.3] },
+          { p: [3.3, 2.6, -15.95], l: [-0.35, 2.0, -17.35] },
+        ])(u, camera);
+      },
+    },
+    bowClose: {
+      setup() {
+        const ms = fillHall(0.45);
+        // 主角：第一排靠走道的那位；镜头在他前方斜侧，背后是一排排礼拜的人
+        const i = hallSeats.findIndex((st) => st.z === CUSHION_ROWS[0] && st.x > 0 && st.x < 3.5);
+        const hero = ms[i >= 0 ? i : 0];
+        hero.actionTime = 0.9;
+        heroSeat = hallSeats[i >= 0 ? i : 0];
+        env.follow(heroSeat.x, heroSeat.z);
+      },
+      update(_t, u) {
+        camera.fov = 50;
+        const s = heroSeat!;
+        camPath([
+          { p: [s.x - 1.9, s.y + 1.3, s.z - 2.9], l: [s.x + 0.15, s.y + 0.55, s.z + 0.3] },
+          { p: [s.x - 1.6, s.y + 1.1, s.z - 2.6], l: [s.x + 0.15, s.y + 0.5, s.z + 0.3] },
         ])(u, camera);
       },
     },
@@ -422,14 +506,7 @@ async function main() {
     },
     moktak: {
       setup() {
-        const seats = CUSHIONS.filter((_, i) => (i * 7) % 10 < 6);
-        const ms = cast(seats.length);
-        ms.forEach((m, i) => {
-          const s = seats[i];
-          place(m, s.x, s.z, s.yaw, s.y);
-          m.setAction('bow');
-          m.actionTime = ((i * 0.37 + 0.4) % 1) * BOW_DURATION;
-        });
+        fillHall(0.4);
         mk = 0;
         env.follow(0, -12);
       },

@@ -1,0 +1,25 @@
+# 山寺 santemple：Node 服务（静态文件 + WebSocket 联机 + /promo/ 宣传片），只听本机 4318，由 nginx 转发
+[Unit]
+Description=santemple 山寺 (online temple)
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/santemple
+ExecStart=/usr/bin/node server/server.mjs
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=4318
+Environment=PROMO_DIR=/opt/santemple/promo
+# 服务不写任何文件：用临时用户、只读系统目录
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+MemoryHigh=200M
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

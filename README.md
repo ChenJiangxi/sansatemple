@@ -70,9 +70,18 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 
 署名也写在游戏「设置」面板底部。换模型时用 `node tools/prep-statue.mjs 输入.glb 输出.glb 目标三角形数` 处理。
 
+## 部署（jessylab 服务器）
+
+线上地址：https://santemple.jessylab.cc （宣传片在 `/promo/`）。服务器 `root@8.216.48.63`，程序在 `/opt/santemple`，systemd 服务 `santemple`（只监听 127.0.0.1:4318），nginx 站点 `santemple.jessylab.cc` 负责 HTTPS 和 `/ws` 的 WebSocket 转发，证书由 certbot 自动续期。配置文件在 `deploy/`。
+
+```bash
+./deploy/deploy.sh                                              # 构建并同步代码，重启服务
+./deploy/deploy.sh /Users/macmini003/chatcut-dev/projects/sansa-promo   # 连宣传片和封面一起同步
+```
+
 ## 宣传片
 
-`tools/promo/` 用游戏本身的场景逐帧录一支竖屏宣传片（1080×1920，30 帧/秒，约 43 秒）：分镜、诗句字幕和配乐时间轴都写在 `timeline.mjs` 里。配乐全部用代码合成（`audio.mjs`：拨弦、梵钟、木鱼、磬、风声），不调用任何视频或音乐生成模型。
+`tools/promo/` 用游戏本身的场景逐帧录一支竖屏宣传片（1080×1920，30 帧/秒，约 55 秒）：分镜、诗句字幕和配乐时间轴都写在 `timeline.mjs` 里。配乐全部用代码合成（`audio.mjs`：拨弦、梵钟、木鱼、磬、风声），不调用任何视频或音乐生成模型。
 
 ```bash
 mkdir -p /tmp/sansa-promo/fonts   # 字体：Google Fonts 的 Zhi Mang Xing、Ma Shan Zheng（OFL）

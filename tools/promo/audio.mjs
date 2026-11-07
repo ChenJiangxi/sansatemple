@@ -1,8 +1,9 @@
 // 宣传片配乐：全部用代码合成（不调用任何音乐生成模型）
-// 古琴似的拨弦用 Karplus-Strong 算法，配梵钟、木鱼、磬、风声、鸟鸣、低声齐诵；时间轴与画面共用 timeline.mjs
+// 72 拍/分、16 小节的完整编曲：古筝分解和弦（Karplus-Strong 拨弦）、笛子旋律、弦乐铺底、古琴低音、
+// 堂鼓与木鱼的节奏、殿内低声齐诵和碰铃，加上梵钟、木鱼、磬、风声、鸟鸣；时间轴与画面共用 timeline.mjs
 // 用法：node tools/promo/audio.mjs 输出.wav
 import fs from 'node:fs';
-import { SHOTS, EVENTS, TOTAL, PROMPT_LINES } from './timeline.mjs';
+import { SHOTS, EVENTS, TOTAL, PROMPT_LINES, BEAT, BAR, DOWNBEAT } from './timeline.mjs';
 
 const SR = 48000;
 const LEN = Math.ceil((TOTAL + 0.2) * SR);
@@ -101,16 +102,19 @@ function partials(f, list, dur, beat) {
       const fr = f * ratio + d, ph = rnd() * 6.28;
       for (let i = 0; i < n; i++) {
         const t = i / SR;
-        out[i] += 0.5 * amp * Math.exp(-t / decay) * Math.min(1, t / 0.003) * Math.sin(2 * Math.PI * fr * t + ph);
+        out[i] += 0.5 * amp * Math.exp(-t / decay) * Math.min(1, t / 0.003, (dur - t) / 1.5) * Math.sin(2 * Math.PI * fr * t + ph);
       }
     }
   }
   return out;
 }
 function templeBell() {
-  const out = partials(108, [[0.5, 0.15, 7], [1, 0.85, 5.5], [1.19, 0.55, 5.5], [1.5, 0.35, 4.5], [2, 0.42, 3.6], [2.52, 0.22, 2.6], [2.66, 0.18, 2.4], [3.01, 0.12, 2], [4.17, 0.07, 1.3], [5.43, 0.05, 0.9]], 11, 0.35);
+  const out = partials(108, [[0.5, 0.05, 4], [1, 0.75, 3.0], [1.19, 0.55, 3.0], [1.5, 0.35, 3.2], [2, 0.42, 2.8], [2.52, 0.22, 2.2], [2.66, 0.18, 2], [3.01, 0.12, 1.7], [4.17, 0.07, 1.1], [5.43, 0.05, 0.8]], 7, 0.35);
   const bpf = biquad('bp', 420, 1.2);
   for (let i = 0; i < SR * 0.06; i++) out[i] += bpf((rnd() * 2 - 1) * (1 - i / (SR * 0.06))) * 1.2; // 撞木碰钟的木声
+  // 去掉最低的轰鸣，免得盖住后面的音乐
+  const hp1 = biquad('hp', 95, 0.7), hp2 = biquad('hp', 95, 0.7);
+  for (let i = 0; i < out.length; i++) out[i] = hp2(hp1(out[i]));
   return out;
 }
 function qing() {
@@ -149,7 +153,7 @@ function bird() {
 // 低声齐诵的「嗡」：几个人声锯齿波经过元音共振峰
 function chant(dur) {
   const n = Math.round(dur * SR), out = new Float32Array(n);
-  const voices = [98, 98.6, 97.3, 146.8, 147.5].map((f) => ({ f, ph: rnd() * 6.28 }));
+  const voices = [146.8, 147.4, 146.1, 110, 110.5].map((f) => ({ f, ph: rnd() * 6.28 }));
   const forms = [biquad('bp', 460, 6), biquad('bp', 820, 7), biquad('bp', 2700, 8)];
   for (let i = 0; i < n; i++) {
     const t = i / SR;
@@ -165,84 +169,182 @@ function chant(dur) {
   return out;
 }
 
+// —— 新加的乐器 ——
+// 古筝：比古琴亮、短
+const zheng = (f, gain, time, pan = 0) => add(qin(f, 2.6, { bright: 0.62, t60: 2.2, lp: 5200, vib: 0.002 }), time, gain, pan, 0.32);
+// 笛子：正弦为主加少量泛音、气声和揉音，音头从上一个音滑过来
+function dizi(f, dur, fromF = 0) {
+  const n = Math.round((dur + 0.15) * SR), out = new Float32Array(n);
+  const breath = biquad('bp', f * 2, 2.5);
+  let ph = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    let fr = fromF && t < 0.07 ? fromF + (f - fromF) * (t / 0.07) : f;
+    if (t > 0.25) fr *= 1 + 0.006 * Math.sin(2 * Math.PI * 5.4 * t) * Math.min(1, (t - 0.25) / 0.4);
+    ph += (2 * Math.PI * fr) / SR;
+    const env = Math.min(1, t / 0.05) * (0.85 + 0.15 * Math.exp(-t / 0.4)) * Math.min(1, Math.max(0, (dur + 0.15 - t) / 0.15));
+    const tone = Math.sin(ph) + 0.32 * Math.sin(2 * ph + 0.3) + 0.11 * Math.sin(3 * ph) + 0.04 * Math.sin(4 * ph);
+    const air = breath(rnd() * 2 - 1) * (0.25 + (t < 0.04 ? 1.2 : 0));
+    out[i] = env * (tone * 0.8 + air * 0.35);
+  }
+  return out;
+}
+// 弦乐铺底：几根略微走音的锯齿波，低通后慢起慢收
+function pad(freqs, dur) {
+  const n = Math.round(dur * SR), out = new Float32Array(n);
+  const oscs = freqs.flatMap((f) => [0.996, 1, 1.004].map((d) => ({ f: f * d, ph: rnd() })));
+  const lp1 = biquad('lp', 1100, 0.7), lp2 = biquad('lp', 1400, 0.6);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    let v = 0;
+    for (const o of oscs) {
+      o.ph += o.f / SR;
+      if (o.ph >= 1) o.ph -= 1;
+      v += o.ph * 2 - 1;
+    }
+    const env = Math.min(1, t / 0.9) * Math.min(1, Math.max(0, (dur - t) / 1.1));
+    out[i] = lp2(lp1(v / oscs.length)) * env;
+  }
+  return out;
+}
+function drum() {
+  const n = Math.round(0.6 * SR), out = new Float32Array(n);
+  const lp = biquad('lp', 900, 0.7);
+  let ph = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    ph += (2 * Math.PI * (82 + 70 * Math.exp(-t / 0.05))) / SR;
+    out[i] = Math.sin(ph) * Math.exp(-t / 0.28) + (t < 0.012 ? lp(rnd() * 2 - 1) * 0.6 : 0);
+  }
+  return out;
+}
+function woodblock() {
+  const n = Math.round(0.2 * SR), out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    out[i] = Math.exp(-t / 0.04) * Math.sin(2 * Math.PI * 880 * t) + 0.5 * Math.exp(-t / 0.025) * Math.sin(2 * Math.PI * 1840 * t);
+  }
+  return out;
+}
+const pengling = () => partials(2620, [[1, 1, 1.3], [2.42, 0.4, 0.6], [4.1, 0.15, 0.3]], 2, 2.5);
+
 // —— 编排 ——
-const N = { D2: 73.42, A2: 110, B2: 123.47, D3: 146.83, E3: 164.81, Fs3: 185, A3: 220, B3: 246.94, D4: 293.66, E4: 329.63, Fs4: 369.99, A4: 440, B4: 493.88, D5: 587.33 };
+const N = {
+  E2: 82.41, G2: 98, A2: 110, B2: 123.47, D2: 73.42, D3: 146.83, E3: 164.81, Fs3: 185, G3: 196, A3: 220, B3: 246.94,
+  D4: 293.66, E4: 329.63, Fs4: 369.99, G4: 392, A4: 440, B4: 493.88, D5: 587.33, E5: 659.26, Fs5: 739.99, A5: 880,
+};
 const play = (time, note, gain = 0.5, o = {}, pan = 0) => add(qin(N[note], o.dur ?? 5, o), time, gain, pan, 0.35);
+const barT = (k) => DOWNBEAT + k * BAR;
+const CH = {
+  D: { pad: ['D3', 'A3', 'E4', 'Fs4'], arp: ['D3', 'A3', 'D4', 'E4', 'Fs4', 'E4', 'D4', 'A3'], bass: 'D2' },
+  Bm: { pad: ['B2', 'Fs3', 'A3', 'D4'], arp: ['B2', 'Fs3', 'B3', 'D4', 'E4', 'D4', 'B3', 'Fs3'], bass: 'B2' },
+  G: { pad: ['G2', 'D3', 'B3', 'E4'], arp: ['G2', 'D3', 'G3', 'B3', 'D4', 'B3', 'G3', 'D3'], bass: 'G2' },
+  A: { pad: ['A2', 'E3', 'A3', 'D4'], arp: ['A2', 'E3', 'A3', 'B3', 'E4', 'B3', 'A3', 'E3'], bass: 'A2' },
+};
+const CHORDS = ['D', 'Bm', 'G', 'A', 'D', 'Bm', 'G', 'A', 'D', 'Bm', 'G', 'A', 'D', 'G', 'A', 'D'];
+// 笛子旋律：[小节, 第几拍, 音, 拍数]
+const MELODY = [
+  [1, 0, 'A4', 2], [1, 2, 'B4', 1], [1, 3, 'A4', 1],
+  [2, 0, 'Fs4', 2], [2, 2, 'E4', 1], [2, 3, 'D4', 1],
+  [3, 0, 'E4', 1.5], [3, 1.5, 'Fs4', 0.5], [3, 2, 'A4', 1], [3, 3, 'B4', 1],
+  [4, 0, 'A4', 3], [4, 3, 'Fs4', 1],
+  [5, 0, 'D5', 2], [5, 2, 'B4', 1], [5, 3, 'A4', 1],
+  [6, 0, 'B4', 1.5], [6, 1.5, 'D5', 0.5], [6, 2, 'E5', 2],
+  [7, 0, 'D5', 1], [7, 1, 'B4', 1], [7, 2, 'A4', 1], [7, 3, 'Fs4', 1],
+  [8, 0, 'E4', 2], [8, 2, 'Fs4', 1], [8, 3, 'A4', 1],
+  [9, 0, 'Fs5', 2], [9, 2, 'E5', 1], [9, 3, 'D5', 1],
+  [10, 0, 'B4', 2], [10, 2, 'D5', 2],
+  [11, 0, 'A4', 3], [11, 3, 'B4', 0.5], [11, 3.5, 'A4', 0.5],
+  [14, 0, 'E4', 2], [14, 2, 'Fs4', 1], [14, 3, 'A4', 1],
+  [15, 0, 'D4', 4.6],
+];
+{
+  let prevF = 0, prevEnd = -9;
+  for (const [bar, beat, note, len] of MELODY) {
+    const t0 = barT(bar) + beat * BEAT, f = N[note];
+    const legato = Math.abs(t0 - prevEnd) < 0.05;
+    add(dizi(f, len * BEAT - 0.04, legato ? prevF : 0), t0, 0.2, 0.08, 0.45);
+    prevF = f;
+    prevEnd = t0 + len * BEAT;
+  }
+}
+// 和声、低音、古筝
+CHORDS.forEach((name, k) => {
+  const c = CH[name], t0 = barT(k);
+  if (k !== 13 || true) add(pad(c.pad.map((n) => N[n]), BAR + 1.2), t0 - 0.15, k === 0 ? 0.05 : 0.075, 0, 0.4);
+  if (k >= 1 && k !== 12) play(t0, c.bass, 0.24, { t60: 4, dur: 4.5, lp: 1300 }, 0);
+  const density = k === 12 ? 0 : k >= 9 && k <= 11 ? 2 : k === 13 ? 2 : 1; // 1 = 八分音符，2 = 四分音符
+  if (!density) return;
+  const g = k === 0 ? 0.08 : k === 13 ? 0.09 : 0.14;
+  c.arp.forEach((n, i) => {
+    if (i % density) return;
+    if (k === 15 && i > 3) return;
+    zheng(N[n], i === 0 ? g * 1.3 : g, t0 + i * (BEAT / 2), ((i % 4) - 1.5) * 0.25);
+  });
+});
+// 古筝刮奏：进入新段落前一串上行
+for (const k of [5, 9, 14]) {
+  const run = ['D4', 'E4', 'Fs4', 'A4', 'B4', 'D5', 'E5', 'Fs5', 'A5'];
+  run.forEach((n, i) => zheng(N[n], 0.08 + i * 0.006, barT(k) - 0.42 + i * 0.05, -0.4 + i * 0.1));
+}
+// 节奏：堂鼓 + 木鱼（上香到大殿），殿内转为木鱼每拍轻敲
+for (let k = 5; k <= 11; k++) {
+  for (let b = 0; b < 4; b++) {
+    const t0 = barT(k) + b * BEAT;
+    if (k <= 8) {
+      if (b === 0) add(drum(), t0, 0.22, 0, 0.2);
+      if (b === 2) add(drum(), t0, 0.13, 0, 0.2);
+      if (b === 1 || b === 3) add(woodblock(), t0, 0.07, 0.3, 0.2);
+    } else {
+      if (b === 0) add(drum(), t0, 0.14, 0, 0.25);
+      add(woodblock(), t0, 0.05, 0.3, 0.25);
+      if (b === 0) add(pengling(), t0, 0.06, -0.3, 0.5);
+    }
+  }
+}
 
 // 片头
-play(0.12, 'D3', 0.55, { t60: 6, dur: 6 }, -0.1);
-play(0.14, 'A2', 0.3, { t60: 6, dur: 6 }, 0.1);
+play(0.12, 'D3', 0.45, { t60: 6, dur: 6 }, -0.1);
+play(0.14, 'A2', 0.25, { t60: 6, dur: 6 }, 0.1);
+add(pad(CH.D.pad.map((n) => N[n]), 2.2), 0, 0.04, 0, 0.4);
 {
   const chars = [...PROMPT_LINES.join('')];
   chars.forEach((_, i) => add(tick(), EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
 }
-add(harm(N.A4 * 2), EVENTS.titleReveal, 0.18, 0.2, 0.5);
-play(EVENTS.titleReveal, 'D4', 0.42, { t60: 5 }, -0.1);
-add(qing(), EVENTS.titleSeal, 0.3, 0.25, 0.45);
+add(harm(N.A5), EVENTS.titleReveal, 0.14, 0.2, 0.5);
+add(qing(), EVENTS.titleSeal, 0.26, 0.25, 0.45);
 
-// 山门、银杏林（清晨）
-const g = at('gate');
-const phrase1 = [[0.2, 'A3'], [0.95, 'D4'], [1.7, 'E4', { slideTo: N.Fs4, slideAt: 0.32 }], [2.8, 'A4'], [3.55, 'Fs4'], [4.3, 'E4'], [5.05, 'D4', { t60: 6, dur: 6 }]];
-for (const [dt, note, o] of phrase1) play(g + dt, note, 0.48, o ?? {}, (rnd() - 0.5) * 0.4);
-play(g + 0.2, 'D2', 0.32, { t60: 7, dur: 7, lp: 1400 });
-play(g + 3.2, 'A2', 0.26, { t60: 6, dur: 6, lp: 1400 });
+// 银杏林里的鸟
 const gr = at('grove');
-[[0.8, 'D5'], [1.55, 'A4'], [2.3, 'B4'], [3.05, 'Fs4']].forEach(([dt, note], i) => add(harm(N[note]), gr + dt, 0.2, i % 2 ? 0.3 : -0.3, 0.55));
-for (const dt of [0.4, 1.6, 2.9, 3.7]) add(bird(), gr + dt, 0.035, rnd() - 0.5, 0.4);
-
-// 石桥、院子（白天）
-const b = at('bridge');
-[[0.1, 'D4'], [0.85, 'E4'], [1.6, 'Fs4'], [2.35, 'A4', { slideTo: N.B4, slideAt: 0.3 }], [3.45, 'A4'], [4.2, 'Fs4']].forEach(([dt, note, o]) => play(b + dt, note, 0.46, o ?? {}, (rnd() - 0.5) * 0.4));
-play(b + 0.1, 'D2', 0.3, { t60: 7, dur: 7, lp: 1400 });
-const c = at('court');
-[[0.3, 'E4'], [1.05, 'D4'], [1.8, 'B3'], [2.55, 'A3', { t60: 6, dur: 6 }], [3.7, 'D4']].forEach(([dt, note, o]) => play(c + dt, note, 0.46, o ?? {}, (rnd() - 0.5) * 0.4));
-play(c + 0.3, 'B2', 0.26, { t60: 6, dur: 6, lp: 1400 });
-play(c + 2.55, 'D2', 0.3, { t60: 7, dur: 7, lp: 1400 });
-
-// 上香
-const inc = at('incense');
-add(harm(N.A4), inc + 0.8, 0.2, -0.2, 0.6);
-add(harm(N.D5), inc + 1.9, 0.18, 0.2, 0.6);
-play(inc + 2.9, 'D4', 0.34, { t60: 6, dur: 6 });
-
-// 大殿：万籁俱寂，只剩低低的齐诵
-const h = at('hall');
-play(h + 0.1, 'D2', 0.32, { t60: 8, dur: 8, lp: 1200 });
-add(chant(6.2), h + 0.2, 1.0, 0, 0.5);
-
+for (const dt of [0.4, 1.5, 2.6]) add(bird(), gr + dt, 0.03, rnd() - 0.5, 0.4);
+// 殿内低声齐诵：从进殿起，到撞钟前收住
+const h = at('hallEnter');
+add(chant(at('bell') - h + 0.6), h, 1.1, 0, 0.5);
 // 钟、木鱼
-add(templeBell(), at('bell') + EVENTS.bellHit, 0.3, -0.1, 0.5);
-for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakDelay, 0.42, 0.1, 0.25);
-
-// 夜
-const nt = at('night');
-[[0.3, 'A3'], [1.05, 'D4'], [1.8, 'Fs4'], [2.55, 'E4', { slideTo: N.D4, slideAt: 0.4, slideTime: 0.4 }]].forEach(([dt, note, o]) => play(nt + dt, note, 0.42, o ?? {}, (rnd() - 0.5) * 0.4));
-play(nt + 0.3, 'D2', 0.28, { t60: 7, dur: 7, lp: 1300 });
+add(templeBell(), at('bell') + EVENTS.bellHit, 0.2, -0.1, 0.25);
+for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakDelay, 0.34, 0.1, 0.25);
+// 夜里的虫鸣
 {
-  // 虫鸣
-  const n = Math.round(4.2 * SR), cr = new Float32Array(n);
+  const nt = at('night');
+  const n = Math.round(4.0 * SR), cr = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SR;
     const pulse = Math.max(0, Math.sin(2 * Math.PI * 28 * t)) * (Math.sin(2 * Math.PI * 0.9 * t) > 0.2 ? 1 : 0);
-    cr[i] = Math.sin(2 * Math.PI * 4400 * t) * pulse * Math.min(1, t / 0.5) * Math.min(1, (4.2 - t) / 0.5);
+    cr[i] = Math.sin(2 * Math.PI * 4400 * t) * pulse * Math.min(1, t / 0.5) * Math.min(1, (4.0 - t) / 0.5);
   }
-  add(cr, nt, 0.012, 0.5, 0.3);
+  add(cr, nt, 0.01, 0.5, 0.3);
 }
+// 片尾：收束和弦、磬、泛音
+['D3', 'A3', 'D4', 'Fs4'].forEach((note, i) => play(barT(15) + i * 0.1, note, 0.3, { t60: 6, dur: 4 }, -0.3 + i * 0.2));
+add(qing(), at('end') + EVENTS.endSeal, 0.24, 0.2, 0.45);
+add(harm(N.D5 * 2), at('end') + 2.6, 0.1, -0.2, 0.6);
 
-// 片尾
-const e = at('end');
-['D3', 'A3', 'D4', 'Fs4'].forEach((note, i) => play(e + 0.2 + i * 0.12, note, 0.38, { t60: 6, dur: 4.4 }, -0.3 + i * 0.2));
-add(qing(), e + EVENTS.endSeal, 0.3, 0.2, 0.45);
-add(harm(N.D5), e + 2.4, 0.16, -0.2, 0.6);
-
-// 风声底：贯穿全片，大殿里压低
+// 风声底：贯穿全片，很轻
 {
-  // 山风：带通噪声缓缓起伏，不要低频轰鸣
   const bl = biquad('bp', 650, 0.6), br2 = biquad('bp', 820, 0.6), hl = biquad('hp', 180, 0.7), hr = biquad('hp', 180, 0.7);
   for (let i = 0; i < LEN; i++) {
     const t = i / SR;
-    const inside = t > h && t < at('night') ? 0.3 : 1;
-    const amp = (0.55 + 0.45 * Math.sin(t * 0.41) * Math.sin(t * 0.17 + 1)) * inside * 0.022;
+    const amp = (0.55 + 0.45 * Math.sin(t * 0.41) * Math.sin(t * 0.17 + 1)) * 0.012;
     L[i] += hl(bl(rnd() * 2 - 1)) * amp;
     R[i] += hr(br2(rnd() * 2 - 1)) * amp;
   }
