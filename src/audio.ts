@@ -308,12 +308,12 @@ export class AudioEngine {
   }
 
   // 梵钟：低沉悠长，带“嗡——嗡——”的拍频
-  templeBell() {
+  templeBell(gain = 1) {
     if (!this.enabled || !this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
     const out = ctx.createGain();
-    out.gain.value = 0.32;
+    out.gain.value = 0.32 * gain;
     out.connect(this.buses.ambient);
     const send = ctx.createGain();
     send.gain.value = 0.9;

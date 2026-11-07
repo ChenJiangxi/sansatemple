@@ -1,6 +1,7 @@
 // 院中陈设：莲花灯、石灯、石塔、香炉与香烟、长椅、围墙、山门
 import * as THREE from 'three';
-import { HALL, COURT, INCENSE, PAGODA, STONE_LANTERNS, BENCHES, BENCH_SEATS } from '../layout';
+import { HALL, COURT, INCENSE, PAGODAS, STONE_LANTERNS, BENCHES, BENCH_SEATS } from '../layout';
+import { IncenseSpot, type IncenseView } from './incense';
 import { stoneTexture, woodTexture, roofTexture, lanternTexture, rng } from '../textures';
 import { mesh, worldBox, lathe } from './util';
 import { buildRoof } from './hall';
@@ -10,7 +11,7 @@ const LANTERN_COLORS = ['#f4a3b5', '#f7c1a0', '#fbe3b0', '#f6f0e6', '#f29aa8', '
 export interface PropsBuild {
   interactives: THREE.Object3D[];
   setLanternLevel(level: number): void;
-  setIncense(list: { id: string; mine: boolean; remain: number }[]): void;
+  setIncense(list: IncenseView[]): void;
   update(dt: number, t: number): void;
 }
 
@@ -37,9 +38,9 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   // —— 莲花灯：沿参道两侧的灯绳 + 屋檐下一排 + 殿内几盏 ——
   const lanternPos: THREE.Vector3[] = [];
   const wireMat = new THREE.LineBasicMaterial({ color: '#3a2e26' });
-  const poleZ = [6.5, 12.5, 18.5, 24.5];
+  const poleZ = [11, 17.5, 24, 30.5, 37, 43.5, 50, 56.5, 63];
   for (const sx of [-1, 1]) {
-    const x = sx * 2.45;
+    const x = sx * 2.75;
     for (const z of poleZ) {
       const pole = mesh(new THREE.CylinderGeometry(0.05, 0.06, 3.9, 8), darkWood);
       pole.position.set(x, 1.95, z);
@@ -61,9 +62,9 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     }
   }
   // 屋檐下
-  for (let x = -9.6; x <= 9.6; x += 0.8) lanternPos.push(new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.65 + Math.sin(x) * 0.05, HALL.colZFront + 0.55));
+  for (let x = -HALL.wallX - 0.6; x <= HALL.wallX + 0.61; x += 0.9) lanternPos.push(new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.7 + Math.sin(x) * 0.05, HALL.colZFront + 0.7));
   // 殿内
-  for (const x of [-6.6, -3.3, 3.3, 6.6]) for (const z of [-6, -9.5]) lanternPos.push(new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.2, z));
+  for (const x of [-11, -7, -3.5, 3.5, 7, 11]) for (const z of [-6.5, -10.5, -14]) lanternPos.push(new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.1, z));
 
   const lanternMat = makeLanternMaterial();
   const lanternGeo = new THREE.SphereGeometry(0.15, 14, 10);
@@ -87,8 +88,8 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   group.add(new THREE.LineSegments(stringGeo, wireMat));
 
   const pathLights = [new THREE.PointLight('#ffb07a', 0, 12, 1.5), new THREE.PointLight('#ffb07a', 0, 12, 1.5)];
-  pathLights[0].position.set(0, 3.2, 10);
-  pathLights[1].position.set(0, 3.2, 21);
+  pathLights[0].position.set(0, 3.4, 16);
+  pathLights[1].position.set(0, 3.4, 40);
   group.add(...pathLights);
 
   // —— 石灯 ——
@@ -112,10 +113,10 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     group.add(g);
   }
 
-  // —— 三层石塔 ——
-  {
+  // —— 双塔（三层石塔）——
+  const pm = new THREE.MeshStandardMaterial({ map: stoneTexture(71, '#9d988b'), roughness: 0.95 });
+  for (const P of PAGODAS) {
     const g = new THREE.Group();
-    const pm = new THREE.MeshStandardMaterial({ map: stoneTexture(71, '#9d988b'), roughness: 0.95 });
     let y = 0;
     const tier = (w: number, h: number) => {
       const b = mesh(worldBox(w, h, w, 1.5), pm);
@@ -128,22 +129,20 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     tier(1.8, 0.12);
     const bodyW = [1.0, 0.82, 0.68];
     const bodyH = [0.9, 0.5, 0.42];
-    for (let s = 0; s < 3; s++) {
-      tier(bodyW[s], bodyH[s]);
-      // 屋檐石：四角微翘
-      const roofW = bodyW[s] + 0.95;
+    for (let k = 0; k < 3; k++) {
+      tier(bodyW[k], bodyH[k]);
+      const roofW = bodyW[k] + 0.95;
       const geo = new THREE.BoxGeometry(roofW, 0.16, roofW, 4, 1, 4);
-      const p = geo.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < p.count; i++) {
-        const ax = Math.abs(p.getX(i)) / (roofW / 2), az = Math.abs(p.getZ(i)) / (roofW / 2);
-        if (p.getY(i) > 0) p.setY(i, p.getY(i) - (1 - Math.max(ax, az)) * 0.0);
-        p.setY(i, p.getY(i) + Math.pow(ax * az, 3) * 0.12);
+      const pos = geo.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < pos.count; i++) {
+        const ax = Math.abs(pos.getX(i)) / (roofW / 2), az = Math.abs(pos.getZ(i)) / (roofW / 2);
+        pos.setY(i, pos.getY(i) + Math.pow(ax * az, 3) * 0.12);
       }
       geo.computeVertexNormals();
       const rm = mesh(geo, pm);
       rm.position.y = y + 0.08;
       g.add(rm);
-      const steps = mesh(new THREE.BoxGeometry(bodyW[s] + 0.4, 0.1, bodyW[s] + 0.4), pm);
+      const steps = mesh(new THREE.BoxGeometry(bodyW[k] + 0.4, 0.1, bodyW[k] + 0.4), pm);
       steps.position.y = y - 0.02;
       g.add(steps);
       y += 0.16;
@@ -151,7 +150,8 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     const fin = mesh(lathe([[0.12, 0], [0.14, 0.1], [0.06, 0.2], [0.12, 0.32], [0.05, 0.45], [0.09, 0.55], [0.03, 0.75], [0, 0.8]], 12), pm);
     fin.position.y = y;
     g.add(fin);
-    g.position.set(PAGODA.x, 0, PAGODA.z);
+    g.scale.setScalar(P.s);
+    g.position.set(P.x, 0, P.z);
     group.add(g);
   }
 
@@ -179,7 +179,8 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const pedestal = mesh(worldBox(1.6, 0.18, 1.6, 1.5), stoneMat);
   pedestal.position.y = -0.09;
   burner.add(pedestal);
-  burner.position.set(INCENSE.x, 0.18, INCENSE.z);
+  burner.scale.setScalar(1.35);
+  burner.position.set(INCENSE.x, 0.24, INCENSE.z);
   burner.traverse((o) => {
     o.userData.interact = { type: 'incense' };
   });
@@ -187,48 +188,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   interactives.push(burner);
 
   // 香和烟
-  const MAX_STICKS = 24;
-  const stickGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 5);
-  stickGeo.translate(0, 0.5, 0);
-  const stickMat = new THREE.MeshStandardMaterial({ color: '#9a4a2a', roughness: 0.8 });
-  const myStickMat = new THREE.MeshStandardMaterial({ color: '#b8742f', roughness: 0.8 });
-  const emberMat = new THREE.MeshBasicMaterial({ color: '#ff7a3a' });
-  const sticks: { stick: THREE.Mesh; ember: THREE.Mesh; id: string }[] = [];
-  for (let i = 0; i < MAX_STICKS; i++) {
-    const a = i * 2.399;
-    const d = 0.12 + Math.sqrt(i / MAX_STICKS) * 0.5;
-    const stick = new THREE.Mesh(stickGeo, stickMat);
-    stick.position.set(INCENSE.x + Math.cos(a) * d, 1.2, INCENSE.z + Math.sin(a) * d);
-    stick.rotation.set((Math.random() - 0.5) * 0.12, 0, (Math.random() - 0.5) * 0.12);
-    const ember = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), emberMat);
-    stick.visible = ember.visible = false;
-    group.add(stick, ember);
-    sticks.push({ stick, ember, id: '' });
-  }
-
-  const smokeN = 260;
-  const smokeGeo = new THREE.BufferGeometry();
-  const sp = new Float32Array(smokeN * 3);
-  const sa = new Float32Array(smokeN);
-  const ss = new Float32Array(smokeN);
-  smokeGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-  smokeGeo.setAttribute('alpha', new THREE.BufferAttribute(sa, 1));
-  smokeGeo.setAttribute('size', new THREE.BufferAttribute(ss, 1));
-  const smokeMat = new THREE.ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    uniforms: { color: { value: new THREE.Color('#e9e6df') }, scale: { value: 400 } },
-    vertexShader: `attribute float alpha; attribute float size; varying float vA; uniform float scale;
-      void main(){ vA = alpha; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = size * scale / -mv.z; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform vec3 color; varying float vA;
-      void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); if (d > 0.5) discard; float a = smoothstep(0.5, 0.0, d) * vA; gl_FragColor = vec4(color, a); #include <colorspace_fragment> }`,
-  });
-  const smoke = new THREE.Points(smokeGeo, smokeMat);
-  smoke.frustumCulled = false;
-  group.add(smoke);
-  const parts = Array.from({ length: smokeN }, () => ({ x: 0, y: -100, z: 0, age: 99, life: 1, src: 0, seed: Math.random() * 10 }));
-  let activeSticks: number[] = [];
-  let spawnAcc = 0;
+  const yardIncense = new IncenseSpot(group, INCENSE.x, 0.24 + 1.02 * 1.35, INCENSE.z, 0.72 * 1.35, 24, 0.5);
 
   // —— 长椅 ——
   for (const b of BENCHES) {
@@ -324,68 +284,11 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       for (const l of pathLights) l.intensity = Math.max(0, level - 0.8) * 6;
     },
     setIncense(list) {
-      activeSticks = [];
-      sticks.forEach((s, i) => {
-        const item = list[i];
-        if (!item) {
-          s.stick.visible = s.ember.visible = false;
-          s.id = '';
-          return;
-        }
-        s.id = item.id;
-        const len = 0.12 + 0.36 * Math.max(0, Math.min(1, item.remain));
-        s.stick.scale.set(1, len, 1);
-        s.stick.material = item.mine ? myStickMat : stickMat;
-        s.stick.visible = s.ember.visible = true;
-        s.stick.updateMatrix();
-        const tip = new THREE.Vector3(0, 1, 0).applyMatrix4(s.stick.matrix);
-        s.ember.position.copy(tip);
-        activeSticks.push(i);
-      });
+      yardIncense.set(list);
     },
     update(dt, t) {
       void lanternLevel;
-      // 烟：每根点着的香持续冒出细烟
-      if (activeSticks.length) {
-        spawnAcc += dt * (10 + activeSticks.length * 6);
-        while (spawnAcc > 1) {
-          spawnAcc -= 1;
-          const p = parts.find((q) => q.age >= q.life);
-          if (!p) break;
-          const s = sticks[activeSticks[Math.floor(Math.random() * activeSticks.length)]];
-          p.x = s.ember.position.x;
-          p.y = s.ember.position.y;
-          p.z = s.ember.position.z;
-          p.age = 0;
-          p.life = 4 + Math.random() * 3;
-          p.seed = Math.random() * 10;
-        }
-      }
-      for (let i = 0; i < smokeN; i++) {
-        const p = parts[i];
-        if (p.age < p.life) {
-          p.age += dt;
-          const k = p.age / p.life;
-          p.y += dt * (0.32 + k * 0.12);
-          p.x += Math.sin(t * 0.9 + p.seed + p.age * 1.3) * dt * 0.08 * (0.3 + k) + dt * 0.03;
-          p.z += Math.cos(t * 0.7 + p.seed * 1.7 + p.age) * dt * 0.06 * (0.3 + k);
-          sp[i * 3] = p.x;
-          sp[i * 3 + 1] = p.y;
-          sp[i * 3 + 2] = p.z;
-          sa[i] = Math.sin(Math.min(1, k) * Math.PI) * 0.16 * (1 - k * 0.5);
-          ss[i] = 0.05 + k * 0.5;
-        } else {
-          sa[i] = 0;
-          sp[i * 3 + 1] = -100;
-        }
-      }
-      smokeGeo.attributes.position.needsUpdate = true;
-      smokeGeo.attributes.alpha.needsUpdate = true;
-      smokeGeo.attributes.size.needsUpdate = true;
-      for (const i of activeSticks) {
-        const e = sticks[i].ember;
-        (e.material as THREE.MeshBasicMaterial).color.setHSL(0.05, 1, 0.5 + Math.sin(t * 3 + i) * 0.08);
-      }
+      yardIncense.update(dt, t);
     },
   };
 }

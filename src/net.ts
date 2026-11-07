@@ -18,8 +18,11 @@ export interface RoomInfo {
   capacity: number;
 }
 
+export type IncensePlace = 'yard' | 'altar';
+
 export interface IncenseItem {
   id: string;
+  place?: IncensePlace;
   by: string;
   owner: string;
   until: number;
@@ -33,6 +36,7 @@ type Events = {
   leave: (id: string) => void;
   incense: (list: IncenseItem[], serverNow: number) => void;
   claim: (seat: string, ok: boolean) => void;
+  bell: (from: string) => void;
 };
 
 export class Net {
@@ -132,6 +136,9 @@ export class Net {
         case 'claim':
           this.emit('claim', msg.seat, msg.ok);
           break;
+        case 'bell':
+          this.emit('bell', msg.from);
+          break;
       }
     };
     ws.onclose = () => {
@@ -200,7 +207,11 @@ export class Net {
     this.send({ t: 'release' });
   }
 
-  offerIncense() {
-    this.send({ t: 'incense' });
+  offerIncense(place: IncensePlace) {
+    this.send({ t: 'incense', place });
+  }
+
+  ringBell() {
+    this.send({ t: 'bell' });
   }
 }

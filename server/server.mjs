@@ -15,7 +15,8 @@ const CAPACITY = 50;
 const TICK_MS = 120;
 const INCENSE_MS = 3 * 60 * 1000;
 const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense']);
-const SEAT_RE = /^(c\d{1,2}|b\d-\d)$/;
+const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d)$/;
+const PLACES = new Set(['yard', 'altar']);
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -26,6 +27,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
+  '.glb': 'model/gltf-binary',
 };
 
 /** @type {Map<number, {players: Map<string, any>, incense: any[]}>} */
@@ -113,7 +115,7 @@ function broadcast(room, obj, except) {
 }
 
 function incenseMsg(room) {
-  return { t: 'incense', now: Date.now(), list: room.incense.map((i) => ({ id: i.id, by: i.by, owner: i.owner, until: i.until, start: i.start })) };
+  return { t: 'incense', now: Date.now(), list: room.incense.map((i) => ({ id: i.id, by: i.by, owner: i.owner, until: i.until, start: i.start, place: i.place })) };
 }
 
 wss.on('connection', (ws) => {
@@ -183,11 +185,21 @@ wss.on('connection', (ws) => {
         break;
       case 'incense': {
         const t = Date.now();
-        // 每人同时只能有一炷香
-        if (room.incense.some((i) => i.owner === me.id && i.until > t)) return;
-        room.incense.push({ id: crypto.randomBytes(4).toString('hex'), by: me.name, owner: me.id, start: t, until: t + INCENSE_MS });
-        if (room.incense.length > 24) room.incense.shift();
+        const place = PLACES.has(msg.place) ? msg.place : 'yard';
+        // 每人在每个香炉同时只能有一炷香
+        if (room.incense.some((i) => i.owner === me.id && i.place === place && i.until > t)) return;
+        room.incense.push({ id: crypto.randomBytes(4).toString('hex'), by: me.name, owner: me.id, start: t, until: t + INCENSE_MS, place });
+        const same = room.incense.filter((i) => i.place === place);
+        if (same.length > 24) room.incense.splice(room.incense.indexOf(same[0]), 1);
         broadcast(room, incenseMsg(room));
+        break;
+      }
+      case 'bell': {
+        // 撞钟：转告房间里其他人，每人 15 秒最多一次
+        const t = Date.now();
+        if (t - (me.bellAt || 0) < 15000) return;
+        me.bellAt = t;
+        broadcast(room, { t: 'bell', from: me.id }, ws);
         break;
       }
     }

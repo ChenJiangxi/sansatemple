@@ -1,7 +1,7 @@
 // 天空、光照、昼夜、远山与地面
 import * as THREE from 'three';
 import { groundTexture, pavingTexture, rng } from '../textures';
-import { HALL, COURT, POND } from '../layout';
+import { HALL, COURT, POND, BELL, SIDE_HALLS } from '../layout';
 
 export type TimeMode = 'auto' | 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -64,6 +64,7 @@ export class Environment {
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
   private current!: Preset;
+  private sunDir = new THREE.Vector3(0, 1, 0);
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     this.scene = scene;
@@ -75,7 +76,7 @@ export class Environment {
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera;
-    sc.left = -34; sc.right = 34; sc.top = 34; sc.bottom = -34; sc.near = 1; sc.far = 140;
+    sc.left = -36; sc.right = 36; sc.top = 36; sc.bottom = -36; sc.near = 1; sc.far = 200;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
     this.sun.target.position.set(0, 0, 2);
@@ -117,7 +118,7 @@ export class Environment {
     this.sky.renderOrder = -10;
     scene.add(this.sky);
 
-    scene.fog = new THREE.Fog('#cfd8d3', 30, 230);
+    scene.fog = new THREE.Fog('#cfd8d3', 45, 330);
     this.apply(presetForHour(12));
   }
 
@@ -138,7 +139,8 @@ export class Environment {
   private apply(p: Preset) {
     this.current = p;
     const dir = new THREE.Vector3(Math.cos(p.azim) * Math.cos(p.elev), Math.sin(p.elev), Math.sin(p.azim) * Math.cos(p.elev));
-    this.sun.position.copy(dir.clone().multiplyScalar(70)).add(this.sun.target.position);
+    this.sunDir.copy(dir);
+    this.sun.position.copy(dir.clone().multiplyScalar(90)).add(this.sun.target.position);
     this.sun.color.copy(p.sun);
     this.sun.intensity = p.sunI;
     this.hemi.color.copy(p.hemiSky);
@@ -155,6 +157,15 @@ export class Environment {
     this.scene.environmentIntensity = p.envI;
   }
 
+  // 阴影范围跟着玩家走（按阴影贴图的像素对齐，避免移动时阴影闪烁）
+  follow(x: number, z: number) {
+    const step = 72 / this.sun.shadow.mapSize.x;
+    const sx = Math.round(x / step) * step;
+    const sz = Math.round(z / step) * step;
+    this.sun.target.position.set(sx, 0, sz);
+    this.sun.position.copy(this.sunDir).multiplyScalar(90).add(this.sun.target.position);
+  }
+
   get isDark() {
     return this.current.lantern > 1;
   }
@@ -168,7 +179,8 @@ export function buildTerrain(scene: THREE.Scene) {
   const gtex = groundTexture();
   const groundMat = new THREE.MeshStandardMaterial({ map: gtex, roughness: 0.97 });
   // 地面挖出莲池的洞（Shape 的 y 对应世界的 -z）
-  const gx0 = COURT.x0 - 4, gx1 = COURT.x1 + 4, gz0 = COURT.z0 - 4, gz1 = COURT.z1 + 4;
+  const GM = 2.5;
+  const gx0 = COURT.x0 - GM, gx1 = COURT.x1 + GM, gz0 = COURT.z0 - GM, gz1 = COURT.z1 + GM;
   const shape = new THREE.Shape();
   shape.moveTo(gx0, -gz0);
   shape.lineTo(gx1, -gz0);
@@ -205,26 +217,29 @@ export function buildTerrain(scene: THREE.Scene) {
     mesh.name = 'walkable';
     group.add(mesh);
   };
-  addPath(0, COURT.z1 + 2, 0, HALL.stepZ1 - 0.1, 3.4);
-  addPath(1.5, 12.5, POND.x - POND.rx - 0.4, POND.z + 2.5, 2.2);
-  addPath(-1.5, 3, -11, 0.5, 2.0);
+  addPath(0, COURT.z1 + 2, 0, HALL.stepZ1 - 0.1, 4.2);
+  addPath(2, 38, POND.x - POND.rx - 0.2, POND.z + 1, 2.4);
+  addPath(-2, 36, BELL.x + BELL.size / 2 + 0.6, BELL.z + 0.5, 2.4);
+  // 大殿前横向的路，连到两侧配殿
+  for (const sh of SIDE_HALLS) addPath(0, 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, 2.6);
+  for (const sh of SIDE_HALLS) addPath(sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), sh.z, 2.6);
   // 大殿前的小广场
-  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(16, 5.6), pathMat.clone());
+  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(26, 8), pathMat.clone());
   (plaza.material as THREE.MeshStandardMaterial).map = (() => {
     const t = ptex.clone();
-    t.repeat.set(5, 1.75);
+    t.repeat.set(26 / 3.2, 8 / 3.2);
     t.needsUpdate = true;
     return t;
   })();
   plaza.rotation.x = -Math.PI / 2;
-  plaza.position.set(0, 0.011, 3.4);
+  plaza.position.set(0, 0.011, 5.6);
   plaza.receiveShadow = true;
   plaza.name = 'walkable';
   group.add(plaza);
 
   // 远处的山：中间留出平地，往外逐渐隆起
-  const size = 700;
-  const seg = 180;
+  const size = 900;
+  const seg = 220;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position as THREE.BufferAttribute;
@@ -245,11 +260,11 @@ export function buildTerrain(scene: THREE.Scene) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     // 院子是一个矩形，用到矩形的距离
-    const dx = Math.max(0, Math.abs(x) - 30);
-    const dz = Math.max(0, z < 0 ? -z - 26 : z - 36);
+    const dx = Math.max(0, Math.abs(x) - (COURT.x1 + GM + 0.5));
+    const dz = Math.max(0, z < 0 ? -z - (-COURT.z0 + GM + 0.5) : z - (COURT.z1 + GM + 0.5));
     const d = Math.hypot(dx, dz);
     // 院子里的地形压低到地面以下，避免穿出地面和池底
-    const insideCourt = Math.abs(x) < COURT.x1 + 2.5 && z > COURT.z0 - 1.5 && z < COURT.z1 + 4.5;
+    const insideCourt = Math.abs(x) < COURT.x1 + GM && z > COURT.z0 - GM && z < COURT.z1 + GM;
     let h = insideCourt ? -1.2 : -0.05;
     if (d > 0) {
       const ramp = Math.min(1, d / 60);
@@ -287,10 +302,10 @@ export function buildTerrain(scene: THREE.Scene) {
   terrain.updateMatrixWorld();
   for (let i = 0; i < count * 3 && placed < count; i++) {
     const a = r() * Math.PI * 2;
-    const dist = 55 + Math.pow(r(), 0.7) * 170;
+    const dist = 70 + Math.pow(r(), 0.7) * 200;
     const x = Math.cos(a) * dist;
     const z = Math.sin(a) * dist;
-    if (Math.abs(x) < 46 && z > -42 && z < 52) continue;
+    if (Math.abs(x) < COURT.x1 + 14 && z > COURT.z0 - 10 && z < COURT.z1 + 14) continue;
     ray.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
     const hit = ray.intersectObject(terrain, false)[0];
     if (!hit) continue;

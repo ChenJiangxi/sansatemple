@@ -7,10 +7,13 @@ import { Environment, buildTerrain, type TimeMode } from './world/environment';
 import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
 import { buildProps } from './world/props';
+import { buildBuildings } from './world/buildings';
+import { IncenseSpot } from './world/incense';
+import { placeStatues } from './world/statues';
 import { Monk, type Action, HAPJANG_DURATION } from './monk';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, type Seat, heightAt, canStep, planRoute } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, type Seat, heightAt, canStep, planRoute } from './layout';
 import { audio } from './audio';
-import { Net, type IncenseItem } from './net';
+import { Net, type IncenseItem, type IncensePlace } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
 import { UI, type Visitor, escapeHtml } from './ui';
 
@@ -84,7 +87,10 @@ async function start() {
   const hall = buildHall(scene);
   const nature = buildNature(scene);
   const props = buildProps(scene);
+  const buildings = buildBuildings(scene);
+  const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
+  placeStatues(hall.group, hall.statueSlots, roomEnv);
   // 金身佛像用室内环境光反射
   hall.group.traverse((o) => {
     const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
@@ -98,7 +104,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives];
 
   // —— 叠加层与界面 ——
   const stage = new OverlayStage(app);
@@ -205,9 +211,11 @@ async function start() {
     onArrive: null as null | (() => void),
     seat: null as Seat | null,
     stuck: 0,
+    dest: null as null | { x: number; z: number },
+    replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -232,6 +240,7 @@ async function start() {
     else if (claimed && intent === 'bow') ui.setStatus('walkingToCushion', 'stop');
     else if (claimed) ui.setStatus('walkingToSeat', 'stop');
     else if (intent === 'incense') ui.setStatus('incenseWalking');
+    else if (intent === 'bell') ui.setStatus('bellWalking');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -244,6 +253,8 @@ async function start() {
     player.route = planRoute(player.x, player.z, x, z);
     player.onArrive = onArrive ?? null;
     player.stuck = 0;
+    player.dest = { x, z };
+    player.replans = 0;
   }
 
   function seatTaken(seat: Seat) {
@@ -356,14 +367,17 @@ async function start() {
     }, HAPJANG_DURATION * 1000);
   }
 
-  // —— 上香 ——
+  // —— 上香（院中大香炉、佛前小香炉）——
   let incenseList: IncenseItem[] = [];
   let serverOffset = 0;
   const myIncenseOwner = () => net.id || 'me';
   function refreshIncense() {
     const now = Date.now() + serverOffset;
     incenseList = incenseList.filter((i) => i.until > now);
-    props.setIncense(incenseList.map((i) => ({ id: i.id, mine: i.owner === myIncenseOwner(), remain: (i.until - now) / (i.until - i.start) })));
+    const view = (place: IncensePlace) =>
+      incenseList.filter((i) => (i.place ?? 'yard') === place).map((i) => ({ id: i.id, mine: i.owner === myIncenseOwner(), remain: (i.until - now) / (i.until - i.start) }));
+    props.setIncense(view('yard'));
+    altarIncense.set(view('altar'));
   }
   net.on('incense', (list, now) => {
     serverOffset = now - Date.now();
@@ -372,9 +386,9 @@ async function start() {
   });
   setInterval(refreshIncense, 2000);
 
-  function requestIncense() {
+  function requestIncense(place: IncensePlace) {
     const now = Date.now() + serverOffset;
-    if (incenseList.some((i) => i.owner === myIncenseOwner() && i.until > now)) {
+    if (incenseList.some((i) => i.owner === myIncenseOwner() && (i.place ?? 'yard') === place && i.until > now)) {
       ui.toast(t('incenseBurning'));
       return;
     }
@@ -382,17 +396,18 @@ async function start() {
     if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
     intent = 'incense';
     refreshStatus();
-    walkTo(INCENSE.x, INCENSE.z + 1.5, () => {
+    const spot = place === 'altar' ? ALTAR_SPOT : { x: INCENSE.x, z: INCENSE.z + 1.9 };
+    walkTo(spot.x, spot.z, () => {
       intent = null;
       player.yaw = Math.PI;
       me.setAction('incense');
       refreshStatus();
       setTimeout(() => {
         if (me.action !== 'incense') return;
-        if (net.online) net.offerIncense();
+        if (net.online) net.offerIncense(place);
         else {
           const t0 = Date.now();
-          incenseList.push({ id: 'local' + t0, by: name, owner: 'me', start: t0, until: t0 + 180000 });
+          incenseList.push({ id: 'local' + t0, by: name, owner: 'me', start: t0, until: t0 + 180000, place });
           refreshIncense();
         }
         audio.bell(0.5);
@@ -403,6 +418,39 @@ async function start() {
       }, (1.2 + HAPJANG_DURATION) * 1000);
     });
   }
+
+  // —— 钟楼：撞钟 ——
+  let lastBell = 0;
+  function ringBell() {
+    if (performance.now() - lastBell < 15000) {
+      ui.toast(t('bellCooldown'));
+      return;
+    }
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    intent = 'bell';
+    refreshStatus();
+    const b = buildings.bell;
+    walkTo(b.standX, b.standZ, () => {
+      intent = null;
+      player.yaw = b.standYaw;
+      lastBell = performance.now();
+      me.setAction('hapjang');
+      refreshStatus();
+      b.strike();
+      setTimeout(() => {
+        audio.templeBell();
+        net.ringBell();
+      }, 1050);
+      setTimeout(() => {
+        if (me.action === 'hapjang') me.setAction(baseAction());
+      }, HAPJANG_DURATION * 1000);
+    });
+  }
+  net.on('bell', () => {
+    buildings.bell.strike();
+    setTimeout(() => audio.templeBell(0.6), 1050);
+  });
 
   // —— 木鱼 ——
   function openMoktak() {
@@ -600,6 +648,17 @@ async function start() {
 
   // —— 镜头 ——
   const cam = { yaw: 0, pitch: 0.3, dist: isTouch ? 6.4 : 5.6, tx: player.x, ty: 1, tz: player.z };
+  // 调试：?debugview&at=x,z&cam=yaw,pitch,dist 直接跳到某个位置
+  if (new URL(location.href).searchParams.has('debugview')) {
+    const sp = new URL(location.href).searchParams;
+    const at = sp.get('at')?.split(',').map(Number);
+    if (at && at.length >= 2 && at.every(Number.isFinite)) {
+      player.x = cam.tx = at[0];
+      player.z = cam.tz = at[1];
+    }
+    const cv = sp.get('cam')?.split(',').map(Number);
+    if (cv && cv.length === 3 && cv.every(Number.isFinite)) [cam.yaw, cam.pitch, cam.dist] = cv;
+  }
   const camRay = new THREE.Raycaster();
   const tmpV = new THREE.Vector3();
   const tmpT = new THREE.Vector3();
@@ -639,9 +698,14 @@ async function start() {
   scene.add(marker);
   let markerLife = 0;
 
-  function findInteract(o: THREE.Object3D | null): any {
+  function findInteract(hit: THREE.Intersection): any {
+    let o: THREE.Object3D | null = hit.object;
     while (o) {
-      if (o.userData.interact) return o.userData.interact;
+      const it = o.userData.interact;
+      if (it) {
+        if (it.ids && hit.instanceId !== undefined) return { type: it.type, id: it.ids[hit.instanceId] };
+        return it;
+      }
       o = o.parent;
     }
     return null;
@@ -652,7 +716,7 @@ async function start() {
     ray.setFromCamera(ndc, camera);
     const ih = ray.intersectObjects(interactives, true)[0];
     const gh = ray.intersectObjects(walkables, false)[0];
-    if (ih && (!gh || ih.distance <= gh.distance + 0.5) && ih.distance < 45) return { interact: findInteract(ih.object), point: ih.point };
+    if (ih && (!gh || ih.distance <= gh.distance + 0.5) && ih.distance < 60) return { interact: findInteract(ih), point: ih.point };
     if (gh) return { interact: null, point: gh.point };
     return null;
   }
@@ -672,8 +736,12 @@ async function start() {
       if (seat) goToSeat(seat, 'sit');
       return;
     }
-    if (p.interact?.type === 'incense') {
-      requestIncense();
+    if (p.interact?.type === 'incense' || p.interact?.type === 'altarIncense') {
+      requestIncense(p.interact.type === 'altarIncense' ? 'altar' : 'yard');
+      return;
+    }
+    if (p.interact?.type === 'bell') {
+      ringBell();
       return;
     }
     cancelIntent();
@@ -700,7 +768,7 @@ async function start() {
       if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (pinch > 0) cam.dist = THREE.MathUtils.clamp(cam.dist * (pinch / d), 2.2, 16);
+        if (pinch > 0) cam.dist = THREE.MathUtils.clamp(cam.dist * (pinch / d), 2.2, 24);
         pinch = d;
         return;
       }
@@ -729,7 +797,8 @@ async function start() {
     if (it?.type === 'seat') {
       const s = SEAT_BY_ID.get(it.id);
       label = s && seatTaken(s) ? t('seatTaken') : t('sit');
-    } else if (it?.type === 'incense') label = t('incense');
+    } else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
+    else if (it?.type === 'bell') label = t('ringBell');
     canvas.classList.toggle('point', !!label);
     ui.showTooltip(label, e.clientX, e.clientY);
   });
@@ -750,7 +819,7 @@ async function start() {
     'wheel',
     (e) => {
       e.preventDefault();
-      cam.dist = THREE.MathUtils.clamp(cam.dist * Math.exp(e.deltaY * 0.0012), 2.2, 16);
+      cam.dist = THREE.MathUtils.clamp(cam.dist * Math.exp(e.deltaY * 0.0012), 2.2, 24);
     },
     { passive: false }
   );
@@ -844,7 +913,7 @@ async function start() {
     }
     const moving = !!(dx || dz);
     if (moving) {
-      const speed = 2.1;
+      const speed = 2.7;
       const step = Math.min(speed * dt, 0.2);
       let nx = player.x + dx * step;
       let nz = player.z + dz * step;
@@ -859,8 +928,13 @@ async function start() {
         player.z = nz;
         player.stuck += dt * 0.5;
       } else player.stuck += dt;
-      if (player.route.length && player.stuck > 1.2) {
-        // 走不过去：放弃这段路
+      if (player.route.length && player.stuck > 1.2 && player.dest && player.replans < 2) {
+        // 被挡住了：从当前位置重新找一条路
+        player.replans++;
+        player.stuck = 0;
+        player.route = planRoute(player.x, player.z, player.dest.x, player.dest.z);
+      } else if (player.route.length && player.stuck > 1.2) {
+        // 还是走不过去：放弃这段路
         player.route = [];
         player.onArrive = null;
         if (claimed || intent) {
@@ -948,6 +1022,9 @@ async function start() {
     updateCamera(dt);
     nature.update(dt, elapsed);
     props.update(dt, elapsed);
+    altarIncense.update(dt, elapsed);
+    buildings.bell.update(dt);
+    env.follow(player.x, player.z);
     for (const [i, f] of hall.candleFlames.entries()) f.scale.set(1, 2.2 + Math.sin(elapsed * 9 + i * 2) * 0.25, 1);
     if (markerLife > 0) {
       markerLife -= dt * 1.2;

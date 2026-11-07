@@ -1,12 +1,12 @@
 // 大殿：台基、台阶、柱网、梁枋、墙、屋顶、佛坛、三尊佛像与蒲团
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { HALL, CUSHIONS } from '../layout';
+import { HALL, CUSHIONS, ALTAR_BURNER } from '../layout';
 import {
   stoneTexture, stoneBlockTexture, woodTexture, floorTexture, plasterTexture, roofTexture,
-  dancheongTexture, latticeTexture, muralTexture, plaqueTexture, rng,
+  dancheongTexture, latticeTexture, muralTexture, plaqueTexture,
 } from '../textures';
-import { worldBox, mesh, lathe, gold } from './util';
+import { worldBox, mesh, lathe } from './util';
 
 export interface HallBuild {
   group: THREE.Group;
@@ -15,6 +15,8 @@ export interface HallBuild {
   candleFlames: THREE.Mesh[];
   interiorLights: THREE.PointLight[];
   blockers: THREE.Object3D[]; // 会挡住镜头的部分：柱、墙、屋顶
+  altarSandY: number; // 佛前香炉沙面的高度
+  statueSlots: { x: number; y: number; z: number; kind: 'main' | 'left' | 'right' }[];
 }
 
 function rafterTexture() {
@@ -93,17 +95,7 @@ function cofferTexture() {
   return t;
 }
 
-// 两点之间的胶囊体
-function capsuleBetween(a: THREE.Vector3, b: THREE.Vector3, r: number, mat: THREE.Material) {
-  const len = a.distanceTo(b);
-  const geo = new THREE.CapsuleGeometry(r, Math.max(0.001, len), 6, 12);
-  const m = mesh(geo, mat);
-  m.position.copy(a).add(b).multiplyScalar(0.5);
-  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
-  return m;
-}
-
-function lotusPedestal(mat: THREE.Material, r: number, h: number) {
+export function lotusPedestal(mat: THREE.Material, r: number, h: number) {
   const g = new THREE.Group();
   g.add(mesh(lathe([[0, 0], [r * 0.95, 0], [r, h * 0.12], [r * 0.7, h * 0.28], [r * 0.55, h * 0.5], [r * 0.75, h * 0.7], [r, h * 0.88], [r * 1.04, h], [0, h]], 40), mat));
   const petalGeo = new THREE.SphereGeometry(1, 12, 8);
@@ -120,112 +112,6 @@ function lotusPedestal(mat: THREE.Material, r: number, h: number) {
       g.add(p);
     }
   }
-  return g;
-}
-
-function seatedBuddha(mat: THREE.Material) {
-  const g = new THREE.Group();
-  const ped = lotusPedestal(mat, 1.0, 0.72);
-  g.add(ped);
-  const base = 0.72;
-  const legs = mesh(new THREE.SphereGeometry(1, 32, 16), mat);
-  legs.scale.set(0.86, 0.26, 0.6);
-  legs.position.set(0, base + 0.2, 0.08);
-  g.add(legs);
-  const torso = mesh(lathe([[0, 0], [0.5, 0], [0.48, 0.25], [0.42, 0.5], [0.47, 0.78], [0.42, 0.9], [0.2, 1.0], [0, 1.02]], 32), mat);
-  torso.scale.set(1, 1, 0.72);
-  torso.position.y = base + 0.22;
-  g.add(torso);
-  const neck = mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.2, 16), mat);
-  neck.position.y = base + 1.25;
-  g.add(neck);
-  const head = mesh(new THREE.SphereGeometry(0.27, 32, 24), mat);
-  head.scale.set(0.95, 1.08, 0.98);
-  head.position.y = base + 1.52;
-  g.add(head);
-  const ush = mesh(new THREE.SphereGeometry(0.14, 20, 14), mat);
-  ush.position.y = base + 1.82;
-  g.add(ush);
-  // 螺发：头顶的小颗粒
-  const curlGeo = new THREE.SphereGeometry(0.03, 6, 4);
-  const r = rng(3);
-  for (let i = 0; i < 70; i++) {
-    const th = r() * Math.PI * 2;
-    const ph = r() * 1.1;
-    const c = mesh(curlGeo, mat, false);
-    c.position.set(Math.sin(ph) * Math.cos(th) * 0.26, base + 1.55 + Math.cos(ph) * 0.29, Math.sin(ph) * Math.sin(th) * 0.27 - 0.01);
-    if (c.position.z > 0.17 && c.position.y < base + 1.75) continue;
-    g.add(c);
-  }
-  for (const s of [-1, 1]) {
-    const ear = mesh(new THREE.CapsuleGeometry(0.045, 0.2, 4, 8), mat);
-    ear.position.set(s * 0.27, base + 1.47, 0);
-    g.add(ear);
-    const sh = new THREE.Vector3(s * 0.43, base + 1.08, 0);
-    const el = new THREE.Vector3(s * 0.56, base + 0.66, 0.08);
-    const hand = new THREE.Vector3(s * 0.12, base + 0.5, 0.38);
-    g.add(capsuleBetween(sh, el, 0.12, mat));
-    g.add(capsuleBetween(el, hand, 0.1, mat));
-    const hm = mesh(new THREE.SphereGeometry(0.1, 12, 8), mat);
-    hm.scale.set(1.1, 0.6, 1.2);
-    hm.position.copy(hand);
-    g.add(hm);
-  }
-  // 头光
-  const halo = mesh(new THREE.TorusGeometry(0.5, 0.025, 8, 48), mat, false);
-  halo.position.set(0, base + 1.55, -0.32);
-  g.add(halo);
-  const halo2 = mesh(new THREE.TorusGeometry(0.98, 0.03, 8, 64), mat, false);
-  halo2.scale.set(1, 1.25, 1);
-  halo2.position.set(0, base + 1.0, -0.42);
-  g.add(halo2);
-  return g;
-}
-
-function standingBodhisattva(mat: THREE.Material, mirror: number) {
-  const g = new THREE.Group();
-  g.add(lotusPedestal(mat, 0.52, 0.42));
-  const base = 0.42;
-  const body = mesh(lathe([[0, 0], [0.34, 0], [0.36, 0.25], [0.28, 0.85], [0.24, 1.25], [0.3, 1.52], [0.27, 1.66], [0.12, 1.74], [0, 1.76]], 28), mat);
-  body.scale.set(1, 1, 0.72);
-  body.position.y = base;
-  g.add(body);
-  const head = mesh(new THREE.SphereGeometry(0.19, 24, 18), mat);
-  head.scale.set(0.95, 1.1, 0.97);
-  head.position.y = base + 1.98;
-  g.add(head);
-  const crown = mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.26, 16, 1, true), mat);
-  crown.position.y = base + 2.2;
-  g.add(crown);
-  for (let i = 0; i < 5; i++) {
-    const a = ((i - 2) / 5) * Math.PI * 0.9;
-    const spike = mesh(new THREE.ConeGeometry(0.05, 0.16, 8), mat, false);
-    spike.position.set(Math.sin(a) * 0.17, base + 2.38, Math.cos(a) * 0.17);
-    g.add(spike);
-  }
-  const neck = mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.16, 12), mat);
-  neck.position.y = base + 1.8;
-  g.add(neck);
-  // 一手举莲，一手垂下
-  const s = mirror;
-  const sh = new THREE.Vector3(s * 0.3, base + 1.6, 0);
-  g.add(capsuleBetween(sh, new THREE.Vector3(s * 0.38, base + 1.2, 0.05), 0.07, mat));
-  g.add(capsuleBetween(new THREE.Vector3(s * 0.38, base + 1.2, 0.05), new THREE.Vector3(s * 0.2, base + 1.42, 0.26), 0.06, mat));
-  const lotus = mesh(new THREE.SphereGeometry(0.08, 10, 8), mat);
-  lotus.position.set(s * 0.2, base + 1.52, 0.27);
-  g.add(lotus);
-  const sh2 = new THREE.Vector3(-s * 0.3, base + 1.6, 0);
-  const el2 = new THREE.Vector3(-s * 0.36, base + 1.15, 0.02);
-  g.add(capsuleBetween(sh2, el2, 0.07, mat));
-  g.add(capsuleBetween(el2, new THREE.Vector3(-s * 0.32, base + 0.82, 0.12), 0.06, mat));
-  // 天衣飘带
-  const scarf = mesh(new THREE.TorusGeometry(0.36, 0.025, 6, 32, Math.PI), mat, false);
-  scarf.rotation.set(Math.PI / 2 + 0.3, 0, 0);
-  scarf.position.set(0, base + 1.0, 0.05);
-  g.add(scarf);
-  const halo = mesh(new THREE.TorusGeometry(0.34, 0.02, 8, 40), mat, false);
-  halo.position.set(0, base + 2.0, -0.25);
-  g.add(halo);
   return g;
 }
 
@@ -404,11 +290,11 @@ export function buildHall(scene: THREE.Scene): HallBuild {
 
   // 柱子与础石
   const colTop = H.baseH + H.colH;
-  const colGeo = new THREE.CylinderGeometry(0.27, 0.31, H.colH, 20);
-  const plinthGeo = new THREE.CylinderGeometry(0.42, 0.48, 0.16, 16);
+  const colGeo = new THREE.CylinderGeometry(0.32, 0.37, H.colH, 20);
+  const plinthGeo = new THREE.CylinderGeometry(0.5, 0.56, 0.18, 16);
   const columns: [number, number][] = [];
   for (const x of H.colX) columns.push([x, H.colZFront], [x, H.colZBack]);
-  for (const z of [-7.3, -11.3]) columns.push([-H.wallX, z], [H.wallX, z]);
+  for (const z of H.colZSide) columns.push([-H.wallX, z], [H.wallX, z]);
   for (const [x, z] of columns) {
     const c = mesh(colGeo, colMat);
     c.position.set(x, H.baseH + H.colH / 2, z);
@@ -465,7 +351,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     group.add(pw);
   }
   // 殿内大梁
-  for (const x of [-5.4, -1.8, 1.8, 5.4]) {
+  for (const x of H.colX.slice(1, -1)) {
     const geo = new THREE.BoxGeometry(0.42, 0.55, H.colZFront - H.colZBack);
     const uv = geo.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * 3);
@@ -517,7 +403,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   group.add(mural);
 
   // 屋顶
-  const roof = buildRoof({ cx: 0, cz: (H.colZFront + H.colZBack) / 2, W: H.wallX + 2.9, D: (H.colZFront - H.colZBack) / 2 + 2.9, rx: 5.6, eaveY: colTop + 0.65, ridgeY: colTop + 4.6, lift: 0.95 });
+  const roof = buildRoof({ cx: 0, cz: (H.colZFront + H.colZBack) / 2, W: H.wallX + 3.3, D: (H.colZFront - H.colZBack) / 2 + 3.3, rx: H.wallX * 0.48, eaveY: colTop + 0.7, ridgeY: colTop + 5.8, lift: 1.25 });
   roof.traverse((o) => {
     if ((o as THREE.Mesh).isMesh) o.castShadow = true;
   });
@@ -525,13 +411,13 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   blockers.push(roof);
 
   // 匾额
-  const plaque = mesh(new THREE.BoxGeometry(3.3, 1.1, 0.12), [
+  const plaque = mesh(new THREE.BoxGeometry(4.6, 1.5, 0.14), [
     new THREE.MeshStandardMaterial({ color: '#c9a85a' }), new THREE.MeshStandardMaterial({ color: '#c9a85a' }),
     new THREE.MeshStandardMaterial({ color: '#c9a85a' }), new THREE.MeshStandardMaterial({ color: '#c9a85a' }),
     new THREE.MeshStandardMaterial({ map: plaqueTexture('殿雄大'), roughness: 0.6, emissive: '#222', emissiveIntensity: 0.15 }),
     new THREE.MeshStandardMaterial({ color: '#3a2a20' }),
   ]);
-  plaque.position.set(0, colTop + 0.95, H.colZFront + 0.32);
+  plaque.position.set(0, colTop + 1.05, H.colZFront + 0.36);
   plaque.rotation.x = -0.12;
   group.add(plaque);
 
@@ -549,84 +435,128 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     group.add(trim);
   }
   // 佛坛正面的格子纹饰
-  for (let i = 0; i < 7; i++) {
-    const panel = mesh(new THREE.BoxGeometry(aw / 7 - 0.2, H.altarH - 0.4, 0.04), new THREE.MeshStandardMaterial({ color: '#2f6b5b', roughness: 0.6 }), false);
-    panel.position.set(H.altarX0 + (i + 0.5) * (aw / 7), H.baseH + H.altarH / 2, H.altarZ1 + 0.01);
+  const panelMat = new THREE.MeshStandardMaterial({ color: '#2f6b5b', roughness: 0.6 });
+  for (let i = 0; i < 11; i++) {
+    const panel = mesh(new THREE.BoxGeometry(aw / 11 - 0.22, H.altarH - 0.42, 0.04), panelMat, false);
+    panel.position.set(H.altarX0 + (i + 0.5) * (aw / 11), H.baseH + H.altarH / 2, H.altarZ1 + 0.01);
     group.add(panel);
   }
 
-  // 三尊佛像
-  const goldMat = gold();
+  // 三尊佛像的位置（模型由 statues.ts 放上去）
   const altarTop = H.baseH + H.altarH;
-  const buddha = seatedBuddha(goldMat);
-  buddha.scale.setScalar(1.12);
-  buddha.position.set(0, altarTop, (H.altarZ0 + H.altarZ1) / 2 - 0.1);
-  group.add(buddha);
-  for (const s of [-1, 1]) {
-    const b = standingBodhisattva(goldMat, s);
-    b.scale.setScalar(1.0);
-    b.position.set(s * 3.4, altarTop, (H.altarZ0 + H.altarZ1) / 2);
-    group.add(b);
-  }
-
-  // 供桌、蜡烛、供果
-  const table = mesh(new THREE.BoxGeometry(4.4, 0.8, 0.8), altarMat);
-  table.position.set(0, H.baseH + 0.4, H.altarZ1 + 0.75);
-  group.add(table);
+  const az = (H.altarZ0 + H.altarZ1) / 2;
+  const statueSlots = [
+    { x: 0, y: altarTop, z: az - 0.15, kind: 'main' as const },
+    { x: -6.2, y: altarTop, z: az, kind: 'left' as const },
+    { x: 6.2, y: altarTop, z: az, kind: 'right' as const },
+  ];
+  // 佛坛上的长明灯与花
   const candleMat = new THREE.MeshStandardMaterial({ color: '#f3ead6', roughness: 0.5 });
   const flameMat = new THREE.MeshBasicMaterial({ color: '#ffcf7a' });
-  for (const x of [-1.7, 1.7]) {
-    const holder = mesh(new THREE.CylinderGeometry(0.07, 0.12, 0.35, 12), trimMat);
-    holder.position.set(x, H.baseH + 0.98, table.position.z);
+  const addCandle = (x: number, y: number, z: number, h = 0.36) => {
+    const holder = mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.4, 12), trimMat);
+    holder.position.set(x, y + 0.2, z);
     group.add(holder);
-    const candle = mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.32, 12), candleMat);
-    candle.position.set(x, H.baseH + 1.31, table.position.z);
+    const candle = mesh(new THREE.CylinderGeometry(0.05, 0.05, h, 12), candleMat);
+    candle.position.set(x, y + 0.4 + h / 2, z);
     group.add(candle);
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), flameMat);
+    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), flameMat);
     flame.scale.set(1, 2.2, 1);
-    flame.position.set(x, H.baseH + 1.52, table.position.z);
+    flame.position.set(x, y + 0.4 + h + 0.07, z);
     group.add(flame);
     candleFlames.push(flame);
+  };
+  for (const x of [-9, -3.3, 3.3, 9]) addCandle(x, altarTop, H.altarZ1 - 0.35, 0.3);
+
+  // 供桌：正中一只铜香炉，两侧蜡烛和供果
+  const tw = H.tableX1 - H.tableX0;
+  const td = H.tableZ1 - H.tableZ0;
+  const tz = (H.tableZ0 + H.tableZ1) / 2;
+  const table = mesh(new THREE.BoxGeometry(tw, H.tableH, td), altarMat);
+  table.position.set(0, H.baseH + H.tableH / 2, tz);
+  group.add(table);
+  const tableTop = mesh(new THREE.BoxGeometry(tw + 0.16, 0.06, td + 0.16), trimMat);
+  tableTop.position.set(0, H.baseH + H.tableH + 0.03, tz);
+  group.add(tableTop);
+  const cloth = mesh(new THREE.PlaneGeometry(tw * 0.62, H.tableH - 0.12), new THREE.MeshStandardMaterial({ color: '#c9a44a', roughness: 0.7, side: THREE.DoubleSide }), false);
+  cloth.position.set(0, H.baseH + H.tableH / 2, H.tableZ1 + 0.012);
+  group.add(cloth);
+  const ttop = H.baseH + H.tableH + 0.06;
+  for (const x of [-2.9, 2.9]) addCandle(x, ttop, tz);
+  const bronze = new THREE.MeshStandardMaterial({ color: '#6b5432', metalness: 0.85, roughness: 0.38 });
+  const burner = new THREE.Group();
+  burner.add(mesh(lathe([[0, 0], [0.2, 0], [0.16, 0.08], [0.3, 0.14], [0.36, 0.3], [0.33, 0.4], [0.37, 0.43], [0, 0.4]], 32), bronze));
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+    const leg = mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.14, 8), bronze);
+    leg.position.set(Math.cos(a) * 0.2, 0.04, Math.sin(a) * 0.2);
+    burner.add(leg);
   }
+  for (const sx of [-1, 1]) {
+    const ear = mesh(new THREE.TorusGeometry(0.07, 0.018, 6, 12, Math.PI), bronze);
+    ear.position.set(sx * 0.32, 0.45, 0);
+    ear.rotation.y = Math.PI / 2;
+    burner.add(ear);
+  }
+  const ash = mesh(new THREE.CircleGeometry(0.33, 24), new THREE.MeshStandardMaterial({ color: '#9a9284', roughness: 1 }), false);
+  ash.rotation.x = -Math.PI / 2;
+  ash.position.y = 0.41;
+  burner.add(ash);
+  burner.position.set(ALTAR_BURNER.x, ttop, ALTAR_BURNER.z);
+  burner.traverse((o) => (o.userData.interact = { type: 'altarIncense' }));
+  group.add(burner);
+  interactives.push(burner);
+  // 透明点击区：点供桌前方也算
+  const burnerHit = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.6), new THREE.MeshBasicMaterial({ visible: false }));
+  burnerHit.position.set(0, H.baseH + 0.9, tz + 0.2);
+  burnerHit.userData.interact = { type: 'altarIncense' };
+  group.add(burnerHit);
+  interactives.push(burnerHit);
+  const altarSandY = ttop + 0.41;
   const bowlMat = new THREE.MeshStandardMaterial({ color: '#b9924a', metalness: 0.7, roughness: 0.4 });
   const fruitMats = ['#d8752a', '#c43f2b', '#e2b23f'].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 }));
-  for (const x of [-0.8, 0, 0.8]) {
+  for (const [x, kind] of [[-1.6, 0], [1.6, 1], [-2.25, 2], [2.25, 0]] as [number, number][]) {
     const bowl = mesh(lathe([[0, 0], [0.12, 0], [0.08, 0.12], [0.24, 0.2], [0.26, 0.24], [0, 0.22]], 20), bowlMat);
-    bowl.position.set(x, H.baseH + 0.8, table.position.z);
+    bowl.position.set(x, ttop, tz);
     group.add(bowl);
     for (let k = 0; k < 4; k++) {
-      const f = mesh(new THREE.SphereGeometry(0.085, 12, 10), fruitMats[(k + Math.round(x * 2)) % 3 < 0 ? 0 : (k + Math.round(x * 2) + 3) % 3]);
+      const f = mesh(new THREE.SphereGeometry(0.085, 12, 10), fruitMats[(k + kind) % 3]);
       const a = (k / 4) * Math.PI * 2;
-      f.position.set(x + (k < 3 ? Math.cos(a) * 0.1 : 0), H.baseH + 1.08 + (k < 3 ? 0 : 0.12), table.position.z + (k < 3 ? Math.sin(a) * 0.1 : 0));
+      f.position.set(x + (k < 3 ? Math.cos(a) * 0.1 : 0), ttop + 0.28 + (k < 3 ? 0 : 0.12), tz + (k < 3 ? Math.sin(a) * 0.1 : 0));
       group.add(f);
     }
   }
 
-  // 蒲团
+  // 蒲团：一个实例化网格，点中时用 instanceId 找回座位
   const cushionGeo = new RoundedBoxGeometry(0.82, 0.12, 0.98, 3, 0.05);
-  const cushionMat = new THREE.MeshStandardMaterial({ color: '#77735f', roughness: 0.95 });
-  const cushionMat2 = new THREE.MeshStandardMaterial({ color: '#6b5a3e', roughness: 0.95 });
-  for (const c of CUSHIONS) {
-    const m = mesh(cushionGeo, Number(c.id.slice(1)) % 7 === 3 ? cushionMat2 : cushionMat, false);
-    m.position.set(c.x, H.baseH + 0.06, c.z + 0.1);
-    m.userData.interact = { type: 'seat', id: c.id };
-    group.add(m);
-    interactives.push(m);
-  }
+  const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.95 });
+  const cushions = new THREE.InstancedMesh(cushionGeo, cushionMat, CUSHIONS.length);
+  const cA = new THREE.Color('#77735f');
+  const cB = new THREE.Color('#6b5a3e');
+  const m4 = new THREE.Matrix4();
+  CUSHIONS.forEach((c, i) => {
+    m4.makeTranslation(c.x, H.baseH + 0.06, c.z + 0.1);
+    cushions.setMatrixAt(i, m4);
+    cushions.setColorAt(i, (i % 16) % 5 === 2 ? cB : cA);
+  });
+  cushions.receiveShadow = true;
+  cushions.userData.interact = { type: 'seat', ids: CUSHIONS.map((c) => c.id) };
+  group.add(cushions);
+  interactives.push(cushions);
 
   // 殿内暖光
   const interiorLights: THREE.PointLight[] = [];
-  const l1 = new THREE.PointLight('#ffc98a', 18, 14, 1.6);
-  l1.position.set(0, H.baseH + 3.4, H.altarZ1 + 2.6);
+  const l1 = new THREE.PointLight('#ffc98a', 46, 22, 1.5);
+  l1.position.set(0, H.baseH + 4.6, H.tableZ1 + 2.5);
   group.add(l1);
   interiorLights.push(l1);
-  for (const x of [-5.5, 5.5]) {
-    const l = new THREE.PointLight('#ffd7a0', 8, 11, 1.8);
-    l.position.set(x, H.baseH + 3.6, -7.5);
+  for (const x of [-8, 8]) {
+    const l = new THREE.PointLight('#ffd7a0', 18, 16, 1.6);
+    l.position.set(x, H.baseH + 4.6, -10);
     group.add(l);
     interiorLights.push(l);
   }
 
   scene.add(group);
-  return { group, walkables, interactives, candleFlames, interiorLights, blockers };
+  return { group, walkables, interactives, candleFlames, interiorLights, blockers, altarSandY, statueSlots };
 }

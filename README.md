@@ -4,7 +4,7 @@
 大家各是一个 Q 版小和尚，在同一个院子里散步、合掌、去大殿蒲团上礼拜、
 敲木鱼、拨 108 颗念珠、坐长椅、上香，彼此看得见但不聊天。
 
-代码、3D 模型、贴图和声音全部是新写的，没有使用原站的任何素材。
+代码、贴图和声音全部是新写的，没有使用原站的任何素材；佛像用的是公开授权的博物馆扫描模型（见「素材来源」）。
 
 ## 运行
 
@@ -32,7 +32,7 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 | 念珠（上下拨，108 颗一圈） | 2，方向键或滚轮拨珠 | 上下滑 |
 | 合掌 | 3 | 底栏「合掌」 |
 | 木鱼（可自动敲） | 5，空格敲 | 点木鱼 |
-| 坐下 / 上香 | 点蒲团、长椅 / 点香炉 | 同左 |
+| 坐下 / 上香 / 撞钟 | 点蒲团、长椅 / 点院中香炉或佛前香炉 / 点钟楼的钟 | 同左 |
 
 时间跟随本地时钟：清晨、白天、傍晚、夜晚光线不同，夜里莲花灯和石灯会亮。
 
@@ -40,15 +40,25 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 ```
 server/server.mjs   静态文件 + WebSocket：5 个房间×50 人，位置快照 8 次/秒，
-                    座位占用由服务器裁决，香炉里的香 3 分钟后燃尽
+                    座位占用由服务器裁决，两处香炉的香 3 分钟后燃尽，撞钟同房间都听得到
 src/main.ts         场景组装、玩家移动、镜头、点击交互、联机同步
-src/layout.ts       场景布局、可走区域、碰撞、上下台基的路线
+src/layout.ts       场景布局、可走区域、碰撞、网格寻路（A*，自动绕开水池石塔柱子）
 src/monk.ts         小和尚模型与程序动画（走、合掌、礼拜、打坐、木鱼、念珠）
-src/world/          环境与昼夜、大殿与佛像、树木莲池、灯与石塔香炉围墙
+src/world/          环境与昼夜、大殿（七开间、112 个蒲团、佛前供桌香炉）、佛像、
+                    配殿与钟楼、树木莲池、灯与双塔香炉围墙
 src/overlays.ts     木鱼、念珠的特写画面
 src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、念佛
 src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 ```
+
+## 素材来源
+
+| 文件 | 来源 | 许可 | 处理 |
+|---|---|---|---|
+| `public/models/buddha.glb` | [Korean Buddha Iron Statue](https://sketchfab.com/3d-models/korean-buddha-iron-statue-872b44150e12431a898d0b8057705770) by artfletch（高丽铁佛扫描） | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | 去掉贴图、改为金身、减面到 9 万三角形、meshopt 压缩 |
+| `public/models/bodhisattva.glb` | [Seated bodhisattva Guanyin, 12th C.](https://sketchfab.com/3d-models/seated-bodhisattva-guanyin-12th-c-ce-2c865894453743a49f8e82d57e4f0a8d)，Minneapolis Institute of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上，减面到 6 万三角形 |
+
+署名也写在游戏「设置」面板底部。换模型时用 `node tools/prep-statue.mjs 输入.glb 输出.glb 目标三角形数` 处理。
 
 ## 与原站的差别
 
