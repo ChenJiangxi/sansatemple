@@ -93,6 +93,8 @@ node tools/promo/audio.mjs /tmp/sansa-promo/score.wav
 node tools/promo/assemble.mjs /tmp/sansa-promo/shots /tmp/sansa-promo/score.wav 宣传片.mp4
 ```
 
+三个版本用 `cut` 参数切换（页面 `?cut=`，Node 脚本用环境变量 `CUT=`）：`vertical`（9:16，2 分钟，默认）、`short34`（3:4，约 1 分钟）、`explainer`（16:9 讲解视频）。讲解视频的口播稿在 `explainer-script.mjs`，先用 `secret exec MINIMAX_API_KEY_MPLAN -- node tools/promo/voice.mjs 配音目录` 生成克隆音（已有的段落不会重复生成），再录制；拼接时把配音目录作为第四个参数传给 `assemble.mjs`，配乐会在说话时自动压低。实拍截图放在 `PROMO_UI` 指向的目录。
+
 封面：打开 `promo.html?cover`，会生成 9:16 和 3:4 两张（`/tmp/sansa-promo/shots/cover*/00000.jpg`）。
 
 成片放到 `PROMO_DIR`（默认项目下的 `promo/`，不进 Git），文件名 `promo.mp4`、`cover.jpg`、`cover-3x4.jpg`，服务器会在 `…/promo/` 提供播放页（支持拖动进度）。本机启动方式：`PROMO_DIR=/Users/macmini003/chatcut-dev/projects/sansa-promo npm start`。

@@ -14,6 +14,12 @@ function capture() {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         const url = new URL(req.url, 'http://x');
+        if (url.pathname.startsWith('/__promo/ui/')) {
+          const f = path.join(process.env.PROMO_UI || path.join(OUT, 'ui'), path.basename(url.pathname));
+          if (!fs.existsSync(f)) return res.writeHead(404).end();
+          res.writeHead(200, { 'content-type': 'image/jpeg' });
+          return fs.createReadStream(f).pipe(res);
+        }
         if (url.pathname.startsWith('/__promo/fonts/')) {
           const f = path.join(OUT, 'fonts', path.basename(url.pathname));
           if (!fs.existsSync(f)) return res.writeHead(404).end();

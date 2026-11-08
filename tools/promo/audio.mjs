@@ -3,14 +3,16 @@
 // 堂鼓与木鱼的节奏、殿内低声齐诵和碰铃，加上梵钟、木鱼、磬、风声、鸟鸣；时间轴与画面共用 timeline.mjs
 // 用法：node tools/promo/audio.mjs 输出.wav
 import fs from 'node:fs';
-import { SHOTS, EVENTS, TOTAL, PROMPT_LINES, BEAT, BAR, DOWNBEAT } from './timeline.mjs';
+import { SHOTS, EVENTS, TOTAL, PROMPT_LINES, BEAT, BAR, DOWNBEAT, CUT } from './timeline.mjs';
 
 const SR = 48000;
 const LEN = Math.ceil((TOTAL + 0.2) * SR);
 const L = new Float32Array(LEN), R = new Float32Array(LEN), SEND = new Float32Array(LEN);
 let seed = 7;
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-const at = (id) => SHOTS.find((s) => s.id === id).start;
+const at = (id) => SHOTS.find((s) => s.id === id)?.start;
+const has = (id) => at(id) !== undefined;
+const EXPLAIN = CUT === 'explainer'; // 讲解视频：配乐垫在口播底下，旋律压低
 
 function add(buf, time, gain, pan = 0, send = 0.3) {
   const i0 = Math.round(time * SR);
@@ -236,7 +238,9 @@ const N = {
 const play = (time, note, gain = 0.5, o = {}, pan = 0) => add(qin(N[note], o.dur ?? 5, o), time, gain, pan, 0.35);
 const barT = (k) => DOWNBEAT + k * BAR;
 const barAt = (t) => Math.max(0, Math.ceil((t - DOWNBEAT) / BAR - 0.2));
-const LAST = barAt(at('end')); // 收束和弦落在片尾这一小节
+const END = at('end') ?? at('eEnd');
+const LAST = barAt(END); // 收束和弦落在片尾这一小节
+const HALL0 = at('hallEnter') ?? at('hallFront'), HALL1 = at('rosary') ?? at('bell');
 const SEC = {
   dawn: [0, barAt(at('pond'))],
   day: [barAt(at('pond')), barAt(at('hallFront'))],
@@ -292,11 +296,16 @@ const PH = {
   P6: [[0, 0, 'E4', 2], [0, 2, 'Fs4', 1], [0, 3, 'A4', 1], [1, 0, 'B4', 2], [1, 2, 'A4', 1], [1, 3, 'Fs4', 1]],
 };
 // 旋律从哪个镜头开始；与上一段不重叠，也不跨进下一个大段
-const SCHEDULE = [['gate', 'P1'], ['leaves', 'P2'], ['bridge', 'P1b'], ['sideHall', 'P2b'], ['ding', 'P5'], ['hallEnter', 'P3'], ['buddha', 'P3b'], ['altar', 'P5b'], ['nightSide', 'P4'], ['night', 'P6']];
+PH.P7 = [[0, 0, 'D5', 2], [0, 2, 'B4', 1], [0, 3, 'A4', 1], [1, 0, 'Fs4', 4]]; // 两小节，殿内
+const SCHEDULES = {
+  short34: [['gate', 'P1'], ['court', 'P5'], ['buddha', 'P7'], ['nightSide', 'P6']],
+};
+const SCHEDULE = SCHEDULES[CUT] ?? [['gate', 'P1'], ['leaves', 'P2'], ['bridge', 'P1b'], ['sideHall', 'P2b'], ['ding', 'P5'], ['hallEnter', 'P3'], ['buddha', 'P3b'], ['altar', 'P5b'], ['nightSide', 'P4'], ['night', 'P6']];
 {
   let free = 1, prevF = 0, prevEnd = -9;
   const placed = [];
   for (const [shot, name] of SCHEDULE) {
+    if (!has(shot)) continue;
     const k0 = Math.max(barAt(at(shot)), free);
     const bars = Math.max(...PH[name].map((n) => n[0])) + 1;
     const sec = secOf(k0);
@@ -307,28 +316,28 @@ const SCHEDULE = [['gate', 'P1'], ['leaves', 'P2'], ['bridge', 'P1b'], ['sideHal
     for (const [bar, beat, note, len] of PH[name]) {
       const t0 = barT(k0 + bar) + beat * BEAT, f = N[note];
       const legato = Math.abs(t0 - prevEnd) < 0.05;
-      add(dizi(f, len * BEAT - 0.04, legato ? prevF : 0), t0, sec === 'night' ? 0.17 : 0.2, 0.08, 0.45);
+      add(dizi(f, len * BEAT - 0.04, legato ? prevF : 0), t0, (sec === 'night' ? 0.17 : 0.2) * (EXPLAIN ? 0.45 : 1), 0.08, 0.45);
       prevF = f;
       prevEnd = t0 + len * BEAT;
     }
     free = k0 + bars;
   }
   // 最后一个音落在片尾
-  add(dizi(N.D4, BEAT * 4.5, prevF), barT(LAST), 0.17, 0.08, 0.5);
+  add(dizi(N.D4, BEAT * 4.5, prevF), barT(LAST), 0.17 * (EXPLAIN ? 0.45 : 1), 0.08, 0.5);
   console.log('旋律：' + placed.join(' '));
 }
 
 // 节奏：院子里堂鼓 + 木鱼；殿内木鱼每拍轻敲、碰铃，「万籁此俱寂」那两个镜头全部停下
-const quiet = [at('rows'), at('buddha')];
+const quiet = [at('rows') ?? -1, at('buddha') ?? -1];
 for (let k = 1; k < LAST; k++) {
   const sec = secOf(k);
   for (let b = 0; b < 4; b++) {
     const t0 = barT(k) + b * BEAT;
-    if (sec === 'day' && t0 >= at('court')) {
+    if (sec === 'day' && t0 >= (at('court') ?? 0)) {
       if (b === 0) add(drum(), t0, 0.2, 0, 0.2);
       if (b === 2) add(drum(), t0, 0.12, 0, 0.2);
       if (b === 1 || b === 3) add(woodblock(), t0, 0.06, 0.3, 0.2);
-    } else if (sec === 'hall' && t0 >= at('hallEnter') && !(t0 >= quiet[0] && t0 < quiet[1]) && t0 < at('rosary')) {
+    } else if (sec === 'hall' && t0 >= HALL0 && !(t0 >= quiet[0] && t0 < quiet[1]) && t0 < HALL1) {
       if (b === 0) add(drum(), t0, 0.1, 0, 0.25);
       add(woodblock(), t0, 0.045, 0.3, 0.25);
       if (b === 0) add(pengling(), t0, 0.05, -0.3, 0.5);
@@ -341,15 +350,16 @@ play(0.12, 'D3', 0.45, { t60: 6, dur: 6 }, -0.1);
 play(0.14, 'A2', 0.25, { t60: 6, dur: 6 }, 0.1);
 {
   const chars = [...PROMPT_LINES.join('')];
-  chars.forEach((_, i) => add(tick(), EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
+  const t0 = EXPLAIN ? at('ePrompt') ?? 0 : 0;
+  chars.forEach((_, i) => add(tick(), t0 + EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
 }
 add(harm(N.A5), EVENTS.titleReveal, 0.14, 0.2, 0.5);
 add(qing(), EVENTS.titleSeal, 0.26, 0.25, 0.45);
 
 // 清晨的鸟
-for (const [shot, dts] of [['grove', [0.4, 1.6, 2.9]], ['leaves', [0.8, 2.4]], ['pond', [1.2]]]) for (const dt of dts) add(bird(), at(shot) + dt, 0.03, rnd() - 0.5, 0.4);
+for (const [shot, dts] of [['grove', [0.4, 1.6, 2.9]], ['leaves', [0.8, 2.4]], ['pond', [1.2]]]) if (has(shot)) for (const dt of dts) add(bird(), at(shot) + dt, 0.03, rnd() - 0.5, 0.4);
 // 殿内低声齐诵：从进殿到撞钟前
-add(chant(at('bell') - at('hallEnter') + 0.6), at('hallEnter'), 1.1, 0, 0.5);
+add(chant(at('bell') - HALL0 + 0.6), HALL0, EXPLAIN ? 0.7 : 1.1, 0, 0.5);
 // 念珠一颗颗拨过的轻响
 for (const dt of EVENTS.rosary) add(woodblock(), at('rosary') + dt, 0.025, 0.2, 0.2);
 // 黄昏：钟、鼓、木鱼
@@ -358,7 +368,7 @@ for (const dt of EVENTS.drum) add(drum(), at('drum') + dt + EVENTS.drumDelay, 0.
 for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakDelay, 0.34, 0.1, 0.25);
 // 夜里的虫鸣
 {
-  const t0 = at('nightSide'), dur = at('end') + 1 - t0;
+  const t0 = at('nightSide'), dur = END + 1 - t0;
   const n = Math.round(dur * SR), cr = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SR;
@@ -368,8 +378,8 @@ for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakD
   add(cr, t0, 0.01, 0.5, 0.3);
 }
 // 片尾：磬、泛音
-add(qing(), at('end') + EVENTS.endSeal, 0.24, 0.2, 0.45);
-add(harm(N.D5 * 2), at('end') + 2.6, 0.1, -0.2, 0.6);
+add(qing(), END + EVENTS.endSeal, 0.24, 0.2, 0.45);
+add(harm(N.D5 * 2), END + 2.6, 0.1, -0.2, 0.6);
 
 // 风声底：贯穿全片，很轻
 {

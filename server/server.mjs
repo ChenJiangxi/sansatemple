@@ -81,20 +81,30 @@ function sendFile(req, res, file, extra = {}) {
 }
 
 function promoPage() {
+  const has = (f) => fs.existsSync(path.join(PROMO_DIR, f));
+  const items = [
+    ['promo.mp4', '宣传片 · 竖版 9:16', '9/16', 'cover.jpg', '一句话复刻韩国爆火的山寺.mp4'],
+    ['explainer-16x9.mp4', '讲解视频 · 横版 16:9', '16/9', '', '一句话复刻韩国爆火的山寺-讲解.mp4'],
+    ['short-3x4.mp4', '短视频 · 竖版 3:4', '3/4', 'cover-3x4.jpg', '一句话复刻韩国爆火的山寺-短视频.mp4'],
+  ].filter(([f]) => has(f));
+  const blocks = items
+    .map(([f, label, ar, poster, dl]) => `<section><h2>${label}</h2><video src="${f}"${poster && has(poster) ? ` poster="${poster}"` : ''} controls playsinline preload="metadata" style="aspect-ratio:${ar}"></video><a href="${f}" download="${dl}">下载</a></section>`)
+    .join('');
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>一句话复刻韩国爆火的山寺</title>
 <meta property="og:title" content="一句话复刻韩国爆火的山寺"><meta property="og:image" content="cover.jpg"><meta property="og:type" content="video.other">
 <style>
-html,body{margin:0;min-height:100%;background:#1b1714;color:#efe5d0;font-family:"Songti SC","Noto Serif CJK SC",serif}
-main{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:20px 16px 28px;box-sizing:border-box}
+html,body{margin:0;background:#1b1714;color:#efe5d0;font-family:"Songti SC","Noto Serif CJK SC",serif}
+main{max-width:1100px;margin:0 auto;padding:22px 16px 40px;display:flex;flex-direction:column;align-items:center;gap:30px}
 h1{margin:0;font-size:22px;font-weight:600;letter-spacing:3px}
-video{display:block;height:min(78vh,calc((100vw - 32px)*16/9));aspect-ratio:9/16;max-width:100%;background:#000;border-radius:10px;box-shadow:0 10px 40px #0008}
-nav{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;font-size:15px}
-a{color:#e2c48a;text-decoration:none;border-bottom:1px solid #e2c48a55;padding-bottom:2px}
+section{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+h2{margin:0;font-size:16px;font-weight:500;color:#cdbb98;letter-spacing:2px}
+video{display:block;max-width:100%;max-height:78vh;background:#000;border-radius:10px;box-shadow:0 10px 40px #0008}
+a{color:#e2c48a;text-decoration:none;border-bottom:1px solid #e2c48a55;padding-bottom:2px;font-size:15px}
+nav{display:flex;gap:22px}
 </style></head><body><main>
-<h1>一句话复刻韩国爆火的山寺</h1>
-<video src="promo.mp4" poster="cover.jpg" controls playsinline preload="metadata"></video>
-<nav><a href="promo.mp4" download="一句话复刻韩国爆火的山寺.mp4">下载视频</a><a href="cover.jpg" download="封面-9比16.jpg">封面 9:16</a><a href="cover-3x4.jpg" download="封面-3比4.jpg">封面 3:4</a><a href="../">进山寺</a></nav>
+<h1>一句话复刻韩国爆火的山寺</h1>${blocks}
+<nav><a href="cover.jpg" download="封面-9比16.jpg">封面 9:16</a><a href="cover-3x4.jpg" download="封面-3比4.jpg">封面 3:4</a><a href="../">进山寺</a></nav>
 </main></body></html>`;
 }
 

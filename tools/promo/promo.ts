@@ -14,7 +14,7 @@ import { Monk, BOW_DURATION } from '../../src/monk';
 import { MoktakView, RosaryView } from '../../src/overlays';
 import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, DRUM, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, heightAt } from '../../src/layout';
 // @ts-ignore 共用的分镜表
-import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES } from './timeline.mjs';
+import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS } from './timeline.mjs';
 
 type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string };
 type V3 = [number, number, number];
@@ -65,6 +65,10 @@ async function main() {
   skyTex.mapping = THREE.EquirectangularReflectionMapping;
   scene.environment = pmrem.fromEquirectangular(skyTex).texture;
   const camera = new THREE.PerspectiveCamera(58, W / H, 0.1, 900);
+  const LAND = W > H;
+  const setFov = (f: number) => {
+    camera.fov = LAND ? f * 0.92 : f;
+  };
 
   const env = new Environment(scene, renderer);
   env.sun.shadow.mapSize.set(4096, 4096);
@@ -105,11 +109,11 @@ async function main() {
   const ovrEnv = new THREE.PMREMGenerator(ovr).fromScene(new RoomEnvironment(), 0.04).texture;
   const moktak = new MoktakView(ovrEnv);
   moktak.camera.aspect = W / H;
-  moktak.camera.fov = 40;
+  moktak.camera.fov = LAND ? 28 : 40;
   moktak.camera.updateProjectionMatrix();
   const rosaryView = new RosaryView(ovrEnv);
   rosaryView.camera.aspect = W / H;
-  rosaryView.camera.fov = 38;
+  rosaryView.camera.fov = LAND ? 27 : 38;
   rosaryView.camera.updateProjectionMatrix();
 
   // —— 香：院中香炉、佛前香炉 ——
@@ -194,6 +198,22 @@ async function main() {
     ctx.restore();
   }
   function header() {
+    if (LAND) {
+      ctx.save();
+      const g = ctx.createLinearGradient(0, 0, 0, 150);
+      g.addColorStop(0, 'rgba(12,9,6,0.5)');
+      g.addColorStop(1, 'rgba(12,9,6,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, 150);
+      ctx.font = '44px ZMX';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#fbf3e2';
+      ctx.fillText('一句话复刻韩国爆火的山寺', 56, 62);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     const g = ctx.createLinearGradient(0, 0, 0, 360);
     g.addColorStop(0, 'rgba(12,9,6,0.62)');
@@ -227,13 +247,60 @@ async function main() {
     return y0 + text.length * size * 1.12;
   }
   function caption(shot: Shot, t: number) {
-    const line = shot.id === 'moktak' ? '但余钟磬音' : shot.line;
+    // 竖版里木鱼紧接在撞钟后面，延续「但余钟磬音」；讲解视频各镜头有自己的名目
+    const carry = shot.id === 'moktak' && CUT !== 'explainer';
+    const line = carry ? '但余钟磬音' : shot.line;
     if (!line) return;
-    const instant = shot.id === 'moktak';
-    const end = verticalLine(line, instant ? 9 : t, W - 132, 520, 98, 'MSZ', '#fbf5e6');
+    const instant = carry;
+    const size = LAND ? 64 : H < 1600 ? 88 : 98;
+    const x = W - (LAND ? 104 : 132), y0 = LAND ? 170 : H < 1600 ? 420 : 520;
+    const end = verticalLine(line, instant ? 9 : t, x, y0, size, 'MSZ', '#fbf5e6');
     const sealA = instant ? 1 : clamp01((t - 0.35 - line.length * 0.12 - 0.1) / 0.3);
-    if (sealA > 0) seal(ctx, W - 132, end + 30, 58, '禅', sealA, 1);
-    if (shot.id === 'gate') verticalLine('唐·常建', t, W - 252, 560, 36, '"Songti SC"', 'rgba(251,245,230,0.85)', 0.06, 1.3);
+    if (sealA > 0) seal(ctx, x, end + size * 0.3, size * 0.6, '禅', sealA, 1);
+    if (shot.id === 'gate' && CUT !== 'explainer') verticalLine('唐·常建', t, x - 120, y0 + 40, 36, '"Songti SC"', 'rgba(251,245,230,0.85)', 0.06, 1.3);
+  }
+  // 讲解视频的口播字幕：底部居中，白字黑边
+  function subtitles(gt: number) {
+    const cur = (SUBS as { text: string; t0: number; t1: number }[]).find((x) => gt >= x.t0 - 0.05 && gt < x.t1 + 0.12);
+    if (!cur) return;
+    ctx.save();
+    ctx.font = '50px "PingFang SC","Songti SC",sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = 'rgba(15,10,6,0.85)';
+    ctx.strokeText(cur.text, W / 2, H - 84);
+    ctx.fillStyle = '#fbf6ea';
+    ctx.fillText(cur.text, W / 2, H - 84);
+    ctx.restore();
+  }
+
+  // 竖版的片头片尾按 1080×1920 设计，其他竖屏画幅等比缩放到中间
+  function portrait() {
+    const k = Math.min(W / 1080, H / 1920);
+    ctx.setTransform(k, 0, 0, k, (W - 1080 * k) / 2, (H - 1920 * k) / 2);
+  }
+  // 线上实拍截图：慢慢推近到要讲的地方
+  const uiImg: Record<string, HTMLImageElement> = {};
+  for (const id of ['uiRooms', 'uiBow']) {
+    if (!SHOTS.some((x: Shot) => x.id === id)) continue;
+    const im = new Image();
+    im.src = `/__promo/ui/${id}.jpg`;
+    await im.decode();
+    uiImg[id] = im;
+  }
+  const UI_FOCUS: Record<string, { cx: number; cy: number; z0: number; z1: number }> = {
+    uiRooms: { cx: 0.2, cy: 0.2, z0: 1.15, z1: 1.9 },
+    uiBow: { cx: 0.36, cy: 0.62, z0: 1.0, z1: 1.3 },
+  };
+  function uiCard(id: string, u: number) {
+    const im = uiImg[id], f = UI_FOCUS[id];
+    const z = f.z0 + (f.z1 - f.z0) * ease(u);
+    const sw = im.width / z, sh = im.height / z;
+    const sx = Math.min(im.width - sw, Math.max(0, f.cx * im.width - sw / 2));
+    const sy = Math.min(im.height - sh, Math.max(0, f.cy * im.height - sh / 2));
+    ctx.drawImage(im, sx, sy, sw, sh, 0, 0, W, H);
   }
 
   // —— 各个镜头 ——
@@ -243,6 +310,8 @@ async function main() {
       update() {},
       draw(t) {
         ctx.drawImage(paper, 0, 0);
+        ctx.save();
+        portrait();
         // 对话气泡：只说了一句话
         const ba = ease(clamp01((t - 0.05) / 0.35));
         ctx.save();
@@ -269,8 +338,8 @@ async function main() {
         }
         ctx.restore();
         // 标题：一笔一笔写出来
-        inkTitle(ctx, '一句话复刻', W / 2, 1010, 176, t - EVENTS.titleReveal);
-        inkTitle(ctx, '韩国爆火的山寺', W / 2, 1215, 160, t - EVENTS.titleReveal - 0.35);
+        inkTitle(ctx, '一句话复刻', 540, 1010, 176, t - EVENTS.titleReveal);
+        inkTitle(ctx, '韩国爆火的山寺', 540, 1215, 160, t - EVENTS.titleReveal - 0.35);
         const sa = clamp01((t - EVENTS.titleSeal) / 0.18);
         if (sa > 0) seal(ctx, 905, 1395, 118, '山寺', sa, 1.25 - 0.25 * ease(sa));
         const subA = clamp01((t - 3.25) / 0.5);
@@ -279,8 +348,9 @@ async function main() {
         ctx.font = '42px "Songti SC"';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#6b5f50';
-        ctx.fillText('一座汉传古寺 · 在线礼佛、上香、撞钟', W / 2, 1515);
+        ctx.fillText('一座汉传古寺 · 在线礼佛、上香、撞钟', 540, 1515);
         ctx.restore();
+        ctx.restore(); // 收回 portrait() 的缩放
       },
     },
     gate: {
@@ -295,7 +365,7 @@ async function main() {
         env.follow(0, 60);
       },
       update(t, u) {
-        camera.fov = 60;
+        setFov(60);
         camPath([
           { p: [0, 2.3, 72.6], l: [0, 3.4, 60] },
           { p: [0, 2.5, 66.5], l: [0, 2.9, 50] },
@@ -313,7 +383,7 @@ async function main() {
         env.follow(16, 40);
       },
       update(_t, u) {
-        camera.fov = 62;
+        setFov(62);
         camPath([
           { p: [14.6, 1.0, 36.2], l: [18.5, 6.0, 42.5] },
           { p: [13.4, 1.5, 38.6], l: [17.4, 8.8, 41.5] },
@@ -331,7 +401,7 @@ async function main() {
       },
       update(t, u) {
         // 从桥头迎着走来的两位僧人，背后是放生池和山门
-        camera.fov = 50;
+        setFov(50);
         const z0 = 57.6 - t * 1.6;
         place(pool[0], -0.25, z0, Math.PI);
         place(pool[1], 0.4, z0 + 2.2, Math.PI);
@@ -362,7 +432,7 @@ async function main() {
         env.follow(0, 6);
       },
       update(t, u) {
-        camera.fov = 60;
+        setFov(60);
         camPath([
           { p: [4.6, 1.3, 17.5], l: [0, 2.4, 6] },
           { p: [6.2, 5.0, 22.5], l: [0, 4.0, -2] },
@@ -387,7 +457,7 @@ async function main() {
         env.follow(0, 7);
       },
       update(_t, u) {
-        camera.fov = 42;
+        setFov(42);
         camPath([
           { p: [2.9, 2.35, 4.4], l: [0, 1.45, 7.9] },
           { p: [2.3, 2.15, 4.9], l: [0, 1.5, 8.1] },
@@ -401,7 +471,7 @@ async function main() {
         env.follow(0, -12);
       },
       update(_t, u) {
-        camera.fov = 60;
+        setFov(60);
         camPath([
           { p: [0, 2.85, 0.1], l: [0, 3.5, -20] },
           { p: [0, 2.65, -3.2], l: [0, 3.5, -20] },
@@ -415,7 +485,7 @@ async function main() {
         env.follow(0, -12);
       },
       update(_t, u) {
-        camera.fov = 62;
+        setFov(62);
         camPath([
           { p: [-11.2, 5.7, -4.8], l: [-1.0, 1.6, -13.5] },
           { p: [-8.6, 5.1, -6.4], l: [0.5, 1.8, -14.5] },
@@ -428,7 +498,7 @@ async function main() {
         env.follow(0, -16);
       },
       update(_t, u) {
-        camera.fov = 46;
+        setFov(46);
         camPath([
           { p: [0, 2.7, -11.8], l: [0, 4.2, -20.6] },
           { p: [0, 3.3, -15.0], l: [0, 5.0, -20.6] },
@@ -442,7 +512,7 @@ async function main() {
       },
       update(_t, u) {
         // 从左到右平移，迦叶、主尊、阿难依次经过
-        camera.fov = 44;
+        setFov(44);
         const x = -3.4 + 6.8 * glide(u);
         camera.position.set(x, 3.15, -16.0);
         camera.lookAt(x * 1.05, 3.9, -20.5);
@@ -460,7 +530,7 @@ async function main() {
         env.follow(0, -17);
       },
       update(_t, u) {
-        camera.fov = 50;
+        setFov(50);
         camPath([
           { p: [3.7, 2.7, -15.6], l: [-0.35, 2.0, -17.3] },
           { p: [3.3, 2.6, -15.95], l: [-0.35, 2.0, -17.35] },
@@ -478,12 +548,99 @@ async function main() {
         env.follow(heroSeat.x, heroSeat.z);
       },
       update(_t, u) {
-        camera.fov = 50;
+        setFov(50);
         const s = heroSeat!;
         camPath([
           { p: [s.x - 1.9, s.y + 1.3, s.z - 2.9], l: [s.x + 0.15, s.y + 0.55, s.z + 0.3] },
           { p: [s.x - 1.6, s.y + 1.1, s.z - 2.6], l: [s.x + 0.15, s.y + 0.5, s.z + 0.3] },
         ])(u, camera);
+      },
+    },
+    // —— 讲解视频：横屏片头、那一句话、实拍截图、片尾 ——
+    eTitle: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        inkTitle(ctx, '一句话复刻韩国爆火的山寺', W / 2, H * 0.42, 124, t - 0.5, 1.1);
+        const sa = clamp01((t - 1.8) / 0.18);
+        if (sa > 0) seal(ctx, W / 2 + 790, H * 0.42 - 20, 96, '山寺', sa, 1.25 - 0.25 * ease(sa));
+        ctx.save();
+        ctx.globalAlpha = clamp01((t - 2.2) / 0.5);
+        ctx.textAlign = 'center';
+        ctx.font = '42px "Songti SC"';
+        ctx.fillStyle = '#6b5f50';
+        ctx.fillText('一座汉传古寺 · 在线礼佛、上香、撞钟', W / 2, H * 0.56);
+        ctx.restore();
+      },
+    },
+    ePrompt: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        const ba = ease(clamp01((t - 0.05) / 0.35));
+        ctx.save();
+        ctx.globalAlpha = ba;
+        ctx.translate(0, (1 - ba) * 24);
+        const bw = 980, bh = 190, bx = (W - bw) / 2, by = H * 0.36;
+        ctx.font = '46px "Songti SC"';
+        ctx.fillStyle = '#7a6c5a';
+        ctx.fillText('只说了一句话：', bx + 10, by - 28);
+        roundRect(ctx, bx, by, bw, bh, 40);
+        ctx.fillStyle = 'rgba(255,252,245,0.95)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(60,40,25,0.28)';
+        ctx.stroke();
+        const all = PROMPT_LINES.join('');
+        const shown = Math.floor(clamp01((t - EVENTS.titleType.from) / (EVENTS.titleType.perChar * all.length)) * all.length);
+        const typed = all.slice(0, shown);
+        ctx.font = '84px "Songti SC"';
+        ctx.fillStyle = '#2b2420';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(typed, bx + 70, by + bh / 2 + 4);
+        if (shown < all.length || Math.floor(t * 2.5) % 2 === 0) ctx.fillRect(bx + 78 + ctx.measureText(typed).width, by + bh / 2 - 44, 5, 88);
+        ctx.restore();
+      },
+    },
+    uiRooms: {
+      setup() {},
+      update() {},
+      draw(t) {
+        uiCard('uiRooms', t / curDur);
+        grade(Math.round(t * FPS));
+        header();
+      },
+    },
+    uiBow: {
+      setup() {},
+      update() {},
+      draw(t) {
+        uiCard('uiBow', t / curDur);
+        grade(Math.round(t * FPS));
+        header();
+      },
+    },
+    eEnd: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        inkTitle(ctx, '山寺', W / 2, H * 0.36, 300, t - 0.2, 0.9);
+        const sa = clamp01((t - EVENTS.endSeal) / 0.18);
+        if (sa > 0) seal(ctx, W / 2 + 330, H * 0.3, 96, '静山', sa, 1.25 - 0.25 * ease(sa));
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.globalAlpha = clamp01((t - 0.9) / 0.5);
+        ctx.font = '68px MSZ';
+        ctx.fillStyle = '#2a2320';
+        ctx.fillText('一句话复刻韩国爆火的山寺', W / 2, H * 0.6);
+        ctx.globalAlpha = clamp01((t - 2.0) / 0.5);
+        ctx.font = '40px "Songti SC"';
+        ctx.fillStyle = '#6b5f50';
+        ctx.fillText('浏览器打开即玩 · 五十人同坐一殿', W / 2, H * 0.7);
+        ctx.restore();
       },
     },
     // —— 清晨 ——
@@ -493,7 +650,7 @@ async function main() {
         env.follow(0, 64);
       },
       update(_t, u) {
-        camera.fov = 46;
+        setFov(46);
         camPath([
           { p: [1.2, 2.6, 73.2], l: [0, 3.9, 68.3] },
           { p: [0.3, 3.3, 71.0], l: [0, 3.95, 68.3] },
@@ -508,7 +665,7 @@ async function main() {
         env.follow(17, 42);
       },
       update(t, u) {
-        camera.fov = 60;
+        setFov(60);
         place(pool[0], 16.2 + t * 0.15, 46.5 - t * 1.0, Math.PI - 0.15);
         camPath([
           { p: [14.2, 0.45, 40.2], l: [17.6, 1.6, 44.5] },
@@ -527,7 +684,7 @@ async function main() {
         env.follow(0, 52);
       },
       update(t, u) {
-        camera.fov = 54;
+        setFov(54);
         place(pool[0], -0.2, 57.5 - t * 1.2, Math.PI);
         place(pool[1], 0.4, 59.5 - t * 1.2, Math.PI);
         // 站在池岸西南角，斜望水面、荷叶和拱桥，背后是山门
@@ -543,7 +700,7 @@ async function main() {
         env.follow(PAGODAS[0].x, PAGODAS[0].z);
       },
       update(_t, u) {
-        camera.fov = 58;
+        setFov(58);
         const P = PAGODAS[0];
         camPath([
           { p: [P.x + 4.2, 1.2, P.z + 6.2], l: [P.x, 2.5, P.z] },
@@ -563,7 +720,7 @@ async function main() {
         env.follow(D.x + 4, D.z);
       },
       update(t, u) {
-        camera.fov = 52;
+        setFov(52);
         const D = SIDE_HALLS[0];
         place(pool[1], D.x + 9, D.z + 4 - t * 1.0, Math.PI);
         const z = D.z + 5.5 - 9 * glide(u);
@@ -580,7 +737,7 @@ async function main() {
         env.follow(S.x + 6, S.z);
       },
       update(_t, u) {
-        camera.fov = 52;
+        setFov(52);
         const S = BENCH_SEATS[0];
         camPath([
           { p: [S.x - 2.0, 1.55, S.z - 1.6], l: [S.x + 7, 0.9, S.z + 2.5] },
@@ -596,7 +753,7 @@ async function main() {
       },
       update(_t, u) {
         // 绕鼎半圈，正面铭文「靜山禪寺」转到镜头前
-        camera.fov = 46;
+        setFov(46);
         const a = 0.75 - 1.5 * glide(u);
         camera.position.set(INCENSE.x + Math.sin(a) * 3.0, 1.75, INCENSE.z + Math.cos(a) * 3.0);
         camera.lookAt(INCENSE.x, 1.0, INCENSE.z);
@@ -614,7 +771,7 @@ async function main() {
         env.follow(0, 0);
       },
       update(t, u) {
-        camera.fov = 58;
+        setFov(58);
         place(pool[0], -1.2, 6 - t * 1.1, Math.PI);
         place(pool[1], 1.0, 8 - t * 1.1, Math.PI);
         camPath([
@@ -630,7 +787,7 @@ async function main() {
         env.follow(0, -14);
       },
       update(_t, u) {
-        camera.fov = 62;
+        setFov(62);
         camPath([
           { p: [0, 2.3, -8.5], l: [0, 7.6, -11.5] },
           { p: [0, 2.5, -10.0], l: [0, 6.5, -16.5] },
@@ -644,7 +801,7 @@ async function main() {
         env.follow(8, -12);
       },
       update(_t, u) {
-        camera.fov = 52;
+        setFov(52);
         const z = -7.5 - 8 * glide(u);
         camera.position.set(8.6, 3.0, z);
         camera.lookAt(13.8, 3.6, z - 2.5);
@@ -657,7 +814,7 @@ async function main() {
         env.follow(0, -12);
       },
       update(t) {
-        camera.fov = 50;
+        setFov(50);
         camera.position.set(-0.4, 2.1, -9.4 - t * 0.12);
         camera.lookAt(0, 2.7, -19);
         while (rk < EVENTS.rosary.length && t >= EVENTS.rosary[rk]) {
@@ -676,7 +833,7 @@ async function main() {
         env.follow(DRUM.x, DRUM.z);
       },
       update(t, u) {
-        camera.fov = 50;
+        setFov(50);
         camPath([
           { p: [DRUM.x + 4.6, 1.9, DRUM.z + 3.8], l: [DRUM.x + 0.3, 1.7, DRUM.z] },
           { p: [DRUM.x + 4.0, 1.8, DRUM.z + 3.1], l: [DRUM.x + 0.3, 1.75, DRUM.z] },
@@ -700,7 +857,7 @@ async function main() {
         env.follow(D.x + 6, D.z);
       },
       update(t, u) {
-        camera.fov = 56;
+        setFov(56);
         const D = SIDE_HALLS[0];
         place(pool[1], D.x + 9.5, D.z + 7 - t * 0.9, Math.PI);
         camPath([
@@ -715,7 +872,7 @@ async function main() {
         env.follow(PAGODAS[1].x, PAGODAS[1].z);
       },
       update(_t, u) {
-        camera.fov = 56;
+        setFov(56);
         const P = PAGODAS[1];
         camPath([
           { p: [P.x - 5.5, 1.4, P.z + 6.5], l: [P.x, 4.0, P.z] },
@@ -736,7 +893,7 @@ async function main() {
         env.follow(0, -12);
       },
       update(_t, u) {
-        camera.fov = 60;
+        setFov(60);
         camPath([
           { p: [0, 5.6, -2.6], l: [0, 1.6, -15] },
           { p: [0, 4.6, -5.0], l: [0, 2.2, -17] },
@@ -751,7 +908,7 @@ async function main() {
         env.follow(BELL.x, BELL.z);
       },
       update(t, u) {
-        camera.fov = 52;
+        setFov(52);
         camPath([
           { p: [BELL.x + 3.0, 1.8, BELL.z + 5.4], l: [BELL.x - 0.4, 3.0, BELL.z] },
           { p: [BELL.x + 2.3, 2.1, BELL.z + 4.6], l: [BELL.x - 0.5, 3.2, BELL.z] },
@@ -769,7 +926,7 @@ async function main() {
         env.follow(0, -12);
       },
       update(t) {
-        camera.fov = 50;
+        setFov(50);
         camera.position.set(0.4, 2.1, -9.6 - t * 0.15);
         camera.lookAt(0, 2.7, -19);
         while (mk < EVENTS.moktak.length && t >= EVENTS.moktak[mk]) {
@@ -791,7 +948,7 @@ async function main() {
         env.follow(0, 10);
       },
       update(t, u) {
-        camera.fov = 60;
+        setFov(60);
         camPath([
           { p: [0, 15.5, 44], l: [0, 3.6, 2] },
           { p: [0, 12.2, 32], l: [0, 4.4, -3] },
@@ -805,14 +962,16 @@ async function main() {
       update() {},
       draw(t) {
         ctx.drawImage(paper, 0, 0);
-        inkTitle(ctx, '山寺', W / 2, 820, 360, t - 0.2, 0.9);
+        ctx.save();
+        portrait();
+        inkTitle(ctx, '山寺', 540, 820, 360, t - 0.2, 0.9);
         const a = clamp01((t - 0.9) / 0.5);
         ctx.save();
         ctx.globalAlpha = a;
         ctx.textAlign = 'center';
         ctx.font = '72px MSZ';
         ctx.fillStyle = '#2a2320';
-        ctx.fillText('一句话复刻韩国爆火的山寺', W / 2, 1110);
+        ctx.fillText('一句话复刻韩国爆火的山寺', 540, 1110);
         ctx.restore();
         const sa = clamp01((t - EVENTS.endSeal) / 0.18);
         if (sa > 0) seal(ctx, 948, 930, 96, '静山', sa, 1.25 - 0.25 * ease(sa));
@@ -822,12 +981,14 @@ async function main() {
         ctx.textAlign = 'center';
         ctx.font = '42px "Songti SC"';
         ctx.fillStyle = '#6b5f50';
-        ctx.fillText('浏览器打开即玩 · 五十人同坐一殿', W / 2, 1230);
+        ctx.fillText('浏览器打开即玩 · 五十人同坐一殿', 540, 1230);
+        ctx.restore();
         ctx.restore();
       },
     },
   };
   let struck = false;
+  let curDur = 4;
   let mk = 0;
   let rk = 0;
   let dk = 0;
@@ -971,6 +1132,7 @@ async function main() {
     if (!want.includes(shot.id)) continue;
     const S = shots[shot.id];
     const n = Math.round(shot.dur * FPS);
+    curDur = shot.dur;
     if (shot.time) {
       env.setMode(shot.time);
       props.setLanternLevel(env.lanternLevel);
@@ -1002,12 +1164,13 @@ async function main() {
           const view = shot.id === 'moktak' ? moktak : rosaryView;
           view.update(1 / FPS);
           ovr.render(view.scene, view.camera);
-          ctx.drawImage(ovr.domElement, 0, shot.id === 'moktak' ? 120 : 60);
+          ctx.drawImage(ovr.domElement, 0, ((shot.id === 'moktak' ? 120 : 60) * H) / 1920);
         } else ctx.drawImage(renderer.domElement, 0, 0);
         grade(i);
         header();
         caption(shot, t);
       }
+      if (CUT === 'explainer') subtitles(shot.start + t);
       const blob: Blob = await new Promise((r) => out.toBlob((b) => r(b!), 'image/jpeg', 0.93));
       await fetch(`/__promo/frame?shot=${shot.id}&i=${i}`, { method: 'POST', body: blob });
       if (i % 10 === 0) status(`${shot.id} ${i}/${n}`);
@@ -1064,13 +1227,13 @@ function paperCanvas() {
   // 朱红的日
   g.fillStyle = 'rgba(196,62,42,0.88)';
   g.beginPath();
-  g.arc(872, 1622, 60, 0, Math.PI * 2);
+  g.arc(W * 0.807, H * 0.845, 60 * Math.max(0.75, H / 1920), 0, Math.PI * 2);
   g.fill();
   // 三层水墨远山，越远越淡、越虚
   const layers = [
-    { base: 1560, amp: 150, alpha: 0.16, blur: 8, seed: 1 },
-    { base: 1660, amp: 170, alpha: 0.28, blur: 4, seed: 2 },
-    { base: 1790, amp: 130, alpha: 0.5, blur: 1.5, seed: 3 },
+    { base: H * 0.8125, amp: 150 * Math.max(0.6, H / 1920), alpha: 0.16, blur: 8, seed: 1 },
+    { base: H * 0.8646, amp: 170 * Math.max(0.6, H / 1920), alpha: 0.28, blur: 4, seed: 2 },
+    { base: H * 0.9323, amp: 130 * Math.max(0.6, H / 1920), alpha: 0.5, blur: 1.5, seed: 3 },
   ];
   for (const L of layers) {
     g.save();
