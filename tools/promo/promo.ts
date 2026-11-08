@@ -251,25 +251,21 @@ async function main() {
         ctx.font = '40px "Songti SC"';
         ctx.fillStyle = '#7a6c5a';
         ctx.fillText('只说了一句话：', 130, 452);
-        roundRect(ctx, 110, 480, 860, 250, 36);
+        roundRect(ctx, 110, 480, 860, 160, 36);
         ctx.fillStyle = 'rgba(255,252,245,0.94)';
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = 'rgba(60,40,25,0.28)';
         ctx.stroke();
-        const all = PROMPT_LINES.join('\n');
+        const all = PROMPT_LINES.join('');
         const shown = Math.floor(clamp01((t - EVENTS.titleType.from) / (EVENTS.titleType.perChar * all.length)) * all.length);
-        const typed = all.slice(0, shown).split('\n');
-        ctx.font = '52px "Songti SC"';
-        ctx.fillStyle = '#2f4f6f';
-        ctx.fillText(typed[0] || '', 160, 585);
+        const typed = all.slice(0, shown);
+        ctx.font = '60px "Songti SC"';
         ctx.fillStyle = '#2b2420';
-        ctx.fillText(typed[1] || '', 160, 672);
+        ctx.fillText(typed, 165, 582);
         if (shown < all.length || Math.floor(t * 2.5) % 2 === 0) {
-          const li = typed.length - 1;
-          const w = ctx.measureText(typed[li] || '').width;
-          ctx.fillStyle = '#2b2420';
-          ctx.fillRect(166 + w, li === 0 ? 545 : 632, 4, 54);
+          const w = ctx.measureText(typed).width;
+          ctx.fillRect(171 + w, 536, 4, 62);
         }
         ctx.restore();
         // 标题：一笔一笔写出来
@@ -827,9 +823,6 @@ async function main() {
         ctx.font = '42px "Songti SC"';
         ctx.fillStyle = '#6b5f50';
         ctx.fillText('浏览器打开即玩 · 五十人同坐一殿', W / 2, 1230);
-        ctx.font = '36px "Songti SC"';
-        ctx.fillStyle = '#8a7c68';
-        ctx.fillText('github.com/ChenJiangxi/sansatemple', W / 2, 1310);
         ctx.restore();
       },
     },
@@ -935,7 +928,7 @@ async function main() {
     g.save();
     g.shadowColor = 'rgba(0,0,0,0.7)';
     {
-      const quote = PROMPT_LINES[1];
+      const quote = PROMPT_LINES[PROMPT_LINES.length - 1];
       const fs = tall ? 60 : 52;
       g.font = `${fs}px "Songti SC"`;
       const tw = g.measureText(quote).width;

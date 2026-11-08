@@ -74,7 +74,7 @@ for (let b = nextBeat(startOf('drum') + 0.5); b < startOf('drum') + 3.6; b += BE
 const rosary = [];
 for (let b = nextBeat(startOf('rosary') + 0.3); b < startOf('rosary') + 3.7; b += BEAT / 2) rosary.push(b - startOf('rosary'));
 export const EVENTS = {
-  titleType: { from: 0.35, perChar: 0.075 },
+  titleType: { from: 0.35, perChar: 0.14 },
   titleReveal: DOWNBEAT,
   titleSeal: 2.9,
   bellStrike: bellHit - STRIKER_DELAY,
@@ -87,4 +87,5 @@ export const EVENTS = {
   endSeal: 1.6,
 };
 
-export const PROMPT_LINES = ['https://sansatemple.com/', '帮我复刻这个游戏'];
+// 画面里不出现任何网址：那一句话只留后半句
+export const PROMPT_LINES = ['帮我复刻这个游戏'];
