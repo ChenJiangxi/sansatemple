@@ -11,8 +11,8 @@ import { IncenseSpot, type IncenseView } from '../../src/world/incense';
 import { placeStatues } from '../../src/world/statues';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from '../../src/world/pbr';
 import { Monk, BOW_DURATION } from '../../src/monk';
-import { MoktakView } from '../../src/overlays';
-import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, CUSHIONS, CUSHION_ROWS, heightAt } from '../../src/layout';
+import { MoktakView, RosaryView } from '../../src/overlays';
+import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, DRUM, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, heightAt } from '../../src/layout';
 // @ts-ignore 共用的分镜表
 import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES } from './timeline.mjs';
 
@@ -107,6 +107,10 @@ async function main() {
   moktak.camera.aspect = W / H;
   moktak.camera.fov = 40;
   moktak.camera.updateProjectionMatrix();
+  const rosaryView = new RosaryView(ovrEnv);
+  rosaryView.camera.aspect = W / H;
+  rosaryView.camera.fov = 38;
+  rosaryView.camera.updateProjectionMatrix();
 
   // —— 香：院中香炉、佛前香炉 ——
   const sticks = (n: number, seed: number): IncenseView[] =>
@@ -133,6 +137,7 @@ async function main() {
   const me = new Monk();
   scene.add(me.root);
   me.root.visible = false;
+  const CUSHION_TOP = HALL.baseH + 0.12; // 和 main.ts 一致
   const hallSeats = CUSHIONS.filter((_, i) => (i * 7) % 10 < 6);
   let heroSeat: (typeof CUSHIONS)[number] | null = null;
   function fillHall(phase: number) {
@@ -140,7 +145,7 @@ async function main() {
     const ms = cast(hallSeats.length);
     ms.forEach((m, i) => {
       const st = hallSeats[i];
-      place(m, st.x, st.z, st.yaw, st.y);
+      place(m, st.x, st.z + 0.32, st.yaw, CUSHION_TOP);
       m.setAction('bow');
       m.actionTime = ((i * 0.37 + phase) % 1) * BOW_DURATION;
     });
@@ -485,6 +490,263 @@ async function main() {
         ])(u, camera);
       },
     },
+    // —— 清晨 ——
+    plaque: {
+      setup() {
+        cast(0);
+        env.follow(0, 64);
+      },
+      update(_t, u) {
+        camera.fov = 46;
+        camPath([
+          { p: [1.2, 2.6, 73.2], l: [0, 3.9, 68.3] },
+          { p: [0.3, 3.3, 71.0], l: [0, 3.95, 68.3] },
+        ])(u, camera);
+      },
+    },
+    leaves: {
+      setup() {
+        const ms = cast(1);
+        ms[0].setAction('walk');
+        ms[0].speed = 1.0;
+        env.follow(17, 42);
+      },
+      update(t, u) {
+        camera.fov = 60;
+        place(pool[0], 16.2 + t * 0.15, 46.5 - t * 1.0, Math.PI - 0.15);
+        camPath([
+          { p: [14.2, 0.45, 40.2], l: [17.6, 1.6, 44.5] },
+          { p: [14.6, 0.55, 40.8], l: [17.2, 2.2, 45.0] },
+        ])(u, camera);
+      },
+    },
+    // —— 白天·院子 ——
+    pond: {
+      setup() {
+        const ms = cast(2);
+        ms.forEach((m) => {
+          m.setAction('walk');
+          m.speed = 1.2;
+        });
+        env.follow(0, 52);
+      },
+      update(t, u) {
+        camera.fov = 54;
+        place(pool[0], -0.2, 57.5 - t * 1.2, Math.PI);
+        place(pool[1], 0.4, 59.5 - t * 1.2, Math.PI);
+        // 站在池岸西南角，斜望水面、荷叶和拱桥，背后是山门
+        camPath([
+          { p: [-10.5, 1.9, 44.2], l: [-0.5, 0.7, 53.5] },
+          { p: [-9.2, 1.7, 45.6], l: [0, 0.8, 54.0] },
+        ])(u, camera);
+      },
+    },
+    pagoda: {
+      setup() {
+        cast(0);
+        env.follow(PAGODAS[0].x, PAGODAS[0].z);
+      },
+      update(_t, u) {
+        camera.fov = 58;
+        const P = PAGODAS[0];
+        camPath([
+          { p: [P.x + 4.2, 1.2, P.z + 6.2], l: [P.x, 2.5, P.z] },
+          { p: [P.x + 4.8, 1.6, P.z + 6.8], l: [P.x, 10.5, P.z] },
+        ])(u, camera);
+      },
+    },
+    sideHall: {
+      setup() {
+        const ms = cast(2);
+        const D = SIDE_HALLS[0];
+        place(ms[0], D.x + 6.5, D.z - 2, -Math.PI / 2);
+        ms[0].setAction('hapjang');
+        place(ms[1], D.x + 9, D.z + 4, Math.PI);
+        ms[1].setAction('walk');
+        ms[1].speed = 1;
+        env.follow(D.x + 4, D.z);
+      },
+      update(t, u) {
+        camera.fov = 52;
+        const D = SIDE_HALLS[0];
+        place(pool[1], D.x + 9, D.z + 4 - t * 1.0, Math.PI);
+        const z = D.z + 5.5 - 9 * glide(u);
+        camera.position.set(D.x + 10.4, 2.3, z);
+        camera.lookAt(D.x + 4, 2.9, z - 1.5);
+      },
+    },
+    bench: {
+      setup() {
+        const ms = cast(1);
+        const S = BENCH_SEATS[0];
+        place(ms[0], S.x, S.z, S.yaw, heightAt(S.x, S.z));
+        ms[0].setAction('bench');
+        env.follow(S.x + 6, S.z);
+      },
+      update(_t, u) {
+        camera.fov = 52;
+        const S = BENCH_SEATS[0];
+        camPath([
+          { p: [S.x - 2.0, 1.55, S.z - 1.6], l: [S.x + 7, 0.9, S.z + 2.5] },
+          { p: [S.x - 1.6, 1.5, S.z - 1.2], l: [S.x + 7, 0.9, S.z + 2.0] },
+        ])(u, camera);
+      },
+    },
+    ding: {
+      setup() {
+        me.root.visible = false;
+        cast(0);
+        env.follow(0, 7);
+      },
+      update(_t, u) {
+        // 绕鼎半圈，正面铭文「靜山禪寺」转到镜头前
+        camera.fov = 46;
+        const a = 0.75 - 1.5 * glide(u);
+        camera.position.set(INCENSE.x + Math.sin(a) * 3.0, 1.75, INCENSE.z + Math.cos(a) * 3.0);
+        camera.lookAt(INCENSE.x, 1.0, INCENSE.z);
+      },
+    },
+    hallFront: {
+      setup() {
+        const ms = cast(2);
+        place(ms[0], -1.2, 6, Math.PI);
+        place(ms[1], 1.0, 8, Math.PI);
+        ms.forEach((m) => {
+          m.setAction('walk');
+          m.speed = 1.1;
+        });
+        env.follow(0, 0);
+      },
+      update(t, u) {
+        camera.fov = 58;
+        place(pool[0], -1.2, 6 - t * 1.1, Math.PI);
+        place(pool[1], 1.0, 8 - t * 1.1, Math.PI);
+        camPath([
+          { p: [3.4, 1.7, 11.5], l: [0.3, 3.2, -4] },
+          { p: [3.0, 3.8, 10.0], l: [0.3, 7.5, -5] },
+          { p: [2.6, 6.2, 8.5], l: [0.3, 10.5, -6] },
+        ])(u, camera);
+      },
+    },
+    ceiling: {
+      setup() {
+        fillHall(0.62);
+        env.follow(0, -14);
+      },
+      update(_t, u) {
+        camera.fov = 62;
+        camPath([
+          { p: [0, 2.3, -8.5], l: [0, 7.6, -11.5] },
+          { p: [0, 2.5, -10.0], l: [0, 6.5, -16.5] },
+          { p: [0, 2.7, -11.5], l: [0, 4.6, -20.5] },
+        ])(u, camera);
+      },
+    },
+    wall: {
+      setup() {
+        fillHall(0.25);
+        env.follow(8, -12);
+      },
+      update(_t, u) {
+        camera.fov = 52;
+        const z = -7.5 - 8 * glide(u);
+        camera.position.set(8.6, 3.0, z);
+        camera.lookAt(13.8, 3.6, z - 2.5);
+      },
+    },
+    rosary: {
+      setup() {
+        fillHall(0.85);
+        rk = 0;
+        env.follow(0, -12);
+      },
+      update(t) {
+        camera.fov = 50;
+        camera.position.set(-0.4, 2.1, -9.4 - t * 0.12);
+        camera.lookAt(0, 2.7, -19);
+        while (rk < EVENTS.rosary.length && t >= EVENTS.rosary[rk]) {
+          rosaryView.nudge(1);
+          rk++;
+        }
+      },
+    },
+    drum: {
+      setup() {
+        const ms = cast(1);
+        const d = buildings.drum;
+        place(ms[0], d.standX, d.standZ, d.standYaw, heightAt(d.standX, d.standZ));
+        ms[0].setAction('idle');
+        dk = 0;
+        env.follow(DRUM.x, DRUM.z);
+      },
+      update(t, u) {
+        camera.fov = 50;
+        camPath([
+          { p: [DRUM.x + 4.6, 1.9, DRUM.z + 3.8], l: [DRUM.x + 0.3, 1.7, DRUM.z] },
+          { p: [DRUM.x + 4.0, 1.8, DRUM.z + 3.1], l: [DRUM.x + 0.3, 1.75, DRUM.z] },
+        ])(u, camera);
+        while (dk < EVENTS.drum.length && t >= EVENTS.drum[dk]) {
+          buildings.drum.strike();
+          dk++;
+        }
+      },
+    },
+    // —— 夜 ——
+    nightSide: {
+      setup() {
+        const ms = cast(2);
+        const D = SIDE_HALLS[0];
+        place(ms[0], D.x + 6.8, D.z + 1, -Math.PI / 2);
+        ms[0].setAction('hapjang');
+        place(ms[1], D.x + 9.5, D.z + 7, Math.PI);
+        ms[1].setAction('walk');
+        ms[1].speed = 0.9;
+        env.follow(D.x + 6, D.z);
+      },
+      update(t, u) {
+        camera.fov = 56;
+        const D = SIDE_HALLS[0];
+        place(pool[1], D.x + 9.5, D.z + 7 - t * 0.9, Math.PI);
+        camPath([
+          { p: [D.x + 14.5, 2.2, D.z + 11], l: [D.x + 3, 2.6, D.z - 1] },
+          { p: [D.x + 13.0, 2.5, D.z + 8.5], l: [D.x + 3, 2.8, D.z - 1.5] },
+        ])(u, camera);
+      },
+    },
+    nightPagoda: {
+      setup() {
+        cast(0);
+        env.follow(PAGODAS[1].x, PAGODAS[1].z);
+      },
+      update(_t, u) {
+        camera.fov = 56;
+        const P = PAGODAS[1];
+        camPath([
+          { p: [P.x - 5.5, 1.4, P.z + 6.5], l: [P.x, 4.0, P.z] },
+          { p: [P.x - 6.5, 1.8, P.z + 7.8], l: [P.x, 8.0, P.z] },
+        ])(u, camera);
+      },
+    },
+    crowd: {
+      setup() {
+        me.root.visible = false;
+        const ms = cast(CUSHIONS.length);
+        ms.forEach((m, i) => {
+          const st = CUSHIONS[i];
+          place(m, st.x, st.z + 0.32, st.yaw, CUSHION_TOP);
+          m.setAction('bow');
+          m.actionTime = ((i * 0.29) % 1) * BOW_DURATION;
+        });
+        env.follow(0, -12);
+      },
+      update(_t, u) {
+        camera.fov = 60;
+        camPath([
+          { p: [0, 5.6, -2.6], l: [0, 1.6, -15] },
+          { p: [0, 4.6, -5.0], l: [0, 2.2, -17] },
+        ])(u, camera);
+      },
+    },
     bell: {
       setup() {
         const ms = cast(1);
@@ -574,6 +836,8 @@ async function main() {
   };
   let struck = false;
   let mk = 0;
+  let rk = 0;
+  let dk = 0;
 
   // —— 封面：黄昏的大殿前，一位小和尚合十；上方大字标题，下方那一句话 ——
   async function renderCover(cw: number, ch: number, id: string) {
@@ -737,14 +1001,15 @@ async function main() {
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
         render3d();
-        if (shot.id === 'moktak') {
+        if (shot.id === 'moktak' || shot.id === 'rosary') {
           ctx.save();
           ctx.filter = 'blur(18px) brightness(0.6) saturate(0.85)';
           ctx.drawImage(renderer.domElement, -60, -100, W + 120, H + 200);
           ctx.restore();
-          moktak.update(1 / FPS);
-          ovr.render(moktak.scene, moktak.camera);
-          ctx.drawImage(ovr.domElement, 0, 120);
+          const view = shot.id === 'moktak' ? moktak : rosaryView;
+          view.update(1 / FPS);
+          ovr.render(view.scene, view.camera);
+          ctx.drawImage(ovr.domElement, 0, shot.id === 'moktak' ? 120 : 60);
         } else ctx.drawImage(renderer.domElement, 0, 0);
         grade(i);
         header();

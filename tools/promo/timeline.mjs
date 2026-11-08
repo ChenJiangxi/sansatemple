@@ -11,22 +11,42 @@ export const DOWNBEAT = 1.75;
 
 // 诗句出自唐·常建《题破山寺后禅院》；殿内几个镜头用名目做字幕
 export const SHOTS = [
-  { id: 'title', dur: 4.4 },
-  { id: 'gate', dur: 4.8, time: 'dawn', line: '清晨入古寺' },
-  { id: 'grove', dur: 3.8, time: 'dawn', line: '初日照高林' },
-  { id: 'bridge', dur: 4.2, time: 'day', line: '潭影空人心' },
-  { id: 'court', dur: 4.4, time: 'day', line: '禅房花木深' },
-  { id: 'incense', dur: 3.6, time: 'day', line: '心香一瓣' },
-  { id: 'hallEnter', dur: 4.4, time: 'day', line: '大雄宝殿' },
-  { id: 'rows', dur: 4.6, time: 'day', line: '万籁此俱寂' },
-  { id: 'buddha', dur: 4.0, time: 'day', line: '释迦牟尼佛' },
-  { id: 'triad', dur: 3.4, time: 'day', line: '一佛二弟子' },
-  { id: 'altar', dur: 3.4, time: 'day', line: '香花灯烛' },
-  { id: 'bowClose', dur: 3.6, time: 'day', line: '五体投地' },
-  { id: 'bell', dur: 3.0, time: 'day', line: '但余钟磬音' },
-  { id: 'moktak', dur: 3.0, time: 'day' },
-  { id: 'night', dur: 4.0, time: 'night', line: '灯火照禅心' },
-  { id: 'end', dur: 4.2 },
+  { id: 'title', dur: 5.0 },
+  // 清晨
+  { id: 'gate', dur: 5.0, time: 'dawn', line: '清晨入古寺' },
+  { id: 'plaque', dur: 3.6, time: 'dawn' },
+  { id: 'grove', dur: 4.5, time: 'dawn', line: '初日照高林' },
+  { id: 'leaves', dur: 4.0, time: 'dawn' },
+  // 白天·院子
+  { id: 'pond', dur: 4.5, time: 'day', line: '潭影空人心' },
+  { id: 'bridge', dur: 4.5, time: 'day', line: '曲径通幽处' },
+  { id: 'court', dur: 5.0, time: 'day', line: '禅房花木深' },
+  { id: 'pagoda', dur: 4.5, time: 'day', line: '八角七层塔' },
+  { id: 'sideHall', dur: 4.5, time: 'day', line: '观音殿' },
+  { id: 'bench', dur: 4.0, time: 'day', line: '坐看云起时' },
+  { id: 'incense', dur: 4.5, time: 'day', line: '心香一瓣' },
+  { id: 'ding', dur: 4.5, time: 'day', line: '青铜宝鼎' },
+  // 大雄宝殿
+  { id: 'hallFront', dur: 4.5, time: 'day', line: '大雄宝殿' },
+  { id: 'hallEnter', dur: 4.5, time: 'day' },
+  { id: 'rows', dur: 4.5, time: 'day', line: '万籁此俱寂' },
+  { id: 'ceiling', dur: 4.5, time: 'day', line: '华盖经幡' },
+  { id: 'buddha', dur: 4.5, time: 'day', line: '释迦牟尼佛' },
+  { id: 'triad', dur: 4.0, time: 'day', line: '一佛二弟子' },
+  { id: 'wall', dur: 4.0, time: 'day', line: '千佛壁' },
+  { id: 'altar', dur: 4.0, time: 'day', line: '香花灯烛' },
+  { id: 'bowClose', dur: 4.5, time: 'day', line: '五体投地' },
+  { id: 'rosary', dur: 4.0, time: 'day', line: '百八念珠' },
+  // 黄昏·钟鼓
+  { id: 'bell', dur: 4.0, time: 'dusk', line: '但余钟磬音' },
+  { id: 'drum', dur: 4.0, time: 'dusk', line: '晨钟暮鼓' },
+  { id: 'moktak', dur: 3.5, time: 'dusk' },
+  // 夜
+  { id: 'nightSide', dur: 4.5, time: 'night', line: '灯火照禅心' },
+  { id: 'nightPagoda', dur: 4.0, time: 'night' },
+  { id: 'night', dur: 5.0, time: 'night' },
+  { id: 'crowd', dur: 4.5, time: 'night', line: '五十人同坐一殿' },
+  { id: 'end', dur: 4.5 },
 ];
 
 // 每个镜头在成片里的起点（秒）
@@ -45,7 +65,14 @@ const MOKTAK_DELAY = 0.07; // 木槌落下到碰到木鱼
 const STRIKER_DELAY = 1.05; // 撞木开始摆到碰到钟
 const bellHit = nextBeat(startOf('bell') + 1.2) - startOf('bell');
 const moktak = [];
-for (let b = nextBeat(startOf('moktak') + 0.25); b < startOf('moktak') + 2.75; b += BEAT / 2) moktak.push(b - startOf('moktak') - MOKTAK_DELAY);
+for (let b = nextBeat(startOf('moktak') + 0.25); b < startOf('moktak') + 3.2; b += BEAT / 2) moktak.push(b - startOf('moktak') - MOKTAK_DELAY);
+// 鼓：鼓槌抬起到打中约 0.32 秒
+const DRUM_DELAY = 0.32;
+const drum = [];
+for (let b = nextBeat(startOf('drum') + 0.5); b < startOf('drum') + 3.6; b += BEAT) drum.push(b - startOf('drum') - DRUM_DELAY);
+// 念珠：每半拍拨一颗
+const rosary = [];
+for (let b = nextBeat(startOf('rosary') + 0.3); b < startOf('rosary') + 3.7; b += BEAT / 2) rosary.push(b - startOf('rosary'));
 export const EVENTS = {
   titleType: { from: 0.35, perChar: 0.075 },
   titleReveal: DOWNBEAT,
@@ -54,6 +81,9 @@ export const EVENTS = {
   bellHit,
   moktak,
   moktakDelay: MOKTAK_DELAY,
+  drum,
+  drumDelay: DRUM_DELAY,
+  rosary,
   endSeal: 1.6,
 };
 

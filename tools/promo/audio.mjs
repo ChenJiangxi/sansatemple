@@ -228,77 +228,110 @@ function woodblock() {
 }
 const pengling = () => partials(2620, [[1, 1, 1.3], [2.42, 0.4, 0.6], [4.1, 0.15, 0.3]], 2, 2.5);
 
-// —— 编排 ——
+// —— 编排：按镜头分段，整段对齐 72 拍/分的小节 ——
 const N = {
   E2: 82.41, G2: 98, A2: 110, B2: 123.47, D2: 73.42, D3: 146.83, E3: 164.81, Fs3: 185, G3: 196, A3: 220, B3: 246.94,
   D4: 293.66, E4: 329.63, Fs4: 369.99, G4: 392, A4: 440, B4: 493.88, D5: 587.33, E5: 659.26, Fs5: 739.99, A5: 880,
 };
 const play = (time, note, gain = 0.5, o = {}, pan = 0) => add(qin(N[note], o.dur ?? 5, o), time, gain, pan, 0.35);
 const barT = (k) => DOWNBEAT + k * BAR;
+const barAt = (t) => Math.max(0, Math.ceil((t - DOWNBEAT) / BAR - 0.2));
+const LAST = barAt(at('end')); // 收束和弦落在片尾这一小节
+const SEC = {
+  dawn: [0, barAt(at('pond'))],
+  day: [barAt(at('pond')), barAt(at('hallFront'))],
+  hall: [barAt(at('hallFront')), barAt(at('bell'))],
+  dusk: [barAt(at('bell')), barAt(at('nightSide'))],
+  night: [barAt(at('nightSide')), LAST],
+};
+const secOf = (k) => Object.keys(SEC).find((n) => k >= SEC[n][0] && k < SEC[n][1]) ?? 'end';
 const CH = {
   D: { pad: ['D3', 'A3', 'E4', 'Fs4'], arp: ['D3', 'A3', 'D4', 'E4', 'Fs4', 'E4', 'D4', 'A3'], bass: 'D2' },
   Bm: { pad: ['B2', 'Fs3', 'A3', 'D4'], arp: ['B2', 'Fs3', 'B3', 'D4', 'E4', 'D4', 'B3', 'Fs3'], bass: 'B2' },
   G: { pad: ['G2', 'D3', 'B3', 'E4'], arp: ['G2', 'D3', 'G3', 'B3', 'D4', 'B3', 'G3', 'D3'], bass: 'G2' },
   A: { pad: ['A2', 'E3', 'A3', 'D4'], arp: ['A2', 'E3', 'A3', 'B3', 'E4', 'B3', 'A3', 'E3'], bass: 'A2' },
 };
-const CHORDS = ['D', 'Bm', 'G', 'A', 'D', 'Bm', 'G', 'A', 'D', 'Bm', 'G', 'A', 'D', 'G', 'A', 'D'];
-// 笛子旋律：[小节, 第几拍, 音, 拍数]
-const MELODY = [
-  [1, 0, 'A4', 2], [1, 2, 'B4', 1], [1, 3, 'A4', 1],
-  [2, 0, 'Fs4', 2], [2, 2, 'E4', 1], [2, 3, 'D4', 1],
-  [3, 0, 'E4', 1.5], [3, 1.5, 'Fs4', 0.5], [3, 2, 'A4', 1], [3, 3, 'B4', 1],
-  [4, 0, 'A4', 3], [4, 3, 'Fs4', 1],
-  [5, 0, 'D5', 2], [5, 2, 'B4', 1], [5, 3, 'A4', 1],
-  [6, 0, 'B4', 1.5], [6, 1.5, 'D5', 0.5], [6, 2, 'E5', 2],
-  [7, 0, 'D5', 1], [7, 1, 'B4', 1], [7, 2, 'A4', 1], [7, 3, 'Fs4', 1],
-  [8, 0, 'E4', 2], [8, 2, 'Fs4', 1], [8, 3, 'A4', 1],
-  [9, 0, 'Fs5', 2], [9, 2, 'E5', 1], [9, 3, 'D5', 1],
-  [10, 0, 'B4', 2], [10, 2, 'D5', 2],
-  [11, 0, 'A4', 3], [11, 3, 'B4', 0.5], [11, 3.5, 'A4', 0.5],
-  [14, 0, 'E4', 2], [14, 2, 'Fs4', 1], [14, 3, 'A4', 1],
-  [15, 0, 'D4', 4.6],
-];
-{
-  let prevF = 0, prevEnd = -9;
-  for (const [bar, beat, note, len] of MELODY) {
-    const t0 = barT(bar) + beat * BEAT, f = N[note];
-    const legato = Math.abs(t0 - prevEnd) < 0.05;
-    add(dizi(f, len * BEAT - 0.04, legato ? prevF : 0), t0, 0.2, 0.08, 0.45);
-    prevF = f;
-    prevEnd = t0 + len * BEAT;
-  }
-}
-// 和声、低音、古筝
-CHORDS.forEach((name, k) => {
-  const c = CH[name], t0 = barT(k);
-  if (k !== 13 || true) add(pad(c.pad.map((n) => N[n]), BAR + 1.2), t0 - 0.15, k === 0 ? 0.05 : 0.075, 0, 0.4);
-  if (k >= 1 && k !== 12) play(t0, c.bass, 0.24, { t60: 4, dur: 4.5, lp: 1300 }, 0);
-  const density = k === 12 ? 0 : k >= 9 && k <= 11 ? 2 : k === 13 ? 2 : 1; // 1 = 八分音符，2 = 四分音符
-  if (!density) return;
-  const g = k === 0 ? 0.08 : k === 13 ? 0.09 : 0.14;
+const CYCLE = ['D', 'Bm', 'G', 'A'];
+const chordOf = (k) => (k >= LAST ? 'D' : CYCLE[k % 4]);
+const PAD_GAIN = { dawn: 0.06, day: 0.075, hall: 0.085, dusk: 0.07, night: 0.06, end: 0.07 };
+for (let k = 0; k <= LAST; k++) {
+  const c = CH[chordOf(k)], t0 = barT(k), sec = secOf(k);
+  add(pad(c.pad.map((n) => N[n]), k === LAST ? 5 : BAR + 1.2), t0 - 0.15, k === 0 ? 0.045 : PAD_GAIN[sec], 0, 0.4);
+  if (k >= 1 && k < LAST) play(t0, c.bass, sec === 'dusk' ? 0.16 : 0.22, { t60: 4, dur: 4.5, lp: 1300 }, 0);
+  // 古筝：清晨、白天、夜里八分音符；殿内四分音符；黄昏只在木鱼那几小节轻轻弹
+  if (k === LAST) continue;
+  let step = 1, g = 0.13;
+  if (k === 0) g = 0.08;
+  else if (sec === 'hall') (step = 2), (g = 0.1);
+  else if (sec === 'dusk') (step = 2), (g = 0.07);
+  else if (sec === 'night') g = 0.1;
   c.arp.forEach((n, i) => {
-    if (i % density) return;
-    if (k === 15 && i > 3) return;
+    if (i % step) return;
     zheng(N[n], i === 0 ? g * 1.3 : g, t0 + i * (BEAT / 2), ((i % 4) - 1.5) * 0.25);
   });
-});
-// 古筝刮奏：进入新段落前一串上行
-for (const k of [5, 9, 14]) {
-  const run = ['D4', 'E4', 'Fs4', 'A4', 'B4', 'D5', 'E5', 'Fs5', 'A5'];
-  run.forEach((n, i) => zheng(N[n], 0.08 + i * 0.006, barT(k) - 0.42 + i * 0.05, -0.4 + i * 0.1));
 }
-// 节奏：堂鼓 + 木鱼（上香到大殿），殿内转为木鱼每拍轻敲
-for (let k = 5; k <= 11; k++) {
+// 收束：片尾一个分解和弦
+['D3', 'A3', 'D4', 'Fs4', 'A4'].forEach((note, i) => play(barT(LAST) + i * 0.1, note, 0.28, { t60: 6, dur: 4 }, -0.3 + i * 0.15));
+// 古筝刮奏：白天、殿内、夜里开头
+for (const k of [SEC.day[0], SEC.hall[0], SEC.night[0]]) {
+  const run = ['D4', 'E4', 'Fs4', 'A4', 'B4', 'D5', 'E5', 'Fs5', 'A5'];
+  run.forEach((n, i) => zheng(N[n], 0.07 + i * 0.006, barT(k) - 0.42 + i * 0.05, -0.4 + i * 0.1));
+}
+
+// 笛子旋律：每段四小节，[小节, 拍, 音, 拍数]
+const PH = {
+  P1: [[0, 0, 'A4', 2], [0, 2, 'B4', 1], [0, 3, 'A4', 1], [1, 0, 'Fs4', 2], [1, 2, 'E4', 1], [1, 3, 'D4', 1], [2, 0, 'E4', 1.5], [2, 1.5, 'Fs4', 0.5], [2, 2, 'A4', 1], [2, 3, 'B4', 1], [3, 0, 'A4', 3], [3, 3, 'Fs4', 1]],
+  P2: [[0, 0, 'D5', 2], [0, 2, 'B4', 1], [0, 3, 'A4', 1], [1, 0, 'B4', 1.5], [1, 1.5, 'D5', 0.5], [1, 2, 'E5', 2], [2, 0, 'D5', 1], [2, 1, 'B4', 1], [2, 2, 'A4', 1], [2, 3, 'Fs4', 1], [3, 0, 'E4', 2], [3, 2, 'Fs4', 1], [3, 3, 'A4', 1]],
+  P1b: [[0, 0, 'A4', 1], [0, 1, 'D5', 1], [0, 2, 'B4', 1], [0, 3, 'A4', 1], [1, 0, 'Fs4', 2], [1, 2, 'A4', 1], [1, 3, 'E4', 1], [2, 0, 'D4', 1], [2, 1, 'E4', 1], [2, 2, 'Fs4', 1], [2, 3, 'A4', 1], [3, 0, 'B4', 3], [3, 3, 'A4', 1]],
+  P2b: [[0, 0, 'E5', 2], [0, 2, 'D5', 1], [0, 3, 'B4', 1], [1, 0, 'A4', 1.5], [1, 1.5, 'B4', 0.5], [1, 2, 'D5', 2], [2, 0, 'B4', 1], [2, 1, 'A4', 1], [2, 2, 'Fs4', 1], [2, 3, 'E4', 1], [3, 0, 'D4', 4]],
+  P5: [[0, 0, 'Fs5', 1.5], [0, 1.5, 'E5', 0.5], [0, 2, 'D5', 2], [1, 0, 'B4', 1], [1, 1, 'D5', 1], [1, 2, 'E5', 2], [2, 0, 'A5', 2], [2, 2, 'Fs5', 1], [2, 3, 'E5', 1], [3, 0, 'D5', 4]],
+  P3: [[0, 0, 'Fs5', 2], [0, 2, 'E5', 1], [0, 3, 'D5', 1], [1, 0, 'B4', 2], [1, 2, 'D5', 2], [2, 0, 'A4', 3], [2, 3, 'B4', 0.5], [2, 3.5, 'A4', 0.5], [3, 0, 'Fs4', 4]],
+  P3b: [[0, 0, 'D5', 2], [0, 2, 'E5', 2], [1, 0, 'Fs5', 3], [1, 3, 'E5', 1], [2, 0, 'D5', 2], [2, 2, 'B4', 2], [3, 0, 'A4', 4]],
+  P5b: [[0, 0, 'B4', 2], [0, 2, 'A4', 1], [0, 3, 'Fs4', 1], [1, 0, 'E4', 2], [1, 2, 'Fs4', 2], [2, 0, 'A4', 3], [2, 3, 'B4', 1], [3, 0, 'A4', 4]],
+  P4: [[0, 0, 'A4', 2], [0, 2, 'Fs4', 2], [1, 0, 'E4', 1.5], [1, 1.5, 'D4', 0.5], [1, 2, 'E4', 2], [2, 0, 'Fs4', 2], [2, 2, 'A4', 1], [2, 3, 'B4', 1], [3, 0, 'A4', 4]],
+  P6: [[0, 0, 'E4', 2], [0, 2, 'Fs4', 1], [0, 3, 'A4', 1], [1, 0, 'B4', 2], [1, 2, 'A4', 1], [1, 3, 'Fs4', 1]],
+};
+// 旋律从哪个镜头开始；与上一段不重叠，也不跨进下一个大段
+const SCHEDULE = [['gate', 'P1'], ['leaves', 'P2'], ['bridge', 'P1b'], ['sideHall', 'P2b'], ['ding', 'P5'], ['hallEnter', 'P3'], ['buddha', 'P3b'], ['altar', 'P5b'], ['nightSide', 'P4'], ['night', 'P6']];
+{
+  let free = 1, prevF = 0, prevEnd = -9;
+  const placed = [];
+  for (const [shot, name] of SCHEDULE) {
+    const k0 = Math.max(barAt(at(shot)), free);
+    const bars = Math.max(...PH[name].map((n) => n[0])) + 1;
+    const sec = secOf(k0);
+    // 旋律不进黄昏钟鼓那几小节，也不越过片尾；放不下就跳过
+    const blocked = (k) => (k >= SEC.dusk[0] && k < SEC.dusk[1]) || k >= LAST;
+    if ([...Array(bars).keys()].some((i) => blocked(k0 + i))) continue;
+    placed.push(`${name}@${k0}`);
+    for (const [bar, beat, note, len] of PH[name]) {
+      const t0 = barT(k0 + bar) + beat * BEAT, f = N[note];
+      const legato = Math.abs(t0 - prevEnd) < 0.05;
+      add(dizi(f, len * BEAT - 0.04, legato ? prevF : 0), t0, sec === 'night' ? 0.17 : 0.2, 0.08, 0.45);
+      prevF = f;
+      prevEnd = t0 + len * BEAT;
+    }
+    free = k0 + bars;
+  }
+  // 最后一个音落在片尾
+  add(dizi(N.D4, BEAT * 4.5, prevF), barT(LAST), 0.17, 0.08, 0.5);
+  console.log('旋律：' + placed.join(' '));
+}
+
+// 节奏：院子里堂鼓 + 木鱼；殿内木鱼每拍轻敲、碰铃，「万籁此俱寂」那两个镜头全部停下
+const quiet = [at('rows'), at('buddha')];
+for (let k = 1; k < LAST; k++) {
+  const sec = secOf(k);
   for (let b = 0; b < 4; b++) {
     const t0 = barT(k) + b * BEAT;
-    if (k <= 8) {
-      if (b === 0) add(drum(), t0, 0.22, 0, 0.2);
-      if (b === 2) add(drum(), t0, 0.13, 0, 0.2);
-      if (b === 1 || b === 3) add(woodblock(), t0, 0.07, 0.3, 0.2);
-    } else {
-      if (b === 0) add(drum(), t0, 0.14, 0, 0.25);
-      add(woodblock(), t0, 0.05, 0.3, 0.25);
-      if (b === 0) add(pengling(), t0, 0.06, -0.3, 0.5);
+    if (sec === 'day' && t0 >= at('court')) {
+      if (b === 0) add(drum(), t0, 0.2, 0, 0.2);
+      if (b === 2) add(drum(), t0, 0.12, 0, 0.2);
+      if (b === 1 || b === 3) add(woodblock(), t0, 0.06, 0.3, 0.2);
+    } else if (sec === 'hall' && t0 >= at('hallEnter') && !(t0 >= quiet[0] && t0 < quiet[1]) && t0 < at('rosary')) {
+      if (b === 0) add(drum(), t0, 0.1, 0, 0.25);
+      add(woodblock(), t0, 0.045, 0.3, 0.25);
+      if (b === 0) add(pengling(), t0, 0.05, -0.3, 0.5);
     }
   }
 }
@@ -306,7 +339,6 @@ for (let k = 5; k <= 11; k++) {
 // 片头
 play(0.12, 'D3', 0.45, { t60: 6, dur: 6 }, -0.1);
 play(0.14, 'A2', 0.25, { t60: 6, dur: 6 }, 0.1);
-add(pad(CH.D.pad.map((n) => N[n]), 2.2), 0, 0.04, 0, 0.4);
 {
   const chars = [...PROMPT_LINES.join('')];
   chars.forEach((_, i) => add(tick(), EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
@@ -314,28 +346,28 @@ add(pad(CH.D.pad.map((n) => N[n]), 2.2), 0, 0.04, 0, 0.4);
 add(harm(N.A5), EVENTS.titleReveal, 0.14, 0.2, 0.5);
 add(qing(), EVENTS.titleSeal, 0.26, 0.25, 0.45);
 
-// 银杏林里的鸟
-const gr = at('grove');
-for (const dt of [0.4, 1.5, 2.6]) add(bird(), gr + dt, 0.03, rnd() - 0.5, 0.4);
-// 殿内低声齐诵：从进殿起，到撞钟前收住
-const h = at('hallEnter');
-add(chant(at('bell') - h + 0.6), h, 1.1, 0, 0.5);
-// 钟、木鱼
+// 清晨的鸟
+for (const [shot, dts] of [['grove', [0.4, 1.6, 2.9]], ['leaves', [0.8, 2.4]], ['pond', [1.2]]]) for (const dt of dts) add(bird(), at(shot) + dt, 0.03, rnd() - 0.5, 0.4);
+// 殿内低声齐诵：从进殿到撞钟前
+add(chant(at('bell') - at('hallEnter') + 0.6), at('hallEnter'), 1.1, 0, 0.5);
+// 念珠一颗颗拨过的轻响
+for (const dt of EVENTS.rosary) add(woodblock(), at('rosary') + dt, 0.025, 0.2, 0.2);
+// 黄昏：钟、鼓、木鱼
 add(templeBell(), at('bell') + EVENTS.bellHit, 0.2, -0.1, 0.25);
+for (const dt of EVENTS.drum) add(drum(), at('drum') + dt + EVENTS.drumDelay, 0.5, 0.15, 0.35);
 for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakDelay, 0.34, 0.1, 0.25);
 // 夜里的虫鸣
 {
-  const nt = at('night');
-  const n = Math.round(4.0 * SR), cr = new Float32Array(n);
+  const t0 = at('nightSide'), dur = at('end') + 1 - t0;
+  const n = Math.round(dur * SR), cr = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SR;
     const pulse = Math.max(0, Math.sin(2 * Math.PI * 28 * t)) * (Math.sin(2 * Math.PI * 0.9 * t) > 0.2 ? 1 : 0);
-    cr[i] = Math.sin(2 * Math.PI * 4400 * t) * pulse * Math.min(1, t / 0.5) * Math.min(1, (4.0 - t) / 0.5);
+    cr[i] = Math.sin(2 * Math.PI * 4400 * t) * pulse * Math.min(1, t / 0.8) * Math.min(1, (dur - t) / 0.8);
   }
-  add(cr, nt, 0.01, 0.5, 0.3);
+  add(cr, t0, 0.01, 0.5, 0.3);
 }
-// 片尾：收束和弦、磬、泛音
-['D3', 'A3', 'D4', 'Fs4'].forEach((note, i) => play(barT(15) + i * 0.1, note, 0.3, { t60: 6, dur: 4 }, -0.3 + i * 0.2));
+// 片尾：磬、泛音
 add(qing(), at('end') + EVENTS.endSeal, 0.24, 0.2, 0.45);
 add(harm(N.D5 * 2), at('end') + 2.6, 0.1, -0.2, 0.6);
 
