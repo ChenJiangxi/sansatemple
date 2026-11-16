@@ -6,6 +6,8 @@ import { t, randomName, onLangChange, type Key } from './i18n';
 import { Environment, buildTerrain, type TimeMode } from './world/environment';
 import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
+import { floatText, Rhythm, Charge, leafPile, waterRing, type QuestDef } from './play';
+import { LEVELS, levelOf } from './progress';
 import { preloadTreeTextures } from './world/ez-textures';
 import { loadHead, REAL } from './body-real';
 import { buildProps } from './world/props';
@@ -308,7 +310,8 @@ async function start() {
   myTag.className = 'tag';
   ui.tags.appendChild(myTag);
   function renderMyTag() {
-    myTag.innerHTML = `<span class="me">${t('me')}</span>${escapeHtml(name)}`;
+    const lv = LEVELS[levelOf(progress.points())];
+    myTag.innerHTML = `<span class="me">${t('me')}</span><span class="title">${t(lv.key as Key)}</span>${escapeHtml(name)}`;
   }
   renderMyTag();
 
@@ -318,6 +321,7 @@ async function start() {
     bowsToday++;
     localStorage.setItem('sansa.bows', JSON.stringify({ date: today(), n: bowsToday }));
     progress.add('bow');
+    gain(2);
     award('bow');
     refreshStatus();
   };
@@ -361,6 +365,15 @@ async function start() {
     n.bubble.textContent = lines[i];
     n.until = performance.now() + 4500;
   }
+  // 僧人对你说一句指定的话（寺务）
+  function sayText(id: number, text: string) {
+    const n = npcUi.find((x) => x.r.id === id);
+    if (!n) return;
+    n.bubble.textContent = text;
+    n.until = performance.now() + 5500;
+    n.lastAmbient = performance.now();
+  }
+
   // 僧人做事时自言自语：只在你走得够近时冒一句，每人二十秒内最多一句
   function murmur(id: number, key: string) {
     const n = npcUi.find((x) => x.r.id === id);
@@ -374,6 +387,153 @@ async function start() {
     n.bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
     n.until = now + 4200;
   }
+  // —— 寺务：扫地僧请你扫落叶，小沙弥请你浇树；头上有「！」就是有事找你 ——
+  const QUESTS: QuestDef[] = [
+    {
+      id: 'sweep', giver: residents.ids.sweeper, action: 'sweep', seconds: 3.2, points: 5, reward: 30, icon: '扫',
+      targets: ([[-9.8, 29.2], [8.6, 33.2], [-16.6, 40.4]] as const).map(([x, z]) => ({ x, z, standX: x + 0.9, standZ: z + 0.5, yaw: Math.atan2(-0.9, -0.5) })),
+    },
+    {
+      id: 'water', giver: residents.ids.waterNovice, action: 'water', seconds: 3.2, points: 5, reward: 30, icon: '浇',
+      targets: ([[-19, 4], [19, 4], [-22, 17]] as const).map(([x, z]) => ({ x, z, standX: x, standZ: z + 1.35, yaw: Math.PI })),
+    },
+  ];
+  const QTEXT = {
+    sweep: { ask: 'questSweepAsk', track: 'questSweepTrack', remind: 'questSweepRemind', thanks: 'questSweepThanks', who: 'roleSweeper' },
+    water: { ask: 'questWaterAsk', track: 'questWaterTrack', remind: 'questWaterRemind', thanks: 'questWaterThanks', who: 'roleNovice' },
+  } as const;
+  type QVis = { update(dt: number, time: number): void; done(): void; hit: THREE.Mesh; mark: HTMLElement };
+  const qRun = QUESTS.map((q) => {
+    const giverMark = document.createElement('div');
+    giverMark.className = 'quest-mark giver';
+    giverMark.textContent = '！';
+    ui.tags.appendChild(giverMark);
+    return { q, giverMark, vis: new Map<number, QVis>() };
+  });
+  const qPill = document.createElement('div');
+  qPill.className = 'pill quest-pill';
+  qPill.hidden = true;
+  ui.root.appendChild(qPill);
+  let questWork: { o: (typeof qRun)[number]; i: number; until: number } | null = null;
+  function questShow(o: (typeof qRun)[number]) {
+    const st = progress.quest(o.q.id);
+    if (!st || st.phase !== 'active') return;
+    o.q.targets.forEach((tg, i) => {
+      if (st.got.includes(i) || o.vis.has(i)) return;
+      const hit = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 1.4, 12), new THREE.MeshBasicMaterial({ visible: false }));
+      hit.position.set(tg.x, 0.7, tg.z);
+      hit.userData.interact = { type: 'quest', q: o.q.id, i };
+      scene.add(hit);
+      interactives.push(hit);
+      const mark = document.createElement('div');
+      mark.className = 'quest-mark';
+      mark.textContent = o.q.icon;
+      ui.tags.appendChild(mark);
+      let v: QVis;
+      if (o.q.action === 'sweep') {
+        const pile = leafPile(tg.x, tg.z, i + 3);
+        scene.add(pile.group);
+        v = { update: (dt) => pile.update(dt), done: () => pile.sweep(), hit, mark };
+      } else {
+        const ring = waterRing(tg.x, tg.z);
+        scene.add(...ring.meshes);
+        v = { update: (dt, time) => ring.update(dt, time), done: () => ring.water(), hit, mark };
+      }
+      o.vis.set(i, v);
+    });
+  }
+  function questPill() {
+    for (const o of qRun) {
+      const st = progress.quest(o.q.id);
+      if (st && st.phase !== 'done') {
+        const tx = QTEXT[o.q.id];
+        qPill.innerHTML = `<b>${t('questTitle')}</b>${st.phase === 'ready' ? t('questReport', { who: t(tx.who) }) : t(tx.track, { n: st.got.length, m: o.q.targets.length })}`;
+        qPill.hidden = false;
+        return;
+      }
+    }
+    qPill.hidden = true;
+  }
+  qRun.forEach(questShow);
+  questPill();
+  // 点到交付寺务的僧人：接活、提醒、或者回禀
+  function questNpc(id: number) {
+    const o = qRun.find((x) => x.q.giver === id);
+    if (!o) return false;
+    const st = progress.quest(o.q.id);
+    const tx = QTEXT[o.q.id];
+    if (st?.phase === 'done') return false;
+    if (!st) {
+      progress.setQuest(o.q.id, { phase: 'active', got: [] });
+      questShow(o);
+      sayText(id, t(tx.ask));
+      audio.bell(0.25);
+    } else if (st.phase === 'ready') {
+      progress.setQuest(o.q.id, { phase: 'done', got: st.got });
+      sayText(id, t(tx.thanks));
+      const m = residents.list[id].monk.root.position;
+      gain(o.q.reward, screenOf(m.x, m.y + 1.6, m.z));
+      audio.bell(0.4);
+    } else sayText(id, t(tx.remind));
+    questPill();
+    return true;
+  }
+  function questGo(qid: string, i: number) {
+    const o = qRun.find((x) => x.q.id === qid);
+    const st = o && progress.quest(o.q.id);
+    if (!o || !st || st.phase !== 'active' || st.got.includes(i)) return;
+    if (player.seat) standUp();
+    cancelIntent();
+    const tg = o.q.targets[i];
+    walkTo(tg.standX, tg.standZ, () => {
+      player.yaw = tg.yaw;
+      me.setAction(o.q.action);
+      questWork = { o, i, until: elapsed + o.q.seconds };
+      ui.setStatus('questWorking');
+    });
+  }
+  function questUpdate(dt: number) {
+    if (questWork && elapsed >= questWork.until) {
+      const { o, i } = questWork;
+      questWork = null;
+      const st = progress.quest(o.q.id);
+      if (st && st.phase === 'active' && !st.got.includes(i)) {
+        st.got.push(i);
+        const all = st.got.length >= o.q.targets.length;
+        progress.setQuest(o.q.id, { phase: all ? 'ready' : 'active', got: st.got });
+        const v = o.vis.get(i);
+        if (v) {
+          v.done();
+          v.mark.remove();
+          const k = interactives.indexOf(v.hit);
+          if (k >= 0) interactives.splice(k, 1);
+          scene.remove(v.hit);
+        }
+        audio.bead();
+        gain(o.q.points);
+        if (all) ui.toast(t('questReport', { who: t(QTEXT[o.q.id].who) }), 4200);
+        questPill();
+      }
+      if (me.action === o.q.action) me.setAction(baseAction());
+      ui.setStatus(null);
+    }
+    for (const o of qRun) {
+      const st = progress.quest(o.q.id);
+      // 有事找你（还没接）或者等你回禀：头上一个「！」
+      const show = !st || st.phase === 'ready';
+      const m = residents.list[o.q.giver].monk.root;
+      if (show && m.visible && !overlay && !intro) {
+        placeTag(o.giverMark, m.position.x, m.position.y + 2.0 * m.scale.y, m.position.z, 40);
+        o.giverMark.classList.toggle('ready', !!st);
+      } else o.giverMark.style.opacity = '0';
+      for (const [i, v] of o.vis) {
+        v.update(dt, elapsed);
+        if (st?.phase === 'active' && !st.got.includes(i) && !overlay && !intro) placeTag(v.mark, o.q.targets[i].x, 1.3, o.q.targets[i].z, 45);
+        else v.mark.style.opacity = '0';
+      }
+    }
+  }
+
   const chip = serviceChip(ui.root, () => {
     if (me.action !== 'bow' && intent !== 'bow') toggleBow();
   });
@@ -403,12 +563,36 @@ async function start() {
         svcJoinedHour = hourN;
         progress.add('service');
         ui.toast(t('serviceJoined'), 4200);
+        gain(10);
       }
       if (audio.enabled && svcMutedHour !== hourN) audio.serviceChant(true, THREE.MathUtils.clamp(1.1 - Math.hypot(player.x, player.z + 12) / 50, 0.08, 1));
     } else audio.serviceChant(false);
   }
 
   // —— 寺游印谱：第一次做到某件事时盖一方印 ——
+  // 功德点：在人头顶飘一个「功德 +N」；升级时放一声磬、换称号
+  const scrV = new THREE.Vector3();
+  function screenOf(x: number, y: number, z: number) {
+    scrV.set(x, y, z).project(camera);
+    return { x: (scrV.x * 0.5 + 0.5) * innerWidth, y: (-scrV.y * 0.5 + 0.5) * innerHeight };
+  }
+  function gain(n: number, at?: { x: number; y: number }, quiet = false) {
+    if (n <= 0) return;
+    const r = progress.addPoints(n);
+    if (!quiet) {
+      const p = at ?? screenOf(player.x, player.y + 1.7, player.z);
+      floatText(ui.root, p.x, p.y, t('meritPlus', { n }), 'merit');
+    }
+    if (r.after > r.before) {
+      renderMyTag();
+      audio.bell(0.5);
+      setTimeout(() => audio.templeBell(0.35), 400);
+      const title = t(LEVELS[r.after].key as Key);
+      floatText(ui.root, innerWidth / 2, innerHeight * 0.4, t('levelUp', { t: title }), 'levelup');
+      ui.toast(t('levelUp', { t: title }), 5000);
+    }
+  }
+
   function award(id: SealId) {
     if (!progress.stamp(id)) return;
     sealPop(ui.root, id, ui.sealsBtn);
@@ -651,6 +835,7 @@ async function start() {
       me.setAction(baseAction());
       endIncenseScene();
       ui.toast(t('incenseOffered'), 3600);
+      gain(5);
       progress.add('incense');
       award('incense');
     }
@@ -738,6 +923,7 @@ async function start() {
         progress.add('koi');
         award('koi');
         setTimeout(() => ui.toast(t('feedDone')), 900);
+        gain(2);
       };
       me.setAction('feed');
       refreshStatus();
@@ -780,6 +966,7 @@ async function start() {
           showFortune(ui.root, n, false, getLang()).then(() => {
             fortuneOpen = false;
             award('fortune');
+            gain(2);
           });
         }, 900);
       };
@@ -793,6 +980,7 @@ async function start() {
       me.setAction(baseAction());
       endIncenseScene();
       ui.toast(t('lanternReleased'), 4200);
+      gain(6);
       progress.add('lantern');
       award('lantern');
     } else if (me.action === 'feed' && me.actionTime >= FEED_DURATION) me.setAction(baseAction());
@@ -802,7 +990,7 @@ async function start() {
   // —— 钟楼：撞钟 ——
   let lastBell = 0;
   // 钟楼撞钟、鼓楼击鼓（晨钟暮鼓），同房间的人也会听到
-  const lastStrike: Record<'bell' | 'drum', number> = { bell: 0, drum: 0 };
+  const lastStrike: Record<'bell' | 'drum', number> = { bell: -1e9, drum: -1e9 };
   function strikeInstrument(kind: 'bell' | 'drum') {
     if (performance.now() - lastStrike[kind] < (kind === 'bell' ? 15000 : 4000)) {
       ui.toast(t('bellCooldown'));
@@ -816,22 +1004,56 @@ async function start() {
     walkTo(b.standX, b.standZ, () => {
       intent = null;
       player.yaw = b.standYaw;
+      if (kind === 'bell') {
+        // 撞钟要自己拉：按住拉撞木，松手撞
+        me.setAction('hapjang');
+        charge.open();
+        refreshStatus();
+        return;
+      }
       lastStrike[kind] = performance.now();
+      gain(3);
       me.setAction('hapjang');
       refreshStatus();
       b.strike();
       progress.add(kind);
       award(kind);
       setTimeout(() => {
-        if (kind === 'bell') audio.templeBell();
-        else audio.drum();
+        audio.drum();
         net.ringBell(kind);
-      }, kind === 'bell' ? 1050 : 320);
+      }, 320);
       setTimeout(() => {
         if (me.action === 'hapjang') me.setAction(baseAction());
       }, HAPJANG_DURATION * 1000);
     });
   }
+  // 松手：落在金色区间最好，钟声最洪亮、传得最远
+  const charge = new Charge(ui.root, {
+    onRelease(q) {
+      const b = buildings.bell;
+      lastStrike.bell = performance.now();
+      b.aim?.(0);
+      b.strike();
+      progress.add('bell');
+      award('bell');
+      setTimeout(() => {
+        audio.templeBell(0.4 + 0.6 * q);
+        net.ringBell('bell');
+      }, 700);
+      const li = Math.round(2 + q * 16);
+      const at = { x: innerWidth / 2, y: innerHeight * 0.42 };
+      floatText(ui.root, at.x, at.y, t(q > 0.95 ? 'bellGreat' : 'bellResult', { n: li }), q > 0.95 ? 'levelup' : 'merit');
+      setTimeout(() => gain(Math.round(4 + q * 16)), 600);
+      setTimeout(() => {
+        if (me.action === 'hapjang') me.setAction(baseAction());
+      }, 1500);
+    },
+    onCancel() {
+      buildings.bell.aim?.(0);
+      if (me.action === 'hapjang') me.setAction(baseAction());
+    },
+  });
+
   net.on('bell', (_from, kind) => {
     const b = kind === 'drum' ? buildings.drum : buildings.bell;
     b.strike();
@@ -839,7 +1061,9 @@ async function start() {
   });
 
   // —— 木鱼 ——
+  const rhythm = new Rhythm(ui.root);
   function openMoktak() {
+    rhythm.start();
     if (overlay === 'rosary') closeRosary();
     if (me.action === 'bow') standUp();
     overlay = 'moktak';
@@ -852,30 +1076,47 @@ async function start() {
   function closeMoktak() {
     if (overlay !== 'moktak') return;
     overlay = null;
+    rhythm.stop();
     if (moktakAuto) toggleMoktakAuto();
     stage.show(null);
     ui.showMoktak(false);
     if (me.action === 'moktak') me.setAction('idle');
     refreshStatus();
   }
-  function strikeMoktak() {
+  // 手敲：跟着圆环收拢的拍子敲，准了是「妙」，连击越多功德越多；自动敲只计数、不计功德点
+  function strikeMoktak(auto = false) {
     moktakView.strike();
     me.strike();
     audio.moktak();
     moktakCount++;
-    ui.setMoktak(!!moktakAuto, moktakCount);
     progress.add('moktak');
     if (moktakCount >= 30) award('moktak');
+    if (!auto) {
+      const r = rhythm.hit();
+      const cx = innerWidth / 2 + (Math.random() - 0.5) * 60, cy = innerHeight * 0.38;
+      floatText(ui.root, cx, cy, `<b>${t(r.grade)}</b>${r.points ? ' ' + t('meritPlus', { n: r.points }) : ''}`, r.grade);
+      if (r.points) gain(r.points, undefined, true);
+    }
+    ui.setMoktak(!!moktakAuto, moktakCount, rhythm.combo);
   }
+  let autoAlign = 0;
   function toggleMoktakAuto() {
-    if (moktakAuto) {
+    if (moktakAuto || autoAlign) {
+      clearTimeout(autoAlign);
       clearInterval(moktakAuto);
       moktakAuto = 0;
+      autoAlign = 0;
     } else {
-      strikeMoktak();
-      moktakAuto = window.setInterval(strikeMoktak, 640);
+      // 自动敲也对齐到拍子上
+      autoAlign = window.setTimeout(() => {
+        autoAlign = 0;
+        strikeMoktak(true);
+        moktakAuto = window.setInterval(() => strikeMoktak(true), rhythm.period * 1000);
+        ui.setMoktak(true, moktakCount, rhythm.combo);
+      }, rhythm.untilBeat());
+      moktakAuto = -1;
     }
-    ui.setMoktak(!!moktakAuto, moktakCount);
+    ui.setMoktak(!!moktakAuto, moktakCount, rhythm.combo);
   }
 
   // —— 念珠 ——
@@ -888,6 +1129,7 @@ async function start() {
       award('beads');
       audio.bell(0.4);
       ui.toast(t('rosaryRoundDone', { n: beadCount / 108 }));
+      gain(15);
     }
     navigator.vibrate?.(6);
   };
@@ -1055,6 +1297,35 @@ async function start() {
     if (act === 'lantern') setTimeout(requestLantern, 1200);
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
+    if (act === 'bell') setTimeout(() => strikeInstrument('bell'), 1200);
+    // 调试：?debugview&moktak=n 打开木鱼并按拍子敲 n 下（前几下准，后面偏一点）
+    const mk = Number(sp.get('moktak'));
+    if (mk > 0)
+      setTimeout(() => {
+        openMoktak();
+        let k = 0;
+        const tick = () => {
+          if (k++ >= mk) return;
+          setTimeout(() => strikeMoktak(), k > mk - 2 ? 200 : 20);
+          setTimeout(tick, rhythm.untilBeat() + 5);
+        };
+        setTimeout(tick, rhythm.untilBeat() + 5);
+      }, 1200);
+    // 调试：?debugview&quest=sweep|water 直接接下寺务
+    const qp = sp.get('quest');
+    const qd = QUESTS.find((q) => q.id === qp);
+    if (qd) setTimeout(() => questNpc(qd.giver), 1200);
+    // 调试：再加 &qauto 自动把目标一个个做完、回去回禀
+    if (qd && sp.has('qauto'))
+      setInterval(() => {
+        const st = progress.quest(qd.id);
+        if (questWork || !st) return;
+        if (st.phase === 'ready') questNpc(qd.giver);
+        else if (st.phase === 'active' && !player.route.length) {
+          const i = qd.targets.findIndex((_, k) => !st.got.includes(k));
+          if (i >= 0) questGo(qd.id, i);
+        }
+      }, 1500);
     // 调试：?treestats 在左下角显示树的三角形数
     if (sp.has('treestats')) {
       const d = document.createElement('div');
@@ -1175,7 +1446,12 @@ async function start() {
       return;
     }
     if (p.interact?.type === 'npc') {
+      if (typeof p.interact.id === 'number' && questNpc(p.interact.id)) return;
       say(typeof p.interact.id === 'number' ? p.interact.id : (p.interact.role as Role));
+      return;
+    }
+    if (p.interact?.type === 'quest') {
+      questGo(p.interact.q, p.interact.i);
       return;
     }
     if (p.interact?.type === 'fortune') {
@@ -1187,7 +1463,11 @@ async function start() {
       return;
     }
     cancelIntent();
-    if (me.action === 'hapjang' || me.action === 'incense') me.setAction(baseAction());
+    if (questWork) {
+      questWork = null;
+      ui.setStatus(null);
+    }
+    if (me.action === 'hapjang' || me.action === 'incense' || me.action === 'sweep' || me.action === 'water') me.setAction(baseAction());
     marker.position.set(p.point.x, p.point.y + 0.03, p.point.z);
     markerLife = 1;
     walkTo(p.point.x, p.point.z);
@@ -1511,6 +1791,10 @@ async function start() {
     checkNewActionsDone();
     trackSeals(dt);
     for (const e of residents.update(dt, svcNow(), camera.position, player)) murmur(e.id, e.key);
+    questUpdate(dt);
+    rhythm.update();
+    charge.update(dt);
+    if (charge.active) buildings.bell.aim?.(Math.max(0.02, charge.power));
     if (!intro && residents.greet(player.x, player.z, elapsed)) say('greeter', 0);
     updateService(dt);
     updateRemotes(dt);

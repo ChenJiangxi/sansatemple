@@ -87,6 +87,7 @@ export interface StrikeBuild {
   standX: number;
   standZ: number;
   standYaw: number;
+  aim?(p: number): void; // 撞钟时把撞木往后拉（0 到 1）
 }
 
 // 钟鼓楼的亭子：台基、四根红柱、彩画梁、带鸱吻的四坡顶、匾额
@@ -169,15 +170,25 @@ function bellTower(group: THREE.Group): StrikeBuild {
   let swing = 0;
   let sway = 0;
   let phase = 0;
+  let pull = 0;
   return {
     interactives: [hit],
     standX: BELL.x - 2.6,
     standZ: BELL.z + 1.0,
     standYaw: Math.PI / 2,
+    aim(p: number) {
+      pull = p;
+    },
     strike() {
-      swing = 1;
+      // 已经拉开了就直接从「往前撞」那一段开始
+      swing = pull > 0.05 || logPivot.rotation.z < -0.05 ? 0.55 : 1;
+      pull = 0;
     },
     update(dt) {
+      if (pull > 0) {
+        logPivot.rotation.z += (-pull * 0.5 - logPivot.rotation.z) * Math.min(1, dt * 10);
+        return;
+      }
       if (swing > 0) {
         swing = Math.max(0, swing - dt * 0.9);
         const t = 1 - swing;

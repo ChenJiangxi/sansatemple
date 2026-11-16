@@ -405,6 +405,8 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   return {
     interactives: list.filter((r) => r.role !== 'assembly').map((r) => r.monk.root),
     list,
+    // 会请玩家帮忙的几位
+    ids: { sweeper: sweeper.id, waterNovice: noviceA.id },
     // 当前处在时刻表的哪一段（给界面用）
     phase(s: number): { kind: 'idle' | 'soon' | 'bell' | 'gather' | 'chant' | 'disperse'; toStart: number } {
       if (s < SVC.gather) return { kind: 'bell', toStart: SVC.chant - s };

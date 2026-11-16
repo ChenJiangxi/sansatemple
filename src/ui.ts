@@ -553,10 +553,10 @@ export class UI {
     if (on) this.moktakHit.focus({ preventScroll: true });
   }
 
-  setMoktak(auto: boolean, count: number) {
+  setMoktak(auto: boolean, count: number, combo = 0) {
     this.moktakAutoBtn.innerHTML = `${auto ? ICON.pause : ICON.play}<span>${t(auto ? 'pause' : 'autoplay')}</span>`;
     this.moktakAutoBtn.setAttribute('aria-pressed', String(auto));
-    this.moktakCount.textContent = count ? t('moktakCount', { n: count }) : '';
+    this.moktakCount.textContent = (count ? t('moktakCount', { n: count }) : '') + (combo > 1 && !auto ? ' · ' + t('combo', { n: combo }) : '');
   }
 
   // —— 念珠 ——

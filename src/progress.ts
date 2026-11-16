@@ -23,13 +23,30 @@ interface Save {
   merit: Partial<Record<MeritKey, number>>;
   fortune?: { day: string; n: number };
   lastVisit?: string;
+  points?: number; // 累计功德点
+  quests?: { day: string; state: Record<string, QuestSave> };
 }
+export interface QuestSave {
+  phase: 'active' | 'ready' | 'done'; // 接了、做完待回禀、已回禀
+  got: number[]; // 已完成的目标编号
+}
+
+// 修行等级：按累计功德点升，名牌上显示称号
+export const LEVELS: { at: number; key: string }[] = [
+  { at: 0, key: 'lv0' },
+  { at: 60, key: 'lv1' },
+  { at: 200, key: 'lv2' },
+  { at: 500, key: 'lv3' },
+  { at: 1200, key: 'lv4' },
+  { at: 3000, key: 'lv5' },
+  { at: 8000, key: 'lv6' },
+];
 
 const KEY = 'sansa.progress';
 let data: Save = { seals: {}, merit: {} };
 try {
   const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (raw && typeof raw === 'object') data = { seals: raw.seals || {}, merit: raw.merit || {}, fortune: raw.fortune, lastVisit: raw.lastVisit };
+  if (raw && typeof raw === 'object') data = { seals: raw.seals || {}, merit: raw.merit || {}, fortune: raw.fortune, lastVisit: raw.lastVisit, points: raw.points || 0, quests: raw.quests };
 } catch {
   /* 存档坏了就从头开始 */
 }
@@ -86,4 +103,30 @@ export const progress = {
     data.fortune = { day: today(), n };
     save();
   },
+  // 功德点：返回加分前后的等级，升级时调用方放提示
+  points() {
+    return data.points || 0;
+  },
+  addPoints(n: number) {
+    const before = levelOf(data.points || 0);
+    data.points = (data.points || 0) + n;
+    save();
+    return { before, after: levelOf(data.points) };
+  },
+  // 今天的寺务（每天本地零点重置）
+  quest(id: string): QuestSave | null {
+    if (!data.quests || data.quests.day !== today()) return null;
+    return data.quests.state[id] ?? null;
+  },
+  setQuest(id: string, q: QuestSave) {
+    if (!data.quests || data.quests.day !== today()) data.quests = { day: today(), state: {} };
+    data.quests.state[id] = q;
+    save();
+  },
 };
+
+export function levelOf(points: number) {
+  let i = 0;
+  while (i < LEVELS.length - 1 && points >= LEVELS[i + 1].at) i++;
+  return i;
+}
