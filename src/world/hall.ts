@@ -623,7 +623,9 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   group.add(mesh(mergeGeometries(rail.map((g) => (g.index ? g.toNonIndexed() : g))), M.marble));
 
   // —— 殿内方砖地（金砖）——
-  const floorMat = pbr('granite', { metersPerTile: 1.3, color: '#6f6b66', roughness: 0.7 });
+  const floorMat = pbr('granite', { metersPerTile: 1.3, color: '#78695b', roughness: 0.72 });
+  // 殿里照不到多少天光：方砖少反射一点外面的蓝天，不然白天整片地发蓝
+  floorMat.envMapIntensity = 0.35;
   const fw = H.wallX * 2 + 0.6;
   const fz0 = H.backZ;
   const fz1 = H.colZFront + 0.9;
@@ -740,6 +742,8 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const ceil = new THREE.Mesh(worldBox(H.wallX * 2, 0.08, H.colZFront - H.colZBack, 1), ceilMat);
   ceil.position.set(0, ceilY + 0.04, cz);
   ceil.receiveShadow = true;
+  // 天花板也要挡光：不然日光、月光会从上下两层屋檐之间的缝里漏进殿，在地上照出一条亮带
+  ceil.castShadow = true;
   group.add(ceil);
   for (const z of H.colZSide) {
     const b = mesh(worldBox(H.wallX * 2, 0.7, 0.55, 1), M.caihua, false);
