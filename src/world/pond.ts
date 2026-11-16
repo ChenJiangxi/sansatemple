@@ -88,39 +88,266 @@ const WaterShader = {
     }`,
 };
 
-// 锦鲤的花色：白底上随机几块红斑，实例颜色再整体染色（白 → 红白锦鲤，金 → 黄金锦鲤）
+// —— 锦鲤 ——
+// 花色贴图：一行一个品种，共 8 行。横向 u 从鼻尖到尾柄，纵向 v 绕身体一圈：
+// 行的上下边是腹部，中线是背脊，1/3、2/3 处是两侧（眼睛画在这里）。
+const KOI_ROWS = 8;
+const KOI_KINDS: { fin: string }[] = [
+  { fin: '#f4efe6' }, // 红白
+  { fin: '#f4efe6' }, // 大正三色
+  { fin: '#5a514c' }, // 昭和三色
+  { fin: '#f3c24e' }, // 山吹黄金
+  { fin: '#f4efe6' }, // 丹顶
+  { fin: '#ff9640' }, // 橙黄金
+  { fin: '#e79a74' }, // 浅黄
+  { fin: '#f4efe6' }, // 红白（另一种斑）
+];
 function koiTexture() {
+  const W = 256, H = 64;
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 64;
+  c.width = W;
+  c.height = H * KOI_ROWS;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#f6f1e6';
-  g.fillRect(0, 0, 128, 64);
-  g.fillStyle = '#e2461f';
-  for (let i = 0; i < 9; i++) {
+  let seed = 9;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const RED = '#e2471c', BLACK = '#1d1a19', WHITE = '#f6f2ea';
+  const blob = (y0: number, x: number, rx: number, ry: number, col: string) => {
+    g.fillStyle = col;
     g.beginPath();
-    g.ellipse(Math.random() * 128, 10 + Math.random() * 44, 8 + Math.random() * 16, 6 + Math.random() * 10, Math.random() * 3, 0, Math.PI * 2);
+    g.ellipse(x, y0 + 32 + (rnd() - 0.5) * 6, rx, ry, (rnd() - 0.5) * 0.3, 0, Math.PI * 2);
     g.fill();
+  };
+  const scales = (y0: number, alpha: number, edge = 'rgba(0,0,0,') => {
+    g.strokeStyle = `${edge}${alpha})`;
+    g.lineWidth = 1;
+    for (let x = 60; x < 236; x += 9)
+      for (let y = 4; y < 60; y += 6) {
+        g.beginPath();
+        g.ellipse(x + ((y / 6) % 2) * 4.5, y0 + y, 6, 3.2, 0, -Math.PI / 2, Math.PI / 2);
+        g.stroke();
+      }
+  };
+  for (let k = 0; k < KOI_ROWS; k++) {
+    const y0 = k * H;
+    g.save();
+    g.beginPath();
+    g.rect(0, y0, W, H);
+    g.clip();
+    const base = k === 2 ? BLACK : k === 3 ? '#f0b93a' : k === 5 ? '#ff8a2a' : k === 6 ? '#7d93a3' : WHITE;
+    g.fillStyle = base;
+    g.fillRect(0, y0, W, H);
+    if (k === 0 || k === 7) {
+      // 红白：头顶一块红，背上两三段红斑
+      blob(y0, 24, 18, 12, RED);
+      const n = k === 0 ? 3 : 2;
+      for (let i = 0; i < n; i++) blob(y0, 70 + i * (k === 0 ? 55 : 75) + rnd() * 12, 22 + rnd() * 14, 13 + rnd() * 6, RED);
+    } else if (k === 1) {
+      blob(y0, 26, 17, 11, RED);
+      blob(y0, 92, 30, 15, RED);
+      blob(y0, 170, 22, 12, RED);
+      for (let i = 0; i < 7; i++) blob(y0, 70 + rnd() * 150, 4 + rnd() * 5, 3 + rnd() * 4, BLACK);
+    } else if (k === 2) {
+      // 昭和：黑底，红斑和白斑交错
+      for (let i = 0; i < 3; i++) blob(y0, 30 + i * 70 + rnd() * 10, 20 + rnd() * 10, 12 + rnd() * 5, RED);
+      for (let i = 0; i < 3; i++) blob(y0, 60 + i * 62 + rnd() * 10, 12 + rnd() * 8, 8 + rnd() * 4, WHITE);
+    } else if (k === 4) {
+      // 丹顶：头顶一个红圆
+      g.fillStyle = RED;
+      g.beginPath();
+      g.ellipse(30, y0 + 32, 13, 9, 0, 0, Math.PI * 2);
+      g.fill();
+    } else if (k === 6) {
+      // 浅黄：青灰背、网状鳞、两侧到腹部是橙红
+      const grd = g.createLinearGradient(0, y0, 0, y0 + H);
+      grd.addColorStop(0, '#ee7b3a');
+      grd.addColorStop(0.22, '#e98a54');
+      grd.addColorStop(0.32, 'rgba(125,147,163,0)');
+      grd.addColorStop(0.68, 'rgba(125,147,163,0)');
+      grd.addColorStop(0.78, '#e98a54');
+      grd.addColorStop(1, '#ee7b3a');
+      g.fillStyle = grd;
+      g.fillRect(0, y0, W, H);
+      scales(y0, 0.45, 'rgba(232,240,246,');
+    }
+    // 黄金类有一层亮鳞，其他品种只有很淡的鳞纹
+    if (k === 3 || k === 5) scales(y0, 0.35, 'rgba(255,248,214,');
+    else if (k !== 6) scales(y0, 0.07);
+    // 腹部偏白偏亮，背脊略深
+    const sh = g.createLinearGradient(0, y0, 0, y0 + H);
+    sh.addColorStop(0, 'rgba(255,255,255,0.35)');
+    sh.addColorStop(0.3, 'rgba(255,255,255,0)');
+    sh.addColorStop(0.5, 'rgba(0,0,0,0.08)');
+    sh.addColorStop(0.7, 'rgba(255,255,255,0)');
+    sh.addColorStop(1, 'rgba(255,255,255,0.35)');
+    g.fillStyle = sh;
+    g.fillRect(0, y0, W, H);
+    // 眼睛：两侧偏上，深色瞳孔加一点高光
+    for (const ey of [21, 43]) {
+      g.fillStyle = '#e8d6a0';
+      g.beginPath();
+      g.ellipse(24, y0 + ey, 6.5, 2.4, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = '#121010';
+      g.beginPath();
+      g.ellipse(24, y0 + ey, 4.6, 1.8, 0, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.beginPath();
+      g.ellipse(22.5, y0 + ey - 0.5, 1.4, 0.6, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.restore();
   }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.flipY = false;
+  t.anisotropy = 4;
+  return t;
+}
+
+// 鳍的贴图：横向从鳍根到鳍缘，越往外越透明；纵向一条条鳍条
+function finTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grd = g.createLinearGradient(0, 0, 128, 0);
+  grd.addColorStop(0, 'rgba(255,255,255,0.92)');
+  grd.addColorStop(0.55, 'rgba(255,255,255,0.6)');
+  grd.addColorStop(0.92, 'rgba(255,255,255,0.32)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  g.globalCompositeOperation = 'destination-out';
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (let y = 4; y < 128; y += 9) g.fillRect(0, y, 128, 4);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
+const KOI_NOSE = 0.22, KOI_TAIL = -0.17;
+// 身体半宽：头圆钝，前三成最宽，往后收到细细的尾柄
+function koiWidth(t: number) {
+  let w = t < 0.3 ? 0.068 * Math.pow(Math.sin((t / 0.3) * Math.PI * 0.5), 0.55) : 0.068 * (1 - 0.8 * Math.pow((t - 0.3) / 0.7, 1.5));
+  if (t > 0.94) w *= (1 - t) / 0.06;
+  return w;
+}
 function koiGeometry() {
-  // 身子：拉长的椭球，头朝 +z；尾鳍：两片薄三角；胸鳍：两片小三角
-  const body = new THREE.SphereGeometry(1, 16, 10);
-  body.scale(0.075, 0.05, 0.27);
-  const fin = (pts: number[]) => {
+  const N = 22, S = 16;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const z = KOI_NOSE + (KOI_TAIL - KOI_NOSE) * t;
+    const w = koiWidth(t);
+    const h = w * 0.85;
+    const yc = 0.008 * Math.sin(Math.PI * t);
+    for (let j = 0; j <= S; j++) {
+      const v = j / S;
+      const a = v * Math.PI * 2 - Math.PI / 2;
+      const sy = Math.sin(a);
+      pos.push(Math.cos(a) * w, yc + sy * h * (sy < 0 ? 0.78 : 1), z);
+      uv.push(t, v);
+    }
+  }
+  for (let i = 0; i < N; i++)
+    for (let j = 0; j < S; j++) {
+      const a = i * (S + 1) + j, b = a + S + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+// 扇形的鳍：从 root 出发，沿 dir 方向、在 dir 与 side 张成的面里展开 ±spread 弧度；
+// len(k) 给出第 k 条鳍条的长度（0..1 的位置），droop 让鳍缘往下垂一点
+function fan(root: THREE.Vector3, dir: THREE.Vector3, side: THREE.Vector3, spread: number, len: (s: number) => number, droop = 0) {
+  const K = 10, M = 4;
+  const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+  const d = new THREE.Vector3();
+  for (let k = 0; k <= K; k++) {
+    const s = k / K;
+    const ang = (s - 0.5) * 2 * spread;
+    d.copy(dir).multiplyScalar(Math.cos(ang)).addScaledVector(side, Math.sin(ang));
+    const L = len(s);
+    for (let m = 0; m <= M; m++) {
+      const f = m / M;
+      pos.push(root.x + d.x * L * f, root.y + d.y * L * f - droop * f * f, root.z + d.z * L * f);
+      uv.push(f, s);
+    }
+  }
+  for (let k = 0; k < K; k++)
+    for (let m = 0; m < M; m++) {
+      const a = k * (M + 1) + m, b = a + M + 1;
+      idx.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g.toNonIndexed();
+}
+function koiFinGeometry() {
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const parts: THREE.BufferGeometry[] = [];
+  // 尾鳍：两瓣，中间短、两边长，像燕尾
+  parts.push(fan(V(0, 0.004, KOI_TAIL + 0.012), V(0, 0, -1), V(1, 0, 0), 0.62, (s) => 0.12 + 0.07 * Math.pow(Math.abs(s - 0.5) * 2, 1.4), 0.006));
+  for (const sx of [-1, 1]) {
+    // 胸鳍：圆扇形，向外、向后、略向下
+    parts.push(fan(V(sx * 0.05, -0.022, 0.1), V(sx * 0.72, -0.22, -0.66).normalize(), V(0, 0, -1).cross(V(sx, 0, 0)).cross(V(sx * 0.72, -0.22, -0.66).normalize()).normalize(), 0.55, (s) => 0.072 * (0.55 + 0.45 * Math.sin(Math.PI * s)), 0.008));
+    // 腹鳍：小一些
+    parts.push(fan(V(sx * 0.028, -0.034, -0.03), V(sx * 0.5, -0.35, -0.79).normalize(), V(0, 0, -1).cross(V(sx, 0, 0)).cross(V(sx * 0.5, -0.35, -0.79).normalize()).normalize(), 0.45, (s) => 0.04 * (0.6 + 0.4 * Math.sin(Math.PI * s)), 0.004));
+  }
+  // 背鳍：沿背脊的一道低鳍，前高后低
+  {
+    const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+    const n = 8;
+    for (let i = 0; i <= n; i++) {
+      const t = 0.36 + (i / n) * 0.36;
+      const z = KOI_NOSE + (KOI_TAIL - KOI_NOSE) * t;
+      const y = 0.008 * Math.sin(Math.PI * t) + koiWidth(t) * 0.85 - 0.004;
+      const hgt = 0.034 * (1 - (i / n) * 0.6) * Math.sin(Math.min(1, (i + 1) / 2) * Math.PI * 0.5);
+      pos.push(0, y, z, 0, y + hgt, z - 0.012);
+      uv.push(0, i / n, 1, i / n);
+    }
+    for (let i = 0; i < n; i++) {
+      const a = i * 2;
+      idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((pts.length / 3) * 2).fill(0.5), 2));
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
     g.computeVertexNormals();
-    return g;
-  };
-  const tail = fin([0, 0, -0.24, -0.11, 0.02, -0.42, 0.11, 0.02, -0.42, 0, 0, -0.24, 0.11, 0.02, -0.42, -0.11, 0.02, -0.42]);
-  const pec = fin([0.05, -0.02, 0.08, 0.16, -0.03, 0.0, 0.05, -0.02, 0.0, -0.05, -0.02, 0.08, -0.05, -0.02, 0.0, -0.16, -0.03, 0.0]);
-  return mergeGeometries([body.toNonIndexed(), tail, pec])!;
+    parts.push(g.toNonIndexed());
+  }
+  return mergeGeometries(parts)!;
+}
+
+// 游动时身体后段左右摆，越靠尾巴摆得越大；身体和鳍用同一段代码，鳍跟着身体走
+function koiWag(sh: THREE.WebGLProgramParametersWithUniforms, timeU: { value: number }, row: boolean) {
+  sh.uniforms.uTime = timeU;
+  sh.vertexShader = sh.vertexShader
+    .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float aPhase;\nattribute float aSwim;\nattribute float aKind;')
+    .replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+      float along = clamp((0.14 - transformed.z) / 0.48, 0.0, 1.0);
+      float wag = sin(uTime * (4.5 + aSwim * 6.0) + aPhase - transformed.z * 8.0) * (0.018 + 0.05 * aSwim) * along * along;
+      transformed.x += wag;`
+    );
+  if (row)
+    sh.vertexShader = sh.vertexShader.replace(
+      '#include <uv_vertex>',
+      `#include <uv_vertex>
+      #ifdef USE_MAP
+      vMapUv.y = (aKind + 0.04 + vMapUv.y * 0.92) / ${KOI_ROWS.toFixed(1)};
+      #endif`
+    );
 }
 
 // 莲花河灯：两层花瓣（花瓣根部白、尖上粉）+ 托底的荷叶
@@ -211,29 +438,31 @@ export function buildPond(scene: THREE.Scene, opts: { isTouch: boolean; lanternF
   // —— 锦鲤 ——
   const KOI = 16;
   const kgeo = koiGeometry();
+  const fgeo = koiFinGeometry();
   const aPhase = new THREE.InstancedBufferAttribute(new Float32Array(KOI), 1);
   const aSwim = new THREE.InstancedBufferAttribute(new Float32Array(KOI), 1);
-  kgeo.setAttribute('aPhase', aPhase);
-  kgeo.setAttribute('aSwim', aSwim);
+  const aKind = new THREE.InstancedBufferAttribute(new Float32Array(KOI), 1);
+  for (const g of [kgeo, fgeo]) {
+    g.setAttribute('aPhase', aPhase);
+    g.setAttribute('aSwim', aSwim);
+    g.setAttribute('aKind', aKind);
+  }
   const timeU = { value: 0 };
-  const kmat = new THREE.MeshStandardMaterial({ map: koiTexture(), roughness: 0.45, metalness: 0.05 });
-  kmat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTime = timeU;
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTime;\nattribute float aPhase;\nattribute float aSwim;')
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        float along = clamp((0.12 - transformed.z) / 0.54, 0.0, 1.0);
-        transformed.x += sin(uTime * (5.0 + aSwim * 6.0) + aPhase - transformed.z * 9.0) * (0.02 + 0.05 * aSwim) * along * along;`
-      );
-  };
+  const kmat = new THREE.MeshStandardMaterial({ map: koiTexture(), roughness: 0.36, metalness: 0.08 });
+  kmat.onBeforeCompile = (sh) => koiWag(sh, timeU, true);
+  kmat.customProgramCacheKey = () => 'koi-body';
+  const fmat = new THREE.MeshStandardMaterial({ map: finTexture(), transparent: true, depthWrite: false, side: THREE.DoubleSide, roughness: 0.5 });
+  fmat.onBeforeCompile = (sh) => koiWag(sh, timeU, false);
+  fmat.customProgramCacheKey = () => 'koi-fin';
   const koi = new THREE.InstancedMesh(kgeo, kmat, KOI);
-  const palette = ['#ffffff', '#ffffff', '#ffffff', '#f0a43a', '#ff9a50', '#2b2622', '#f7d58a'].map((c) => new THREE.Color(c));
+  const fins = new THREE.InstancedMesh(fgeo, fmat, KOI);
+  // 红白最多，其次三色、昭和、黄金、丹顶、橙、浅黄
+  const kinds = [0, 7, 1, 0, 2, 3, 0, 4, 1, 5, 7, 6, 0, 2, 3, 1];
   const fish = Array.from({ length: KOI }, (_, i) => {
     const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 0.7;
     aPhase.setX(i, Math.random() * 6.28);
-    koi.setColorAt(i, palette[i % palette.length]);
+    aKind.setX(i, kinds[i % kinds.length]);
+    fins.setColorAt(i, new THREE.Color(KOI_KINDS[kinds[i % kinds.length]].fin));
     return {
       x: POND.x + Math.cos(a) * POND.rx * d,
       z: POND.z + Math.sin(a) * POND.rz * d,
@@ -242,13 +471,14 @@ export function buildPond(scene: THREE.Scene, opts: { isTouch: boolean; lanternF
       tx: 0,
       tz: 0,
       wait: 0,
-      size: 0.75 + Math.random() * 0.55,
-      depth: -0.34 - Math.random() * 0.12,
+      size: 0.8 + Math.random() * 0.5,
+      depth: -0.3 - Math.random() * 0.1,
       bob: Math.random() * 6,
     };
   });
-  koi.frustumCulled = false;
-  group.add(koi);
+  koi.frustumCulled = fins.frustumCulled = false;
+  koi.castShadow = false;
+  group.add(koi, fins);
 
   // —— 鱼食：浮在水面的小颗粒 ——
   const FOOD = 40;
@@ -422,9 +652,12 @@ export function buildPond(scene: THREE.Scene, opts: { isTouch: boolean; lanternF
         pos.set(k.x, k.depth + (target ? 0.12 : 0) + Math.sin(k.bob * 0.7) * 0.02, k.z);
         q.setFromAxisAngle(up, k.h);
         sc.setScalar(k.size);
-        koi.setMatrixAt(i, m4.compose(pos, q, sc));
+        m4.compose(pos, q, sc);
+        koi.setMatrixAt(i, m4);
+        fins.setMatrixAt(i, m4);
       }
       koi.instanceMatrix.needsUpdate = true;
+      fins.instanceMatrix.needsUpdate = true;
       aSwim.needsUpdate = true;
 
       // 河灯

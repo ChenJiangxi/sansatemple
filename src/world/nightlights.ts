@@ -112,19 +112,25 @@ export function buildNightLights(scene: THREE.Scene) {
   }
 
   // —— 配殿前、通往钟鼓楼的一排石灯 ——
-  const stone = pbr('granite', { metersPerTile: 0.9, color: '#b8b2a6' });
+  // 六角石灯：土衬、须弥座、灯柱、中台、六根小柱围着灯室、六角攒尖顶加宝珠
+  const stone = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(4.3, 4.1, 3.8) });
   const parts: THREE.BufferGeometry[] = [];
   const lights: THREE.BufferGeometry[] = [];
   for (const [x, z] of SIDE_LAMPS) {
     const at = (gg: THREE.BufferGeometry, y: number) => gg.translate(x, y, z).toNonIndexed();
-    parts.push(at(new THREE.BoxGeometry(0.56, 0.14, 0.56), 0.07));
-    parts.push(at(new THREE.CylinderGeometry(0.11, 0.13, 0.62, 8), 0.45));
-    parts.push(at(new THREE.BoxGeometry(0.46, 0.08, 0.46), 0.8));
-    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) parts.push(at(new THREE.BoxGeometry(0.07, 0.34, 0.07).translate(sx * 0.16, 0, sz * 0.16), 1.01));
-    parts.push(at(new THREE.BoxGeometry(0.5, 0.04, 0.5), 1.19));
-    parts.push(at(new THREE.ConeGeometry(0.42, 0.24, 4).rotateY(Math.PI / 4), 1.32));
-    parts.push(at(new THREE.SphereGeometry(0.06, 8, 6), 1.47));
-    lights.push(at(new THREE.BoxGeometry(0.27, 0.3, 0.27), 1.01));
+    parts.push(at(new THREE.CylinderGeometry(0.3, 0.33, 0.12, 6), 0.06));
+    parts.push(at(new THREE.CylinderGeometry(0.2, 0.27, 0.12, 6), 0.18));
+    parts.push(at(new THREE.CylinderGeometry(0.09, 0.11, 0.56, 6), 0.52));
+    parts.push(at(new THREE.CylinderGeometry(0.27, 0.15, 0.13, 6), 0.865));
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2;
+      parts.push(at(new THREE.BoxGeometry(0.05, 0.3, 0.05).rotateY(-a).translate(Math.cos(a) * 0.19, 0, Math.sin(a) * 0.19), 1.08));
+    }
+    parts.push(at(new THREE.CylinderGeometry(0.42, 0.4, 0.04, 6), 1.25));
+    parts.push(at(new THREE.CylinderGeometry(0.05, 0.36, 0.2, 6), 1.37));
+    parts.push(at(new THREE.CylinderGeometry(0.035, 0.05, 0.06, 6), 1.5));
+    parts.push(at(new THREE.SphereGeometry(0.055, 8, 6), 1.57));
+    lights.push(at(new THREE.CylinderGeometry(0.16, 0.16, 0.28, 6), 1.08));
     glow(group, x, 1.02, z, 1.3);
     pool(group, x, z, 3.1);
   }

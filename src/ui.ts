@@ -535,7 +535,12 @@ export class UI {
       details.innerHTML = `<summary>${t('controls')}</summary><p>${t('controlsBody')}</p>`;
       body.appendChild(details);
       const credits = el('p', 'panel-foot muted');
-      credits.textContent = t('credits');
+      const link = el('a');
+      link.href = new URL('credits.html', document.baseURI).toString();
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = t('creditsLink');
+      credits.appendChild(link);
       body.appendChild(credits);
       p.appendChild(body);
     }

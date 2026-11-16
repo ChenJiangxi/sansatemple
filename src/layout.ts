@@ -129,10 +129,6 @@ export const ROCKS: [number, number, number][] = [
   [-13, 44, 0.8], [13.5, 45, 0.7], [-30, 42, 0.8], [31, 44, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
 ];
 
-// 参道两侧的红灯笼灯柱
-export const STONE_LANTERNS: [number, number][] = [
-  [-3.9, 20], [3.9, 20], [-3.9, 31], [3.9, 31], [-3.9, 41], [3.9, 41],
-];
 
 // 配殿前、通往钟鼓楼的石灯（夜里点亮，照亮寺院两侧）
 export const SIDE_LAMPS: [number, number][] = [
@@ -163,7 +159,7 @@ const boxes: Box[] = [];
 for (const [x, z, s] of MAPLES) circles.push({ x, z, r: 0.45 * s });
 for (const [x, z, s] of PINES) circles.push({ x, z, r: 0.5 * s });
 for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
-for (const [x, z] of STONE_LANTERNS) circles.push({ x, z, r: 0.45 });
+for (const sx of [-1, 1]) for (const z of [11, 22, 33, 43.5]) circles.push({ x: sx * 2.75, z, r: 0.28 });
 for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
 for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });

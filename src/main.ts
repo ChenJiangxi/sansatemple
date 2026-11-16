@@ -310,9 +310,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', assembly: 'roleWeina',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', assembly: 'roleWeina',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -328,9 +328,11 @@ async function start() {
     for (const n of npcUi) n.tag.textContent = t(ROLE_KEY[n.r.role]);
   }
   renderNpcTags();
-  function say(role: Role, idx?: number) {
-    const n = npcUi.find((x) => x.r.role === role);
-    const key = LINES_KEY[role];
+  // who：角色（同角色取第一位）或点中的那位僧人的编号
+  function say(who: Role | number, idx?: number) {
+    const n = npcUi.find((x) => (typeof who === 'number' ? x.r.id === who : x.r.role === who));
+    const role = n?.r.role;
+    const key = role && LINES_KEY[role];
     if (!n || !key) return;
     const lines = t(key).split('|');
     const i = idx ?? (role === 'elder' ? n.line++ % lines.length : Math.floor(Math.random() * lines.length));
@@ -1124,7 +1126,7 @@ async function start() {
       return;
     }
     if (p.interact?.type === 'npc') {
-      say(p.interact.role as Role);
+      say(typeof p.interact.id === 'number' ? p.interact.id : (p.interact.role as Role));
       return;
     }
     if (p.interact?.type === 'fortune') {
@@ -1454,7 +1456,7 @@ async function start() {
     checkIncenseDone();
     checkNewActionsDone();
     trackSeals(dt);
-    residents.update(dt, svcNow(), camera.position);
+    residents.update(dt, svcNow(), camera.position, player);
     if (!intro && residents.greet(player.x, player.z, elapsed)) say('greeter', 0);
     updateService(dt);
     updateRemotes(dt);

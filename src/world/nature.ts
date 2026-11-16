@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { MAPLES, PINES, ROCKS, POND, COURT } from '../layout';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { pbr } from './pbr';
+import { rockGeometry, rockMaterial } from './rock';
+import { buildLotus } from './lotus';
 import { foliageClusterTexture, ginkgoClusterTexture, woodTexture, rng } from '../textures';
 import { mesh } from './util';
 
@@ -170,26 +172,26 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   group.add(mesh(mergeGeometries(pineBarkGeos), pineBark));
   group.add(mesh(mergeGeometries(pineCrowns), pineMat));
 
-  // 石头
-  const rockMat = pbr('stonewall', { metersPerTile: 1.2, color: '#a8a296' });
-  const rockGeo = (seed: number) => {
-    const g = new THREE.IcosahedronGeometry(1, 1);
-    const rr = rng(seed);
-    const p = g.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < p.count; i++) {
-      const v = new THREE.Vector3(p.getX(i), p.getY(i), p.getZ(i));
-      v.multiplyScalar(0.8 + rr() * 0.35);
-      p.setXYZ(i, v.x, Math.max(-0.2, v.y), v.z);
-    }
-    g.computeVertexNormals();
-    return g;
-  };
+  // 石头：每处一块大石，旁边散两三块小石
+  const rockMat = rockMaterial('#ffffff', 1.8, 0.3);
+  const pebbleGeos = [0, 1, 2].map((k) => rockGeometry(500 + k, 3, 4));
   ROCKS.forEach(([x, z, s], i) => {
-    const rk = mesh(rockGeo(i + 7), rockMat);
-    rk.scale.set(s * 1.2, s * 0.7, s);
-    rk.position.set(x, 0.05, z);
+    const rk = mesh(rockGeometry(i + 7), rockMat);
+    rk.scale.set(s * 1.25, s * 0.78, s * 0.95);
+    rk.position.set(x, 0.12 * s, z);
     rk.rotation.y = r() * 6;
     group.add(rk);
+    const n = 2 + Math.floor(r() * 2);
+    for (let k = 0; k < n; k++) {
+      const a = r() * Math.PI * 2;
+      const d = s * (1.35 + r() * 0.5);
+      const ps = s * (0.18 + r() * 0.16);
+      const pb = mesh(pebbleGeos[(i + k) % 3], rockMat);
+      pb.scale.set(ps * 1.2, ps * 0.7, ps);
+      pb.position.set(x + Math.cos(a) * d, 0.08 * ps, z + Math.sin(a) * d);
+      pb.rotation.y = r() * 6;
+      group.add(pb);
+    }
   });
 
   // 莲池：池底、水面、岸石、莲叶和莲花
@@ -198,50 +200,29 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   basin.position.set(POND.x, 0, POND.z);
   group.add(basin);
   // 水面在 pond.ts（会倒映的镜面水）
-  const edgeMat = pbr('stonewall', { metersPerTile: 0.9, color: '#9d988d' });
+  // 岸石：六种形状轮流用，每种一个实例化网格
+  const edgeMat = rockMaterial('#d8d4cc', 1.1, 0.45);
   const edgeN = 46;
+  const edgeGeos = [0, 1, 2, 3, 4, 5].map((k) => rockGeometry(100 + k, 3, 4));
+  const edgeMeshes = edgeGeos.map((g) => {
+    const im = new THREE.InstancedMesh(g, edgeMat, Math.ceil(edgeN / 6));
+    im.castShadow = im.receiveShadow = true;
+    im.count = 0;
+    return im;
+  });
+  const em = new THREE.Matrix4();
+  const eq = new THREE.Quaternion();
   for (let i = 0; i < edgeN; i++) {
-    const a = (i / edgeN) * Math.PI * 2;
-    const s = 0.24 + r() * 0.2;
-    const rk = mesh(rockGeo(100 + i), edgeMat);
-    rk.scale.set(s * 1.4, s * 0.6, s);
-    rk.position.set(POND.x + Math.cos(a) * (POND.rx + 0.1), 0.0, POND.z + Math.sin(a) * (POND.rz + 0.1));
-    rk.rotation.y = -a;
-    group.add(rk);
+    const a = (i / edgeN) * Math.PI * 2 + (r() - 0.5) * 0.05;
+    const s = 0.26 + r() * 0.2;
+    const out = 0.05 + r() * 0.15;
+    eq.setFromEuler(new THREE.Euler((r() - 0.5) * 0.2, -a + (r() - 0.5) * 0.8, (r() - 0.5) * 0.2));
+    em.compose(new THREE.Vector3(POND.x + Math.cos(a) * (POND.rx + out), 0.02, POND.z + Math.sin(a) * (POND.rz + out)), eq, new THREE.Vector3(s * 1.45, s * 0.62, s));
+    const im = edgeMeshes[i % 6];
+    im.setMatrixAt(im.count++, em);
   }
-  const padMat = new THREE.MeshStandardMaterial({ color: '#4d6b34', roughness: 0.7, side: THREE.DoubleSide });
-  const padGeo = new THREE.CircleGeometry(0.34, 20, 0.3, Math.PI * 2 - 0.3);
-  const petalMat = new THREE.MeshStandardMaterial({ color: '#f2b7c3', roughness: 0.6, emissive: '#5a2a33', emissiveIntensity: 0.15 });
-  const petalGeo = new THREE.SphereGeometry(1, 10, 8);
-  for (let i = 0; i < 26; i++) {
-    const a = r() * Math.PI * 2;
-    const d = Math.sqrt(r()) * 0.85;
-    const px = POND.x + Math.cos(a) * POND.rx * d;
-    const pz = POND.z + Math.sin(a) * POND.rz * d;
-    const pad = new THREE.Mesh(padGeo, padMat);
-    pad.rotation.set(-Math.PI / 2, 0, r() * 6);
-    const ps = 0.7 + r() * 0.8;
-    pad.scale.setScalar(ps);
-    pad.position.set(px, -0.14, pz);
-    group.add(pad);
-    if (i % 4 === 0) {
-      const flower = new THREE.Group();
-      for (let k = 0; k < 8; k++) {
-        const pe = new THREE.Mesh(petalGeo, petalMat);
-        const pa = (k / 8) * Math.PI * 2;
-        pe.scale.set(0.05, 0.13, 0.035);
-        pe.position.set(Math.cos(pa) * 0.07, 0.1, Math.sin(pa) * 0.07);
-        pe.lookAt(new THREE.Vector3(0, 0.1, 0));
-        pe.rotateX(0.5);
-        flower.add(pe);
-      }
-      const core = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), new THREE.MeshStandardMaterial({ color: '#e8c04a' }));
-      core.position.y = 0.08;
-      flower.add(core);
-      flower.position.set(px, -0.12, pz);
-      group.add(flower);
-    }
-  }
+  group.add(...edgeMeshes);
+  buildLotus(group);
 
   // 飘落的枫叶
   const leafTex = (() => {

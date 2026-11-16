@@ -2,7 +2,7 @@
 // 黄色寺墙、三开间山门、放生池上的石拱桥
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { HALL, COURT, INCENSE, PAGODAS, STONE_LANTERNS, BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
+import { HALL, COURT, INCENSE, PAGODAS, BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng } from '../textures';
 import { mesh, worldBox, lathe } from './util';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
@@ -38,7 +38,7 @@ function lanternTexture() {
   g.fillStyle = '#ffffff';
   g.fillRect(0, 0, 256, 128);
   g.fillStyle = 'rgba(120,40,30,0.35)';
-  for (let x = 0; x < 256; x += 21) g.fillRect(x, 0, 3, 128);
+  for (let x = 0; x < 256; x += 16) g.fillRect(x - 1, 0, 3, 128);
   g.strokeStyle = 'rgba(240,200,90,0.9)';
   g.lineWidth = 5;
   for (const cx of [64, 192]) {
@@ -61,31 +61,42 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const group = new THREE.Group();
   const r = rng(202);
   const interactives: THREE.Object3D[] = [];
-  const stoneMat = pbr('granite', { metersPerTile: 1.5, color: '#c9c4ba' });
+  // 花岗岩贴图本身很暗（均值约 78/255），乘一个大于 1 的颜色提到青灰石的亮度
+  const stoneMat = pbr('granite', { metersPerTile: 1.5, color: new THREE.Color().setRGB(4.0, 3.85, 3.6) });
 
-  // —— 红灯笼：参道两侧的灯绳、大殿屋檐下每间一盏大的、灯柱上各一盏 ——
+  // —— 红灯笼：参道两侧各四根灯杆拉灯绳，大殿屋檐下每间一盏大的 ——
   type L = { p: THREE.Vector3; s: number };
   const lanterns: L[] = [];
   const wireMat = new THREE.LineBasicMaterial({ color: '#3a2e26' });
-  const poleZ = [11, 17.5, 24, 30.5, 37, 43.5];
+  const poleZ = [11, 22, 33, 43.5];
+  const poleH = 4.1;
+  const finial = lathe([[0, 0], [0.07, 0], [0.09, 0.06], [0.07, 0.14], [0.03, 0.2], [0, 0.25]], 12);
   for (const sx of [-1, 1]) {
     const x = sx * 2.75;
     for (const z of poleZ) {
-      const pole = mesh(meterUV(new THREE.CylinderGeometry(0.06, 0.07, 3.9, 8), 0.4, 3.9), M.red);
-      pole.position.set(x, 1.95, z);
+      const pole = mesh(meterUV(new THREE.CylinderGeometry(0.065, 0.075, poleH, 10), 0.45, poleH), M.red);
+      pole.position.set(x, poleH / 2, z);
       group.add(pole);
+      const base = mesh(lathe([[0, 0], [0.2, 0], [0.2, 0.12], [0.15, 0.2], [0, 0.2]], 14), stoneMat);
+      base.position.set(x, 0, z);
+      group.add(base);
+      const top = mesh(finial, M.gold, false);
+      top.position.set(x, poleH, z);
+      group.add(top);
     }
     for (let i = 0; i < poleZ.length - 1; i++) {
       const za = poleZ[i], zb = poleZ[i + 1];
+      const y0 = poleH - 0.12;
+      const sag = 0.5;
       const pts: THREE.Vector3[] = [];
-      for (let k = 0; k <= 16; k++) {
-        const tt = k / 16;
-        pts.push(new THREE.Vector3(x, 3.85 - Math.sin(tt * Math.PI) * 0.25, za + (zb - za) * tt));
+      for (let k = 0; k <= 24; k++) {
+        const tt = k / 24;
+        pts.push(new THREE.Vector3(x, y0 - Math.sin(tt * Math.PI) * sag, za + (zb - za) * tt));
       }
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
-      for (let k = 1; k < 5; k++) {
-        const tt = k / 5;
-        lanterns.push({ p: new THREE.Vector3(x, 3.85 - Math.sin(tt * Math.PI) * 0.25 - 0.45, za + (zb - za) * tt), s: 0.8 });
+      for (let k = 1; k < 7; k++) {
+        const tt = k / 7;
+        lanterns.push({ p: new THREE.Vector3(x, y0 - Math.sin(tt * Math.PI) * sag - 0.45, za + (zb - za) * tt), s: 0.8 });
       }
     }
   }
@@ -93,18 +104,19 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     const x = (HALL.colX[i] + HALL.colX[i + 1]) / 2;
     lanterns.push({ p: new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.9, HALL.colZFront + 1.2), s: 1.9 });
   }
-  for (const [x, z] of STONE_LANTERNS) {
-    const post = mesh(meterUV(new THREE.CylinderGeometry(0.08, 0.1, 2.6, 8), 0.5, 2.6), M.red);
-    post.position.set(x, 1.3, z);
-    group.add(post);
-    const arm = mesh(worldBox(0.7, 0.08, 0.08, 1), M.redDark);
-    arm.position.set(x - Math.sign(x) * 0.3, 2.55, z);
-    group.add(arm);
-    lanterns.push({ p: new THREE.Vector3(x - Math.sign(x) * 0.55, 2.1, z), s: 1.1 });
-  }
   const lanternMat = glowMaterial({ map: lanternTexture(), roughness: 0.6 });
-  const lanternGeo = new THREE.SphereGeometry(0.2, 16, 12);
-  lanternGeo.scale(1, 0.85, 1);
+  // 瓜棱形：16 道竹骨处往里收，骨与骨之间鼓出来
+  const lanternGeo = new THREE.SphereGeometry(0.2, 64, 20);
+  {
+    const lp = lanternGeo.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < lp.count; i++) {
+      const x = lp.getX(i), y = lp.getY(i), z = lp.getZ(i);
+      const th = Math.atan2(z, x);
+      const k = 0.955 + 0.045 * Math.sqrt(Math.abs(Math.sin(8 * th)));
+      lp.setXYZ(i, x * k, y * 0.85, z * k);
+    }
+    lanternGeo.computeVertexNormals();
+  }
   const lm = new THREE.InstancedMesh(lanternGeo, lanternMat, lanterns.length);
   const caps = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 12), M.gold, lanterns.length * 2);
   const tassels = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.01, 0.035, 0.26, 6), new THREE.MeshStandardMaterial({ color: '#b51f18', roughness: 0.8 }), lanterns.length);

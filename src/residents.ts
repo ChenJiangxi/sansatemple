@@ -1,13 +1,15 @@
 // 常住僧人与时刻表。所有动作都由「服务器时间」推算，同一房间的人看到的是同一场：
 //   每小时 0 分：钟头撞钟三下 → 大众从两侧配殿走进大雄宝殿 → 1–5 分大殿共修（礼拜、木鱼、引磬、诵经）→ 散去
 //   每小时 30 分：鼓头击鼓九下
-// 扫地僧沿院子一圈慢慢扫，知客僧在入口迎客，老和尚在银杏下打坐，香灯师和维那守在殿里。
+// 平时各有各的日常（也按服务器时间循环）：扫地僧沿院子扫，知客僧在入口和桥头之间迎客，
+// 老和尚在银杏下打坐、隔一阵起身绕树走一圈，香灯师去佛前和院中香炉上香、看烛台，
+// 维那沿殿里巡一圈到殿门口看看，钟头、鼓头扫钟鼓楼，两位僧人绕着东西两座塔慢慢走（绕塔）。
 import * as THREE from 'three';
 import { Monk, type Action, BOW_DURATION } from './monk';
-import { planRoute, heightAt, SIDE_HALLS, SPAWN, HALL } from './layout';
+import { planRoute, heightAt, SIDE_HALLS, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS } from './layout';
 import type { StrikeBuild } from './world/buildings';
 
-export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'assembly';
+export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'assembly';
 
 // 一小时里的时刻（秒）
 export const SVC = { bell: [3, 11, 19], gather: 25, chant: 62, end: 300, gone: 348, drum: 1800 };
@@ -15,8 +17,12 @@ const DRUM_BEATS = 9;
 
 type P = { x: number; z: number };
 interface Resident {
+  id: number;
   role: Role;
   monk: Monk;
+  prog?: Program;
+  windows?: [number, number][]; // 日常只在一小时里的这些时段进行，其余时间守在岗位上
+  offset?: number;
   post: P & { yaw: number; action: Action };
   route?: P[]; // 大众：从配殿门口到大殿的路线
   len?: number;
@@ -54,6 +60,60 @@ const route = (pts: P[]) => {
   return out;
 };
 
+// 日常：一串「走到某处」「在原地做某事若干秒」的步骤，首尾都在岗位上，循环进行
+type Step = { to: P; v?: number } | { stay: number; act: Action; yaw?: number };
+interface Seg {
+  t0: number;
+  t1: number;
+  path?: ReturnType<typeof polyline>;
+  v: number;
+  p: P;
+  yaw: number;
+  act: Action;
+}
+interface Pose {
+  x: number;
+  z: number;
+  yaw: number;
+  act: Action;
+  v: number;
+}
+type Program = { period: number; at(t: number): Pose };
+function program(start: P & { yaw: number }, steps: Step[]): Program {
+  const segs: Seg[] = [];
+  let t = 0;
+  let cur: P = start;
+  let yaw = start.yaw;
+  for (const st of steps) {
+    if ('to' in st) {
+      const pts = [cur, ...planRoute(cur.x, cur.z, st.to.x, st.to.z)];
+      const path = polyline(pts.length > 1 ? pts : [cur, st.to]);
+      const v = st.v ?? 0.8;
+      const d = path.len / v;
+      segs.push({ t0: t, t1: t + d, path, v, p: cur, yaw, act: 'walk' });
+      t += d;
+      cur = pts[pts.length - 1];
+      if (path.len > 0) yaw = path.at(path.len).yaw;
+    } else {
+      if (st.yaw !== undefined) yaw = st.yaw;
+      segs.push({ t0: t, t1: t + st.stay, v: 0, p: cur, yaw, act: st.act });
+      t += st.stay;
+    }
+  }
+  return {
+    period: t,
+    at(tt: number): Pose {
+      const s = segs.find((g) => tt < g.t1) ?? segs[segs.length - 1];
+      if (s.path) {
+        const q = s.path.at((tt - s.t0) * s.v);
+        return { x: q.x, z: q.z, yaw: q.yaw, act: 'walk', v: s.v };
+      }
+      return { x: s.p.x, z: s.p.z, yaw: s.yaw, act: s.act, v: 0 };
+    },
+  };
+}
+const loop = (pts: P[]) => pts.map((p) => ({ to: p }));
+
 export interface ResidentsOpts {
   bell: StrikeBuild;
   drum: StrikeBuild;
@@ -69,9 +129,10 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     monk.root.position.set(post.x, heightAt(post.x, post.z), post.z);
     monk.root.rotation.y = post.yaw;
     monk.setAction(post.action);
-    monk.root.traverse((m) => (m.userData.interact = { type: 'npc', role }));
+    const id = list.length;
+    monk.root.traverse((m) => (m.userData.interact = { type: 'npc', role, id }));
     scene.add(monk.root);
-    const r: Resident = { role, monk, post, lastStrike: -1 };
+    const r: Resident = { id, role, monk, post, lastStrike: -1 };
     list.push(r);
     return r;
   };
@@ -95,6 +156,81 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     scene.add(pad);
     elder.monk.root.position.y += 0.12;
   }
+  // —— 平时的日常 ——
+  const [xiangdeng, weina, bellMonk, drumMonk] = list;
+  const at = (r: Resident) => ({ x: r.post.x, z: r.post.z, yaw: r.post.yaw });
+  // 香灯师：佛前上香 → 出殿到院中大香炉上香 → 看看两边烛台 → 回殿
+  xiangdeng.prog = program(at(xiangdeng), [
+    { stay: 140, act: 'idle' },
+    { to: ALTAR_SPOT, v: 0.7 },
+    { stay: 8, act: 'incense', yaw: Math.PI },
+    { to: { x: INCENSE.x, z: INCENSE.z + 2.3 }, v: 0.85 },
+    { stay: 8, act: 'incense', yaw: Math.PI },
+    { to: { x: INCENSE.x + 2.6, z: INCENSE.z + 1.4 }, v: 0.6 },
+    { stay: 4, act: 'hapjang', yaw: Math.PI },
+    { to: { x: INCENSE.x - 2.6, z: INCENSE.z + 1.4 }, v: 0.6 },
+    { stay: 4, act: 'hapjang', yaw: Math.PI },
+    { to: xiangdeng.post, v: 0.85 },
+    { stay: 2, act: 'idle', yaw: Math.PI },
+  ]);
+  xiangdeng.windows = [[SVC.gone + 20, 3600 - 50]];
+  // 维那：沿殿里东侧走到殿门口，站一会儿看看院子，再从西侧绕回来
+  weina.prog = program(at(weina), [
+    { stay: 100, act: 'idle' },
+    ...loop([{ x: 9.5, z: -13 }, { x: 9.5, z: -6.5 }, { x: 2.2, z: -3.2 }]).map((s) => ({ ...s, v: 0.6 })),
+    { stay: 4, act: 'hapjang', yaw: 0 },
+    { stay: 18, act: 'idle', yaw: 0 },
+    ...loop([{ x: -9.5, z: -6.5 }, { x: -9.5, z: -13 }, weina.post]).map((s) => ({ ...s, v: 0.6 })),
+    { stay: 2, act: 'idle', yaw: Math.PI },
+  ]);
+  weina.windows = [[SVC.gone + 50, 3600 - 60]];
+  // 钟头、鼓头：在钟鼓楼上转一圈，扫两处地
+  const towerRound = (r: Resident, cx: number, cz: number, sx: number) =>
+    program(at(r), [
+      { stay: 50, act: 'idle' },
+      { to: { x: cx, z: cz + 3.0 }, v: 0.6 },
+      { stay: 10, act: 'sweep', yaw: -sx * Math.PI / 2 },
+      { to: { x: cx - sx * 3.0, z: cz }, v: 0.6 },
+      { stay: 10, act: 'sweep', yaw: Math.PI },
+      { to: { x: cx, z: cz - 3.0 }, v: 0.6 },
+      { stay: 8, act: 'idle', yaw: Math.PI },
+      { to: r.post, v: 0.6 },
+      { stay: 2, act: 'idle', yaw: r.post.yaw },
+    ]);
+  bellMonk.prog = towerRound(bellMonk, o.bell.standX + 2.6, o.bell.standZ - 1.0, -1);
+  bellMonk.windows = [[40, 3600 - 40]];
+  drumMonk.prog = towerRound(drumMonk, o.drum.standX - 1.9, o.drum.standZ - 0.3, 1);
+  drumMonk.windows = [[40, SVC.drum - 30], [SVC.drum + 40, 3600 - 20]];
+  // 知客僧：在入口站一阵，走到桥头朝山门方向合十、看看有没有人来，再走回来
+  greeter.prog = program(at(greeter), [
+    { stay: 75, act: 'idle' },
+    { to: { x: SPAWN.x + 3.6, z: SPAWN.z + 5.6 }, v: 0.7 },
+    { stay: 3, act: 'hapjang', yaw: 0 },
+    { stay: 12, act: 'idle', yaw: 0 },
+    { to: greeter.post, v: 0.7 },
+    { stay: 1, act: 'idle', yaw: greeter.post.yaw },
+  ]);
+  // 老和尚：坐三分多钟，起身绕银杏慢慢走一圈，回来合十再坐下
+  elder.prog = program(at(elder), [
+    { stay: 200, act: 'sit' },
+    ...loop([{ x: elderPos.x - 1.8, z: elderPos.z + 1.6 }, { x: elderPos.x + 1.8, z: elderPos.z + 2.0 }, { x: elderPos.x + 2.0, z: elderPos.z - 1.6 }, { x: elderPos.x - 1.6, z: elderPos.z - 1.8 }, elderPos]).map((s) => ({ ...s, v: 0.4 })),
+    { stay: 3, act: 'hapjang', yaw: elder.post.yaw },
+  ]);
+  // 绕塔：两位僧人各绕一座塔，塔始终在右手边，每绕一圈在塔前合十
+  const walkers = PAGODAS.map((pg, i) => {
+    const R = 3.3;
+    const pts: P[] = [];
+    for (let k = 1; k <= 16; k++) {
+      const a = Math.PI / 2 + (k / 16) * Math.PI * 2;
+      pts.push({ x: pg.x + Math.cos(a) * R, z: pg.z + Math.sin(a) * R });
+    }
+    const start = { x: pg.x, z: pg.z + R, yaw: Math.PI };
+    const r = add('walker', 'resident', { ...start, action: 'idle' });
+    r.prog = program(start, [{ stay: 4, act: 'hapjang', yaw: Math.PI }, ...loop(pts).map((s) => ({ ...s, v: 0.45 }))]);
+    r.offset = i * 23;
+    return r;
+  });
+
   // 扫地僧：沿院子一圈，每到一处停下扫一会儿
   const sweeper = add('sweeper', 'resident', { x: -6, z: 14, yaw: 0, action: 'sweep' });
   const sweepStops: P[] = [
@@ -155,10 +291,26 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   const tmp = new THREE.Vector3();
   let greetAt = -999;
   let greetWall = 0;
-  const greeterYaw = greeter.post.yaw;
+  let greetYaw = 0;
+  void walkers;
+  // 按日常算出此刻的位置和动作；不在日常时段里就是 null（守在岗位上）
+  function routine(r: Resident, nowS: number, hourS: number): Pose | null {
+    if (!r.prog) return null;
+    if (!r.windows) return r.prog.at((nowS + (r.offset ?? 0)) % r.prog.period);
+    for (const [w0, w1] of r.windows) {
+      if (hourS < w0 || hourS >= w1) continue;
+      const k = hourS - w0;
+      const n = Math.floor((w1 - w0) / r.prog.period);
+      return k < n * r.prog.period ? r.prog.at(k % r.prog.period) : null;
+    }
+    return null;
+  }
+  const turn = (m: Monk, yaw: number, k: number) => {
+    m.root.rotation.y += Math.atan2(Math.sin(yaw - m.root.rotation.y), Math.cos(yaw - m.root.rotation.y)) * Math.min(1, k);
+  };
 
   return {
-    interactives: [sweeper.monk.root, greeter.monk.root, elder.monk.root] as THREE.Object3D[],
+    interactives: list.filter((r) => r.role !== 'assembly').map((r) => r.monk.root),
     list,
     // 当前处在时刻表的哪一段（给界面用）
     phase(s: number): { kind: 'idle' | 'soon' | 'bell' | 'gather' | 'chant' | 'disperse'; toStart: number } {
@@ -172,21 +324,40 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     // 知客僧：玩家走近时转身合十（一分钟内只迎一次）
     greet(px: number, pz: number, now: number) {
       const g = greeter.monk.root.position;
+      if (greeter.monk.action === 'walk') return false;
       if (Math.hypot(px - g.x, pz - g.z) < 4.2 && now - greetAt > 60) {
         greetAt = now;
         greetWall = Date.now() / 1000;
-        greeter.post.yaw = Math.atan2(px - g.x, pz - g.z);
+        greetYaw = Math.atan2(px - g.x, pz - g.z);
         greeter.monk.setAction('hapjang');
         return true;
       }
       return false;
     },
-    update(dt: number, nowMs: number, camPos: THREE.Vector3) {
+    update(dt: number, nowMs: number, camPos: THREE.Vector3, player: P) {
       const hourS = (nowMs / 1000) % 3600;
       const hourN = Math.floor(nowMs / 3600000);
+      const nowS = nowMs / 1000;
       for (const r of list) {
         const m = r.monk;
         if (r.role === 'assembly') continue;
+        const pose = routine(r, nowS, hourS);
+        if (pose) {
+          // 在走日常：位置、动作都由时刻算出；站着没事时，有人走近就转过来看看
+          m.root.position.set(pose.x, heightAt(pose.x, pose.z) + (pose.act === 'sit' && r.role === 'elder' ? 0.12 : 0), pose.z);
+          let yaw = pose.yaw;
+          const near = Math.hypot(player.x - pose.x, player.z - pose.z);
+          if (pose.act === 'idle' && near < 3.2 && near > 0.3) yaw = Math.atan2(player.x - pose.x, player.z - pose.z);
+          if (r.role === 'greeter' && Date.now() / 1000 - greetWall < 9 && pose.act !== 'walk') yaw = greetYaw;
+          turn(m, yaw, dt * (pose.act === 'walk' ? 6 : 3));
+          m.speed = pose.v;
+          const keepGreet = r.role === 'greeter' && m.action === 'hapjang' && m.actionTime < 2.4;
+          if (m.action !== pose.act && !keepGreet) m.setAction(pose.act);
+          m.update(dt);
+          continue;
+        }
+        if (r.role === 'elder') m.root.position.set(r.post.x, heightAt(r.post.x, r.post.z) + 0.12, r.post.z);
+        else if (r.role !== 'sweeper') m.root.position.set(r.post.x, heightAt(r.post.x, r.post.z), r.post.z);
         if (r.role === 'sweeper') {
           const st = sweeperAt((nowMs / 1000) % sweepPeriod);
           const p = sweepPath.at(st.d);
@@ -198,7 +369,11 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
           const want: Action = st.sweeping ? 'sweep' : 'walk';
           if (m.action !== want) m.setAction(want);
         } else {
-          m.root.rotation.y += Math.atan2(Math.sin(r.post.yaw - m.root.rotation.y), Math.cos(r.post.yaw - m.root.rotation.y)) * Math.min(1, dt * 3);
+          let yaw = r.post.yaw;
+          const near = Math.hypot(player.x - r.post.x, player.z - r.post.z);
+          if (m.action === 'idle' && near < 3.2 && near > 0.3 && r.role !== 'xiangdeng' && r.role !== 'weina') yaw = Math.atan2(player.x - r.post.x, player.z - r.post.z);
+          turn(m, yaw, dt * 3);
+          if (m.action === 'walk' || m.action === 'sweep' || (m.action === 'sit' && r.role !== 'elder')) m.setAction(r.post.action);
         }
         // 殿内两位：共修时一位敲木鱼、一位合十
         if (r.role === 'xiangdeng' || r.role === 'weina') {
@@ -244,7 +419,6 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
           }
         }
         if (m.action === 'hapjang' && m.actionTime > 2.4) m.setAction(r.post.action);
-        if (r.role === 'greeter' && Date.now() / 1000 - greetWall > 9) r.post.yaw = greeterYaw;
         m.update(dt);
       }
 
