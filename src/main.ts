@@ -6,6 +6,8 @@ import { t, randomName, onLangChange, type Key } from './i18n';
 import { Environment, buildTerrain, type TimeMode } from './world/environment';
 import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
+import { preloadTreeTextures } from './world/ez-textures';
+import { loadHead } from './body-real';
 import { buildProps } from './world/props';
 import { buildBuildings } from './world/buildings';
 import { IncenseSpot } from './world/incense';
@@ -75,8 +77,16 @@ async function start() {
 
   // —— 渲染器与场景 ——
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  // 调试：?debugview 时把着色器编译错误写进页面，便于排查
+  // 调试：?debugview 时把着色器编译错误和脚本报错写进页面，便于排查
   if (new URL(location.href).searchParams.has('debugview')) {
+    const errBox = document.createElement('pre');
+    errBox.style.cssText = 'position:fixed;left:8px;top:60px;z-index:99;max-width:60vw;white-space:pre-wrap;background:#300c;color:#fdd;font:11px monospace;padding:4px 8px;pointer-events:none';
+    document.body.appendChild(errBox);
+    const showErr = (m: string) => {
+      errBox.textContent = (errBox.textContent + '\n' + m).slice(-1500);
+    };
+    addEventListener('error', (e) => showErr('error: ' + e.message));
+    addEventListener('unhandledrejection', (e) => showErr('reject: ' + String((e as PromiseRejectionEvent).reason?.stack || (e as PromiseRejectionEvent).reason)));
     renderer.debug.onShaderError = (gl, program, vs, fs) => {
       let box = document.querySelector<HTMLPreElement>('[data-testid="shader-error"]');
       if (!box) {
@@ -92,7 +102,7 @@ async function start() {
   renderer.domElement.className = 'main';
   renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 1.75));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   let shadowsOn = localStorage.getItem('sansa.shadows') !== '0';
   renderer.shadowMap.enabled = shadowsOn;
@@ -101,14 +111,16 @@ async function start() {
 
   setMaxAnisotropy(renderer.capabilities.getMaxAnisotropy());
   const bootMsg = document.getElementById('boot-msg')!;
-  await preloadTextures((d, n) => (bootMsg.textContent = `${t('opening')} · ${Math.round((d / n) * 100)}%`));
+  // 贴图、僧人的头、树皮树叶一起在加载画面里下载好
+  await Promise.all([
+    preloadTextures((d, n) => (bootMsg.textContent = `${t('opening')} · ${Math.round((d / n) * 100)}%`)),
+    loadHead().catch(() => {}),
+    preloadTreeTextures(),
+  ]);
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   const roomEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  // 室外反射用森林全景照片
-  const skyTex = loadTexture('sky.jpg');
-  skyTex.mapping = THREE.EquirectangularReflectionMapping;
-  scene.environment = pmrem.fromEquirectangular(skyTex).texture;
+  // 室外的环境光由 Environment 用写实天空生成
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 900);
 
   const post = new PostFX(renderer, scene, camera, isTouch);
@@ -132,9 +144,9 @@ async function start() {
   const timeParam = new URL(location.href).searchParams.get('time') as TimeMode | null;
   env.setMode(timeParam && ['auto', 'dawn', 'day', 'dusk', 'night'].includes(timeParam) ? timeParam : (localStorage.getItem('sansa.time') as TimeMode) || 'auto');
   if (isTouch) env.sun.shadow.mapSize.set(1024, 1024);
-  buildTerrain(scene);
+  const terrain = buildTerrain(scene);
   const hall = buildHall(scene);
-  const nature = buildNature(scene);
+  const nature = buildNature(scene, { renderer, heightAt: terrain.heightAt, size: terrain.size, lite: isTouch });
   const props = buildProps(scene);
   const buildings = buildBuildings(scene);
   const pond = buildPond(scene, { isTouch, lanternFrom: { x: LANTERN_STAND.standX, z: LANTERN_STAND.standZ + 0.9 } });
@@ -1025,7 +1037,7 @@ async function start() {
   }, 1000);
 
   // —— 镜头 ——
-  const cam = { yaw: 0, pitch: 0.3, dist: isTouch ? 6.4 : 5.6, tx: player.x, ty: 1, tz: player.z };
+  const cam = { yaw: 0, pitch: 0.22, dist: isTouch ? 5.4 : 4.6, tx: player.x, ty: 1.4, tz: player.z };
   // 调试：?debugview&at=x,z&cam=yaw,pitch,dist 直接跳到某个位置
   if (new URL(location.href).searchParams.has('debugview')) {
     const sp = new URL(location.href).searchParams;
@@ -1043,6 +1055,14 @@ async function start() {
     if (act === 'lantern') setTimeout(requestLantern, 1200);
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
+    // 调试：?treestats 在左下角显示树的三角形数
+    if (sp.has('treestats')) {
+      const d = document.createElement('div');
+      d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99;background:#000a;color:#fff;font:12px monospace;padding:4px 8px';
+      d.textContent = `trees ${(((window as unknown as { __treeTris: number }).__treeTris ?? 0) / 1000).toFixed(0)}k tris · calls ${renderer.info.render.calls} · scene ${(renderer.info.render.triangles / 1000).toFixed(0)}k`;
+      document.body.appendChild(d);
+      setInterval(() => (d.textContent = `trees ${(((window as unknown as { __treeTris: number }).__treeTris ?? 0) / 1000).toFixed(0)}k tris · calls ${renderer.info.render.calls} · frame ${(renderer.info.render.triangles / 1000).toFixed(0)}k`), 1000);
+    }
     // 调试：?hideme 截图时把自己藏起来
     if (sp.has('hideme')) me.root.scale.setScalar(0.001);
     const rt = Number(sp.get('routine'));
@@ -1057,7 +1077,8 @@ async function start() {
     const k = 1 - Math.exp(-dt * 9);
     cam.tx += (player.x - cam.tx) * k;
     cam.tz += (player.z - cam.tz) * k;
-    const targetY = player.y + (me.action === 'bow' || me.action === 'sit' ? 0.55 : 0.95);
+    // 镜头看向胸口偏上（真人比例），跪拜、打坐时跟着降低
+    const targetY = player.y + (me.action === 'bow' || me.action === 'sit' ? 0.8 : 1.4);
     cam.ty += (targetY - cam.ty) * k;
     tmpT.set(cam.tx, cam.ty, cam.tz);
     const cp = Math.cos(cam.pitch);
@@ -1355,7 +1376,7 @@ async function start() {
     }
     const moving = !!(dx || dz);
     if (moving) {
-      const speed = 2.7;
+      const speed = 2.1;
       const step = Math.min(speed * dt, 0.2);
       let nx = player.x + dx * step;
       let nz = player.z + dz * step;
@@ -1434,7 +1455,7 @@ async function start() {
       const m = n.r.monk.root;
       const a = n.r.monk.action;
       const low = a === 'sit' || a === 'bow' || a === 'read' || a === 'tea' || a === 'teach' || a === 'fill';
-      const y = m.position.y + (low ? 1.2 : 1.55) * m.scale.y;
+      const y = m.position.y + (low ? 1.25 : 1.95) * m.scale.y;
       if (!m.visible || overlay || intro) {
         n.tag.style.opacity = '0';
         n.bubble.style.opacity = '0';
@@ -1449,11 +1470,11 @@ async function start() {
         placeTag(n.bubble, m.position.x, y + 0.42, m.position.z, 30);
       } else n.bubble.style.opacity = '0';
     }
-    const lift = me.action === 'bow' || me.action === 'sit' ? 1.15 : 1.5;
+    const lift = me.action === 'bow' || me.action === 'sit' ? 1.25 : 1.95;
     placeTag(myTag, player.x, player.y + lift, player.z, 60);
     myTag.style.visibility = overlay ? 'hidden' : 'visible';
     for (const r of remotes.values()) {
-      const y = r.monk.root.position.y + (r.a === 'bow' || r.a === 'sit' ? 1.15 : 1.5);
+      const y = r.monk.root.position.y + (r.a === 'bow' || r.a === 'sit' ? 1.25 : 1.95);
       placeTag(r.tag, r.x, y, r.z, 24);
       r.tag.style.visibility = overlay ? 'hidden' : 'visible';
     }
@@ -1516,7 +1537,7 @@ async function start() {
       env.update();
       props.setLanternLevel(env.lanternLevel);
     }
-    env.sky.position.copy(camera.position);
+    env.tick(dt, camera.position);
     post.render(dt / slowmo);
     stage.render(dt);
     updateTags();

@@ -1,6 +1,7 @@
 // Q 版小和尚：几何体拼成，动作用关节旋转做程序动画
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { REAL, R, buildRealGeo, loadHead } from './body-real';
 
 
 export type Action =
@@ -100,6 +101,11 @@ function incensePose(t: number): { pose: Pose; prop: [number, number, number] } 
     }
   }
   return { pose: mk({}), prop: [0, 0.1, 0.36] };
+}
+
+// 道具在上身坐标里的位置是按 Q 版身材定的；真实身体更高、手更靠前，这里换算一下
+function tp(v: [number, number, number]): [number, number, number] {
+  return REAL ? [v[0] * 1.3, 0.12 + v[1] * 1.2, 0.1 + v[2] * 0.9] : v;
 }
 
 // 通用的关键帧插值：[时间, 姿势, 道具位置]
@@ -313,6 +319,19 @@ function tube(pts: THREE.Vector3[], r: number, closed = false) {
 
 // 所有小和尚共用同一套几何体
 let sharedGeo: ReturnType<typeof buildGeo> | null = null;
+let realGeo: ReturnType<typeof buildRealGeo> | null = null;
+let linen: { n: THREE.Texture; r: THREE.Texture } | null = null;
+function linenMaps() {
+  if (!linen) {
+    const L = new THREE.TextureLoader();
+    const base = new URL('tex/', document.baseURI).toString();
+    const n = L.load(base + 'linen_normal.jpg');
+    const r = L.load(base + 'linen_rough.jpg');
+    for (const t of [n, r]) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    linen = { n, r };
+  }
+  return linen;
+}
 function buildGeo() {
   // 腿与鞋（鞋头微微上翘）
   const leg = xf(new THREE.CapsuleGeometry(0.08, 0.14, 4, 10), [0, -0.14, 0]);
@@ -534,6 +553,11 @@ export class Monk {
   private armR = new THREE.Group();
   private handL = new THREE.Group();
   private handR = new THREE.Group();
+  // 真实身体才有的关节：膝、肘
+  private kneeL = new THREE.Group();
+  private kneeR = new THREE.Group();
+  private elbowL = new THREE.Group();
+  private elbowR = new THREE.Group();
   private moktakProp: THREE.Group;
   private malletProp: THREE.Mesh;
   private beadsProp: THREE.Mesh;
@@ -575,62 +599,65 @@ export class Monk {
       return o;
     };
 
-    this.hips.position.y = HIP;
-    this.root.add(this.hips);
+    if (REAL) this.buildReal(M, noKasaya, mesh);
+    else {
+      this.hips.position.y = HIP;
+      this.root.add(this.hips);
 
-    // 腿：白绑腿 + 僧鞋
-    for (const [g, sx] of [[this.legL, 1], [this.legR, -1]] as [THREE.Group, number][]) {
-      g.position.set(sx * 0.1, 0, 0);
-      g.rotation.order = 'YXZ';
-      g.add(mesh(G.leg, M.legging), mesh(G.shoe, M.shoe));
-      this.hips.add(g);
+      // 腿：白绑腿 + 僧鞋
+      for (const [g, sx] of [[this.legL, 1], [this.legR, -1]] as [THREE.Group, number][]) {
+        g.position.set(sx * 0.1, 0, 0);
+        g.rotation.order = 'YXZ';
+        g.add(mesh(G.leg, M.legging), mesh(G.shoe, M.shoe));
+        this.hips.add(g);
+      }
+
+      // 下摆：海青长到脚面，袈裟盖到小腿
+      this.skirt.add(mesh(G.skirt, M.robe));
+      if (!noKasaya) this.skirt.add(mesh(G.skirtKasaya, M.kasaya));
+      this.hips.add(this.skirt);
+
+      // 上身
+      this.hips.add(this.torso);
+      this.torso.add(mesh(G.robe, M.robe), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.mala, M.bead, false));
+      if (!noKasaya) this.torso.add(mesh(G.kasaya, M.kasaya), mesh(G.ring, M.gold, false));
+
+      // 头
+      this.headG.position.y = 0.42;
+      this.torso.add(this.headG);
+      this.headG.add(mesh(G.head, M.headSkin), mesh(G.face, M.face, false));
+      const blush = mesh(G.blush, M.blush, false);
+      blush.renderOrder = 2;
+      this.headG.add(blush);
+
+      // 手臂：宽袖（外黄里深）+ 手；左肩上搭着袈裟
+      for (const [g, sx] of [[this.armL, 1], [this.armR, -1]] as [THREE.Group, number][]) {
+        g.position.set(sx * 0.2, 0.3, 0);
+        g.rotation.order = 'YXZ';
+        const h = sx > 0 ? this.handL : this.handR;
+        h.position.y = -0.25;
+        h.add(mesh(sx > 0 ? G.handL : G.handR, M.skin));
+        g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), h);
+        this.torso.add(g);
+      }
+      if (!noKasaya) this.armL.add(mesh(G.shoulderCap, M.kasaya));
+      if (style === 'elder') this.root.scale.setScalar(1.08);
+      if (style === 'novice') this.root.scale.setScalar(0.84);
     }
-
-    // 下摆：海青长到脚面，袈裟盖到小腿
-    this.skirt.add(mesh(G.skirt, M.robe));
-    if (!noKasaya) this.skirt.add(mesh(G.skirtKasaya, M.kasaya));
-    this.hips.add(this.skirt);
-
-    // 上身
-    this.hips.add(this.torso);
-    this.torso.add(mesh(G.robe, M.robe), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.mala, M.bead, false));
-    if (!noKasaya) this.torso.add(mesh(G.kasaya, M.kasaya), mesh(G.ring, M.gold, false));
-
-    // 头
-    this.headG.position.y = 0.42;
-    this.torso.add(this.headG);
-    this.headG.add(mesh(G.head, M.headSkin), mesh(G.face, M.face, false));
-    const blush = mesh(G.blush, M.blush, false);
-    blush.renderOrder = 2;
-    this.headG.add(blush);
-
-    // 手臂：宽袖（外黄里深）+ 手；左肩上搭着袈裟
-    for (const [g, sx] of [[this.armL, 1], [this.armR, -1]] as [THREE.Group, number][]) {
-      g.position.set(sx * 0.2, 0.3, 0);
-      g.rotation.order = 'YXZ';
-      const h = sx > 0 ? this.handL : this.handR;
-      h.position.y = -0.25;
-      h.add(mesh(sx > 0 ? G.handL : G.handR, M.skin));
-      g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), h);
-      this.torso.add(g);
-    }
-    if (!noKasaya) this.armL.add(mesh(G.shoulderCap, M.kasaya));
-    if (style === 'elder') this.root.scale.setScalar(1.08);
-    if (style === 'novice') this.root.scale.setScalar(0.84);
 
     // 手里的木鱼、木槌与念珠（只在对应动作时显示）
     this.moktakProp = new THREE.Group();
     this.moktakProp.add(mesh(G.moktak, M.moktak), mesh(G.moktakSlit, M.dark, false));
-    this.moktakProp.position.set(0, -0.3, 0.03);
+    this.moktakProp.position.set(0, REAL ? -0.27 : -0.3, 0.03);
     this.moktakProp.visible = false;
-    this.armL.add(this.moktakProp);
+    (REAL ? this.elbowL : this.armL).add(this.moktakProp);
     this.malletProp = mesh(G.mallet, M.wood, false);
     this.malletProp.visible = false;
-    this.armR.add(this.malletProp);
+    (REAL ? this.elbowR : this.armR).add(this.malletProp);
     this.beadsProp = mesh(G.handBeads, M.bead, false);
-    this.beadsProp.position.set(0, -0.27, 0.03);
+    this.beadsProp.position.set(0, REAL ? -0.3 : -0.27, 0.03);
     this.beadsProp.visible = false;
-    this.armR.add(this.beadsProp);
+    (REAL ? this.elbowR : this.armR).add(this.beadsProp);
 
     // 手里的两支香（上香时显示）
     this.incenseProp = new THREE.Group();
@@ -683,6 +710,12 @@ export class Monk {
     }
     this.tubeProp.visible = false;
     this.torso.add(this.tubeProp);
+    if (REAL) {
+      this.lanternProp.scale.setScalar(1.7);
+      this.tubeProp.scale.setScalar(1.5);
+      this.moktakProp.scale.setScalar(1.2);
+      this.beadsProp.scale.setScalar(1.15);
+    }
 
     // 脚下的圆形软阴影（让角色不显得飘）
     const blob = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), M.shadow);
@@ -690,6 +723,63 @@ export class Monk {
     blob.position.y = 0.02;
     blob.renderOrder = 1;
     this.root.add(blob);
+  }
+
+  // 真实比例的身体：关节位置按 body-real.ts 的尺寸摆
+  private buildReal(M: Record<string, THREE.Material>, noKasaya: boolean, mesh: (g: THREE.BufferGeometry, m: THREE.Material, shadow?: boolean) => THREE.Mesh) {
+    const G = (realGeo ??= buildRealGeo());
+    (M.skin as THREE.MeshStandardMaterial).color.set('#d6a78e');
+    // 袍子的布纹：亚麻的法线和粗糙度贴图（Poly Haven，CC0）
+    const lin = linenMaps();
+    for (const m of [M.robe, M.lining, M.legging] as THREE.MeshPhysicalMaterial[]) {
+      if (m.normalMap) continue;
+      m.normalMap = lin.n;
+      m.normalScale.set(0.6, 0.6);
+      m.roughness = 0.95;
+      if (m.sheen !== undefined) m.sheen = 0.2;
+      m.needsUpdate = true;
+    }
+    void lin.r;
+    this.hips.position.y = R.hip;
+    this.root.add(this.hips);
+    for (const [g, k, sx] of [[this.legL, this.kneeL, 1], [this.legR, this.kneeR, -1]] as [THREE.Group, THREE.Group, number][]) {
+      g.position.set(sx * 0.095, 0, 0);
+      g.rotation.order = 'YXZ';
+      g.add(mesh(G.thigh, M.robe));
+      k.position.y = -R.thigh;
+      k.add(mesh(G.shin, M.legging), mesh(G.shoe, M.shoe));
+      g.add(k);
+      this.hips.add(g);
+    }
+    this.skirt.add(mesh(G.skirt, M.robe));
+    if (!noKasaya) this.skirt.add(mesh(G.skirtKasaya, M.kasaya));
+    this.hips.add(this.skirt);
+    this.hips.add(this.torso);
+    this.torso.add(mesh(G.top, M.robe), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.mala, M.bead, false));
+    if (!noKasaya) this.torso.add(mesh(G.kasaya, M.kasaya), mesh(G.ring, M.gold, false));
+    this.headG.position.y = R.neck - 0.005;
+    this.torso.add(this.headG);
+    loadHead().then((h) => {
+      const m = new THREE.Mesh(h.geometry, h.material);
+      m.castShadow = true;
+      this.headG.add(m);
+    });
+    for (const [g, e, sx] of [[this.armL, this.elbowL, 1], [this.armR, this.elbowR, -1]] as [THREE.Group, THREE.Group, number][]) {
+      g.position.set(sx * R.shoulder.x, R.shoulder.y, 0);
+      g.rotation.order = 'YXZ';
+      g.add(mesh(G.upperSleeve, M.robe));
+      e.position.y = -R.upper;
+      e.rotation.order = 'YXZ';
+      const h = sx > 0 ? this.handL : this.handR;
+      h.position.y = -R.fore;
+      h.add(mesh(sx > 0 ? G.handL : G.handR, M.skin));
+      e.add(mesh(G.foreSleeve, M.robe), mesh(G.foreSleeve, M.lining, false), h);
+      g.add(e);
+      this.torso.add(g);
+    }
+    if (!noKasaya) this.armL.add(mesh(G.shoulderCap, M.kasaya));
+    if (this.style === 'elder') this.root.scale.setScalar(0.98);
+    if (this.style === 'novice') this.root.scale.setScalar(0.8);
   }
 
   // 扫地僧的竹扫帚（只有用到时才做）
@@ -704,7 +794,8 @@ export class Monk {
     head.position.set(0, -0.56, 0.5);
     head.rotation.x = 0.7 + Math.PI;
     g.add(stick, head);
-    g.position.set(0, 0.2, 0.18);
+    g.position.set(...tp([0, 0.2, 0.18]));
+    if (REAL) g.scale.setScalar(1.6);
     g.visible = false;
     this.torso.add(g);
     this.broomProp = g;
@@ -787,10 +878,44 @@ export class Monk {
       this.handR.add(g);
     }
     // Q 版身材头大手短，道具按真实尺寸会被脑袋挡住，放大一些
-    g.scale.setScalar({ book: 1.8, cup: 1.9, tray: 1.45, can: 1.35, cloth: 1.6 }[kind]);
+    g.scale.setScalar((REAL ? { book: 1.3, cup: 1.15, tray: 1.3, can: 1.8, cloth: 1.3 } : { book: 1.8, cup: 1.9, tray: 1.45, can: 1.35, cloth: 1.6 })[kind]);
     g.visible = false;
     this.extra[kind] = g;
     return g;
+  }
+
+  // 把姿势参数换算到真实身体：胯高按「站 / 跪 / 坐凳 / 盘腿」分别给，腿和手臂多一个膝、肘
+  private applyReal(p: Pose) {
+    const ss = THREE.MathUtils.smoothstep;
+    const avg = (p.legL + p.legR) / 2;
+    const kneelW = ss(avg, 0.7, 1.4);
+    const seatW = ss(-avg, 0.7, 1.3);
+    const cross = ss(p.legSpread, 0.25, 0.6);
+    let H = THREE.MathUtils.lerp(R.hip, 0.5, kneelW);
+    H = THREE.MathUtils.lerp(H, THREE.MathUtils.lerp(0.5, 0.2, cross), seatW);
+    this.hips.position.y = H + p.bob;
+    const leg = (a: number, g: THREE.Group, k: THREE.Group, side: number) => {
+      const walkT = a * 0.75, walkK = 0.12 + Math.max(0, a) * 0.95;
+      const thigh = THREE.MathUtils.lerp(THREE.MathUtils.lerp(walkT, 0.02, kneelW), THREE.MathUtils.lerp(-1.5, -1.3, cross), seatW);
+      const knee = THREE.MathUtils.lerp(THREE.MathUtils.lerp(walkK, 1.6, kneelW), THREE.MathUtils.lerp(1.45, 2.55, cross), seatW);
+      g.rotation.set(thigh, side * p.legSpread * 0.9, 0);
+      k.rotation.x = knee;
+    };
+    leg(p.legL, this.legL, this.kneeL, -1);
+    leg(p.legR, this.legR, this.kneeR, 1);
+    // 下摆：跪、坐时压短并向外摊开
+    const hr = H / R.hip;
+    this.skirt.scale.set(1 + seatW * 0.3, Math.max(0.2, hr) * (1 - 0.45 * seatW * (1 - cross)), 1 + seatW * 0.4);
+    this.skirt.rotation.z = p.sway * 0.6;
+    this.torso.rotation.x = p.torso;
+    this.headG.rotation.x = p.head * 0.8;
+    const arm = (pitch: number, yaw: number, roll: number, g: THREE.Group, e: THREE.Group, h: THREE.Group) => {
+      g.rotation.set(pitch * 0.3, yaw * 0.55, roll);
+      e.rotation.x = THREE.MathUtils.clamp(pitch * 1.32, -2.6, -0.08);
+      h.rotation.x = p.wrist * 0.7;
+    };
+    arm(p.armLp, p.armLy, p.armLr, this.armL, this.elbowL, this.handL);
+    arm(p.armRp, p.armRy, p.armRr, this.armR, this.elbowR, this.handR);
   }
 
   setAction(a: Action, restart = false) {
@@ -848,7 +973,7 @@ export class Monk {
           // 双手平端托盘，走得稳
           target = mk({ ...legs, bob: legs.bob * 0.5, armLp: -1.3, armRp: -1.3, armLy: -0.3, armRy: 0.3, wrist: -0.15, torso: 0.02 });
           const tr = this.prop('tray');
-          tr.position.set(0, 0.07, 0.3);
+          tr.position.set(...tp([0, 0.07, 0.3]));
           tr.rotation.x = -this.pose.torso;
         } else if (this.action === 'beadwalk') {
           target = mk({ ...legs, armLp: -1.05, armRp: -1.1, armLy: -0.7, armRy: 0.75, wrist: -0.4, head: 0.2, torso: 0.05 });
@@ -865,7 +990,7 @@ export class Monk {
         const flip = ct > 7.6 ? ease(Math.min(1, (ct - 7.6) / 0.9)) : 0;
         target = mk({ ...seated, armLp: -1.2, armRp: -1.2 - (flip > 0 && flip < 1 ? 0.12 : 0), armLy: -0.42, armRy: 0.42 + Math.sin(flip * Math.PI) * 0.25, wrist: -0.35, head: 0.42, torso: 0.08, bob: Math.sin(t * 1.1) * 0.005 });
         const b = this.prop('book');
-        b.position.set(0, 0.13, 0.3);
+        b.position.set(...tp([0, 0.13, 0.3]));
         b.rotation.set(-this.pose.torso - 0.6, 0, 0);
         if (this.page) this.page.rotation.z = -0.2 + flip * (Math.PI + 0.4);
         break;
@@ -874,7 +999,7 @@ export class Monk {
         const r = keyed(TEA_KEYS, t % TEA_CYCLE);
         target = { ...r.pose, ...seated, bob: Math.sin(t * 1.1) * 0.005 };
         const c = this.prop('cup');
-        c.position.set(...r.prop);
+        c.position.set(...tp(r.prop));
         c.rotation.x = -this.pose.torso;
         rate = 12;
         break;
@@ -913,7 +1038,7 @@ export class Monk {
         // 双手奉上托盘，微微欠身
         target = mk({ armLp: -1.5, armRp: -1.5, armLy: -0.28, armRy: 0.28, wrist: -0.1, torso: 0.3, head: 0.25 });
         const tr = this.prop('tray');
-        tr.position.set(0, 0.12, 0.36);
+        tr.position.set(...tp([0, 0.12, 0.36]));
         tr.rotation.x = -this.pose.torso;
         break;
       }
@@ -940,7 +1065,7 @@ export class Monk {
       case 'incense': {
         const r = incensePose(Math.min(t, INCENSE_DURATION));
         target = r.pose;
-        this.incenseProp.position.set(...r.prop);
+        this.incenseProp.position.set(...tp(r.prop));
         // 香始终竖直：抵消上身的前倾
         this.incenseProp.rotation.x = -this.pose.torso;
         if (!this.planted && t >= INCENSE_PLANT_TIME) {
@@ -953,7 +1078,7 @@ export class Monk {
       case 'lantern': {
         const r = keyed(LANTERN_KEYS, Math.min(t, LANTERN_DURATION));
         target = r.pose;
-        this.lanternProp.position.set(...r.prop);
+        this.lanternProp.position.set(...tp(r.prop));
         this.lanternProp.rotation.x = -this.pose.torso;
         if (!this.planted && t >= LANTERN_RELEASE_TIME) {
           this.planted = true;
@@ -979,7 +1104,7 @@ export class Monk {
         const sh = shaking ? Math.sin(t * 34) * 0.13 : 0;
         target.armLp += sh;
         target.armRp += sh;
-        this.tubeProp.position.set(...r.prop);
+        this.tubeProp.position.set(...tp(r.prop));
         this.tubeProp.rotation.x = -this.pose.torso + (t > 0.7 && t < FORTUNE_DROP_TIME + 0.2 ? 0.75 + sh * 1.5 : 0);
         if (!this.planted && t >= FORTUNE_DROP_TIME) {
           this.planted = true;
@@ -1022,6 +1147,10 @@ export class Monk {
     const k = 1 - Math.exp(-rate * dt);
     this.pose = lerpPose(this.pose, target, k);
     const p = this.pose;
+    if (REAL) {
+      this.applyReal(p);
+      return;
+    }
     const hipY = HIP + p.drop + p.bob;
     this.hips.position.y = hipY;
     // 下摆随胯部高度压扁（跪下、坐下时不穿进地面），腿向前伸时也收起来

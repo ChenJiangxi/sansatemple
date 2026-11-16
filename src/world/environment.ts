@@ -1,5 +1,6 @@
 // 天空、光照、昼夜、远山与地面
 import * as THREE from 'three';
+import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Look } from './post';
 import { rng } from '../textures';
 import { pbr, loadTexture } from './pbr';
@@ -31,14 +32,21 @@ interface Preset {
   con: number;
   lift: number;
   vig: number;
+  // 写实天空（Preetham 大气散射）：天空里的太阳高度可以和打光的太阳不同（夜里天空的太阳在地平线下，打光用月光）
+  skyElev: number;
+  turb: number;
+  ray: number;
+  mie: number;
+  gain: number; // 天空整体亮度
+  cloud: number; // 云量
 }
 
 const C = (h: string) => new THREE.Color(h);
 const PRESETS: Record<Exclude<TimeMode, 'auto'>, Preset> = {
-  dawn: { skyTop: C('#7b8fb5'), skyHorizon: C('#f2c6a0'), fog: C('#b8a08a'), sun: C('#ffc58f'), sunI: 1.6, hemiSky: C('#b9c4dc'), hemiGround: C('#6b5a48'), hemiI: 0.9, elev: 0.18, azim: 1.9, lantern: 0.9, exposure: 1.0, stars: 0.1, envI: 0.35, bgI: 0.7, bloom: 0.5, thr: 1.3, tint: C('#fff1e0'), sat: 1.06, con: 1.04, lift: 0.03, vig: 0.32 },
-  day: { skyTop: C('#7fa6cf'), skyHorizon: C('#dfe7e6'), fog: C('#a39686'), sun: C('#fff1dc'), sunI: 2.9, hemiSky: C('#cfe0ef'), hemiGround: C('#7a6a50'), hemiI: 1.05, elev: 0.85, azim: 2.4, lantern: 0.25, exposure: 1.0, stars: 0, envI: 0.55, bgI: 1.0, bloom: 0.28, thr: 2.4, tint: C('#fff7ec'), sat: 1.08, con: 1.05, lift: 0.0, vig: 0.26 },
-  dusk: { skyTop: C('#4b5a86'), skyHorizon: C('#f0a070'), fog: C('#8a6a58'), sun: C('#ff9a5a'), sunI: 1.5, hemiSky: C('#9c8fb0'), hemiGround: C('#4e3d33'), hemiI: 0.75, elev: 0.12, azim: 3.9, lantern: 1.3, exposure: 1.05, stars: 0.15, envI: 0.25, bgI: 0.45, bloom: 0.65, thr: 1.25, tint: C('#ffe6d2'), sat: 1.1, con: 1.06, lift: 0.03, vig: 0.36 },
-  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 1.15, hemiSky: C('#4a5c96'), hemiGround: C('#26201a'), hemiI: 0.7, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.2, stars: 1, envI: 0.05, bgI: 0.07, bloom: 0.8, thr: 1.3, tint: C('#e4ecff'), sat: 1.02, con: 1.03, lift: 0.09, vig: 0.38 },
+  dawn: { skyTop: C('#7b8fb5'), skyHorizon: C('#f2c6a0'), fog: C('#b8a08a'), sun: C('#ffc58f'), sunI: 1.6, hemiSky: C('#b9c4dc'), hemiGround: C('#6b5a48'), hemiI: 0.9, elev: 0.18, azim: 1.9, lantern: 0.9, exposure: 1.0, stars: 0.1, envI: 0.35, bgI: 0.7, bloom: 0.5, thr: 1.3, tint: C('#fff1e0'), sat: 1.06, con: 1.04, lift: 0.03, vig: 0.32, skyElev: 0.06, turb: 5, ray: 2.2, mie: 0.006, gain: 1.0, cloud: 0.35 },
+  day: { skyTop: C('#7fa6cf'), skyHorizon: C('#dfe7e6'), fog: C('#a39686'), sun: C('#fff1dc'), sunI: 2.9, hemiSky: C('#cfe0ef'), hemiGround: C('#7a6a50'), hemiI: 1.05, elev: 0.85, azim: 2.4, lantern: 0.25, exposure: 1.0, stars: 0, envI: 0.55, bgI: 1.0, bloom: 0.28, thr: 2.4, tint: C('#fff7ec'), sat: 1.08, con: 1.05, lift: 0.0, vig: 0.26, skyElev: 0.62, turb: 3.2, ray: 1.2, mie: 0.004, gain: 0.85, cloud: 0.4 },
+  dusk: { skyTop: C('#4b5a86'), skyHorizon: C('#f0a070'), fog: C('#8a6a58'), sun: C('#ff9a5a'), sunI: 1.5, hemiSky: C('#9c8fb0'), hemiGround: C('#4e3d33'), hemiI: 0.75, elev: 0.12, azim: 3.9, lantern: 1.3, exposure: 1.05, stars: 0.15, envI: 0.25, bgI: 0.45, bloom: 0.65, thr: 1.25, tint: C('#ffe6d2'), sat: 1.1, con: 1.06, lift: 0.03, vig: 0.36, skyElev: 0.03, turb: 7, ray: 2.6, mie: 0.007, gain: 1.0, cloud: 0.42 },
+  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 1.15, hemiSky: C('#4a5c96'), hemiGround: C('#26201a'), hemiI: 0.7, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.2, stars: 1, envI: 0.05, bgI: 0.07, bloom: 0.8, thr: 1.3, tint: C('#e4ecff'), sat: 1.02, con: 1.03, lift: 0.09, vig: 0.38, skyElev: -0.16, turb: 2, ray: 0.6, mie: 0.003, gain: 0.6, cloud: 0.25 },
 };
 
 function presetForHour(h: number): Preset {
@@ -63,14 +71,22 @@ function lerpPreset(a: Preset, b: Preset, t: number): Preset {
     sunI: ln(a.sunI, b.sunI), hemiSky: lc(a.hemiSky, b.hemiSky), hemiGround: lc(a.hemiGround, b.hemiGround), hemiI: ln(a.hemiI, b.hemiI),
     elev: ln(a.elev, b.elev), azim: ln(a.azim, b.azim), lantern: ln(a.lantern, b.lantern), exposure: ln(a.exposure, b.exposure), stars: ln(a.stars, b.stars), envI: ln(a.envI, b.envI), bgI: ln(a.bgI, b.bgI),
     bloom: ln(a.bloom, b.bloom), thr: ln(a.thr, b.thr), tint: lc(a.tint, b.tint), sat: ln(a.sat, b.sat), con: ln(a.con, b.con), lift: ln(a.lift, b.lift), vig: ln(a.vig, b.vig),
+    skyElev: ln(a.skyElev, b.skyElev), turb: ln(a.turb, b.turb), ray: ln(a.ray, b.ray), mie: ln(a.mie, b.mie), gain: ln(a.gain, b.gain), cloud: ln(a.cloud, b.cloud),
   };
 }
 
 export class Environment {
   sun: THREE.DirectionalLight;
   hemi: THREE.HemisphereLight;
-  sky: THREE.Mesh;
+  sky: THREE.Mesh; // 夜空的星星（叠在写实天空上）
   skyMat: THREE.ShaderMaterial;
+  private atmo: Sky; // 画面里看到的天空
+  private envSky: Sky; // 只用来生成环境光的天空（不画太阳圆盘，免得反射里出现亮点）
+  private envScene = new THREE.Scene();
+  private pmrem: THREE.PMREMGenerator;
+  private envRT: THREE.WebGLRenderTarget | null = null;
+  private envSun = new THREE.Vector3(0, -2, 0);
+  private time = 0;
   lanternLevel = 0.3;
   look!: Look;
   onLook?: (l: Look) => void;
@@ -96,32 +112,53 @@ export class Environment {
     this.sun.target.position.set(0, 0, 2);
     scene.add(this.sun, this.sun.target);
 
+    // 写实天空：Preetham 大气散射，自带会飘的云；输出前乘一个亮度系数，免得白天天空曝光过度
+    const mkSky = () => {
+      const sky = new Sky();
+      const m = sky.material as THREE.ShaderMaterial;
+      m.uniforms.uGain = { value: 1 };
+      m.fragmentShader = m.fragmentShader
+        .replace('void main() {', 'uniform float uGain;\nvoid main() {')
+        .replace('gl_FragColor = vec4( texColor, 1.0 );', 'gl_FragColor = vec4( texColor * uGain, 1.0 );');
+      sky.scale.setScalar(800);
+      sky.frustumCulled = false;
+      return sky;
+    };
+    this.atmo = mkSky();
+    this.atmo.renderOrder = -10;
+    scene.add(this.atmo);
+    this.envSky = mkSky();
+    (this.envSky.material as THREE.ShaderMaterial).uniforms.showSunDisc.value = 0;
+    this.envScene.add(this.envSky);
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    scene.background = null;
+
+    // 夜空：星星和一点深蓝的底色，叠加在写实天空上
     this.skyMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
       depthWrite: false,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
       fog: false,
       uniforms: {
-        top: { value: new THREE.Color() },
-        horizon: { value: new THREE.Color() },
-        sunDir: { value: new THREE.Vector3(0, 1, 0) },
-        sunColor: { value: new THREE.Color() },
+        top: { value: new THREE.Color('#0b1430') },
+        horizon: { value: new THREE.Color('#1e2a48') },
         stars: { value: 0 },
       },
       vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
       fragmentShader: `
-        uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform vec3 sunColor; uniform float stars;
+        uniform vec3 top; uniform vec3 horizon; uniform float stars;
         varying vec3 vDir;
         float hash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
         void main(){
           vec3 d = normalize(vDir);
           float h = clamp(d.y, -0.2, 1.0);
-          vec3 col = mix(horizon, top, pow(smoothstep(-0.05, 0.75, h), 0.7));
-          float s = max(dot(d, normalize(sunDir)), 0.0);
-          col += sunColor * (pow(s, 12.0) * 0.35 + pow(s, 400.0) * 1.2);
-          if (stars > 0.0 && d.y > 0.05) {
-            vec3 q = floor(d * 380.0);
-            float st = step(0.9965, hash(q));
-            col += vec3(st) * stars * smoothstep(0.05, 0.4, d.y) * 0.9;
+          vec3 col = mix(horizon, top, pow(smoothstep(-0.05, 0.75, h), 0.7)) * stars;
+          if (stars > 0.0 && d.y > 0.03) {
+            vec3 q = floor(d * 420.0);
+            float r = hash(q);
+            float st = step(0.9968, r) * (0.5 + 0.5 * hash(q + 7.0));
+            col += vec3(0.9, 0.95, 1.0) * st * stars * smoothstep(0.03, 0.35, d.y);
           }
           gl_FragColor = vec4(col, 1.0);
           #include <colorspace_fragment>
@@ -129,14 +166,11 @@ export class Environment {
     });
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), this.skyMat);
     this.sky.frustumCulled = false;
-    this.sky.renderOrder = -10;
-    this.sky.visible = false; // 白天用森林全景照片做背景；这个程序天空保留给以后的夜空
-    const bg = loadTexture('sky.jpg');
-    bg.mapping = THREE.EquirectangularReflectionMapping;
-    scene.background = bg;
+    this.sky.renderOrder = -9;
     scene.add(this.sky);
+    void loadTexture;
 
-    scene.fog = new THREE.Fog('#cfd8d3', 45, 330);
+    scene.fog = new THREE.Fog('#cfd8d3', 70, 760);
     this.apply(presetForHour(12));
   }
 
@@ -165,17 +199,42 @@ export class Environment {
     this.hemi.groundColor.copy(p.hemiGround);
     this.hemi.intensity = p.hemiI;
     (this.scene.fog as THREE.Fog).color.copy(p.fog);
-    this.skyMat.uniforms.top.value.copy(p.skyTop);
-    this.skyMat.uniforms.horizon.value.copy(p.skyHorizon);
-    this.skyMat.uniforms.sunDir.value.copy(dir);
-    this.skyMat.uniforms.sunColor.value.copy(p.sun);
     this.skyMat.uniforms.stars.value = p.stars;
+    // 天空里的太阳：方位和打光的太阳一致，高度单独给
+    const sd = new THREE.Vector3(Math.cos(p.azim) * Math.cos(p.skyElev), Math.sin(p.skyElev), Math.sin(p.azim) * Math.cos(p.skyElev));
+    for (const sky of [this.atmo, this.envSky]) {
+      const u = (sky.material as THREE.ShaderMaterial).uniforms;
+      u.sunPosition.value.copy(sd);
+      u.turbidity.value = p.turb;
+      u.rayleigh.value = p.ray;
+      u.mieCoefficient.value = p.mie;
+      u.mieDirectionalG.value = 0.82;
+      u.uGain.value = p.gain;
+      u.cloudCoverage.value = p.cloud;
+      u.cloudDensity.value = 0.45;
+      u.cloudElevation.value = 0.55;
+    }
+    // 环境光从天空生成：太阳挪动明显时才重算（一次几毫秒）
+    if (sd.distanceTo(this.envSun) > 0.03) {
+      this.envSun.copy(sd);
+      const rt = this.pmrem.fromScene(this.envScene, 0, 0.1, 1000);
+      this.scene.environment = rt.texture;
+      this.envRT?.dispose();
+      this.envRT = rt;
+    }
     this.renderer.toneMappingExposure = p.exposure;
     this.lanternLevel = p.lantern;
     this.scene.environmentIntensity = p.envI;
-    this.scene.backgroundIntensity = p.bgI;
     this.look = { bloom: p.bloom, threshold: p.thr, tint: p.tint.clone(), sat: p.sat, contrast: p.con, lift: p.lift, vignette: p.vig };
     this.onLook?.(this.look);
+  }
+
+  // 云慢慢飘
+  tick(dt: number, camPos: THREE.Vector3) {
+    this.time += dt;
+    (this.atmo.material as THREE.ShaderMaterial).uniforms.time.value = this.time;
+    this.atmo.position.copy(camPos);
+    this.sky.position.copy(camPos);
   }
 
   // 阴影范围跟着玩家走（按阴影贴图的像素对齐，避免移动时阴影闪烁）
@@ -190,6 +249,32 @@ export class Environment {
   get isDark() {
     return this.current.lantern > 1;
   }
+}
+
+// 远山林冠的细碎明暗：平铺在山体顶点色上，近看不至于是一整片平色
+function canopyTexture() {
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#c8c8c8';
+  g.fillRect(0, 0, S, S);
+  const r = rng(91);
+  for (let i = 0; i < 1600; i++) {
+    const x = r() * S, y = r() * S, rad = 2 + r() * 9;
+    const v = Math.floor(120 + r() * 135);
+    g.fillStyle = `rgba(${v},${v},${v},0.55)`;
+    for (const ox of [-S, 0, S])
+      for (const oy of [-S, 0, S]) {
+        g.beginPath();
+        g.arc(x + ox, y + oy, rad, 0, Math.PI * 2);
+        g.fill();
+      }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // 地面：院子里平整，外面是起伏的秋山
@@ -258,9 +343,9 @@ export function buildTerrain(scene: THREE.Scene) {
   for (const sh of SIDE_HALLS) addPath(0, 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, 2.6);
   for (const sh of SIDE_HALLS) addPath(sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), sh.z, 2.6);
 
-  // 远处的山：中间留出平地，往外逐渐隆起
-  const size = 900;
-  const seg = 220;
+  // 远处的山：院墙外先是缓坡和林子，往外抬成几百米外的高山（大殿背后最高）
+  const size = 1000;
+  const seg = 250;
   const geo = new THREE.PlaneGeometry(size, size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position as THREE.BufferAttribute;
@@ -272,12 +357,21 @@ export function buildTerrain(scene: THREE.Scene) {
     for (const [ox, oz, f] of noiseSeeds) v += Math.sin((x + ox) * f * 6.1) * Math.cos((z + oz) * f * 5.3) / (f * 60);
     return v;
   };
-  const cA = new THREE.Color('#4f5a33');
-  const cB = new THREE.Color('#7a4528');
-  const cC = new THREE.Color('#8a682e');
-  const cD = new THREE.Color('#3f5233');
+  // 山脊：几层「1 - |sin|」叠出尖的山脊线，再按方向旋转打散
+  const ridgeLayers = Array.from({ length: 5 }, (_, i) => ({ f: 0.006 * Math.pow(1.9, i), a: Math.pow(0.5, i), ang: r() * Math.PI, ph: r() * 100 }));
+  const ridged = (x: number, z: number) => {
+    let v = 0;
+    for (const L of ridgeLayers) {
+      const u = x * Math.cos(L.ang) + z * Math.sin(L.ang), w = -x * Math.sin(L.ang) + z * Math.cos(L.ang);
+      const n = 1 - Math.abs(Math.sin(u * L.f + L.ph) * Math.cos(w * L.f * 0.7 + L.ph * 0.3));
+      v += n * n * L.a;
+    }
+    return v / 1.6;
+  };
+  const forest = [new THREE.Color('#2f3d26'), new THREE.Color('#4a4a26'), new THREE.Color('#6b3e22'), new THREE.Color('#8a6a2c'), new THREE.Color('#3a4a2c')];
+  const rock = new THREE.Color('#6e6a62');
   const tmp = new THREE.Color();
-  const WHITE = new THREE.Color(1, 1, 1);
+  const heights = new Float32Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
@@ -292,30 +386,50 @@ export function buildTerrain(scene: THREE.Scene) {
       const ramp = Math.min(1, d / 60);
       const backBoost = z < 0 ? 1.6 : 0.8; // 大殿背后的山更高
       h = Math.pow(ramp, 1.6) * (9 * backBoost) + noise(x, z) * ramp * 2.5 + d * 0.02;
+      // 高山：离院子四十米外开始升起，三百米外到最高
+      const m = THREE.MathUtils.smoothstep(d, 40, 320);
+      h += ridged(x, z) * m * (z < 0 ? 210 : 120) * (0.6 + 0.4 * Math.abs(Math.sin(Math.atan2(z, x) * 1.5 + 0.7)));
       h = Math.max(h, -0.05);
     }
     pos.setY(i, h - 0.06);
-    const n = (Math.sin(x * 0.11) * Math.cos(z * 0.13) + 1) / 2;
-    const n2 = (Math.sin(x * 0.031 + 2) * Math.cos(z * 0.027 + 1) + 1) / 2;
-    tmp.copy(cA).lerp(cB, n * 0.8).lerp(cC, n2 * 0.4).lerp(cD, Math.min(1, h / 50) * 0.5);
-    tmp.lerp(WHITE, 0.6); // 只做轻微的冷暖变化，主要颜色来自贴图
-    if (d < 2) tmp.set('#b0a594');
+    heights[i] = h;
+  }
+  geo.computeVertexNormals();
+  const nrm = geo.attributes.normal as THREE.BufferAttribute;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i), h = heights[i];
+    // 坡上是秋天的林子（青、黄、赭色块状交错），陡坡和山顶露出岩石
+    const n = (Math.sin(x * 0.05 + Math.cos(z * 0.04) * 2) * Math.cos(z * 0.06 - x * 0.02) + 1) / 2;
+    const n2 = (Math.sin(x * 0.17 + 1.3) * Math.sin(z * 0.15 + 0.4) + 1) / 2;
+    tmp.copy(forest[Math.floor(n * 4.99)]).lerp(forest[Math.floor(n2 * 4.99)], 0.35);
+    const slope = 1 - nrm.getY(i);
+    const rocky = THREE.MathUtils.smoothstep(slope, 0.32, 0.55) + THREE.MathUtils.smoothstep(h, 150, 230);
+    tmp.lerp(rock, Math.min(1, rocky));
+    const dCourt = Math.max(Math.abs(x) - COURT.x1 - GM, z < 0 ? COURT.z0 - GM - z : z - COURT.z1 - GM);
+    if (dCourt < 3) tmp.set('#8f8470');
     colors[i * 3] = tmp.r;
     colors[i * 3 + 1] = tmp.g;
     colors[i * 3 + 2] = tmp.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.computeVertexNormals();
   {
     const uv = geo.attributes.uv as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * size, uv.getY(i) * size);
   }
-  const terrainMat = pbr('ground', { metersPerTile: 5, color: '#ffffff' });
-  terrainMat.vertexColors = true;
+  const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, map: canopyTexture() });
+  terrainMat.map!.repeat.set(1 / 9, 1 / 9);
   const terrain = new THREE.Mesh(geo, terrainMat);
   terrain.receiveShadow = true;
   group.add(terrain);
 
+  // 地形高度（给山坡上种树用）
+  const heightAt = (x: number, z: number) => {
+    const fx = (x + size / 2) / size * seg, fz = (z + size / 2) / size * seg;
+    const ix = Math.max(0, Math.min(seg - 1, Math.floor(fx))), iz = Math.max(0, Math.min(seg - 1, Math.floor(fz)));
+    const a = heights[iz * (seg + 1) + ix], b = heights[iz * (seg + 1) + ix + 1], c = heights[(iz + 1) * (seg + 1) + ix], d2 = heights[(iz + 1) * (seg + 1) + ix + 1];
+    const tx = fx - ix, tz = fz - iz;
+    return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d2 * tx) * tz;
+  };
   scene.add(group);
-  return { ground, group };
+  return { ground, group, heightAt, size };
 }

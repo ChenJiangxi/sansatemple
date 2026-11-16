@@ -27,6 +27,54 @@ export function meterUV(geo: THREE.BufferGeometry, su: number, sv: number) {
   return geo;
 }
 
+// 做旧着色：参数走 uniform（同一份着色器代码可以被多个材质共用，不会串）
+const AGED_VS_HEAD = 'varying vec3 vAgedP;';
+function aged(mat: THREE.MeshStandardMaterial, desat: number, grime: number) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    prev?.call(mat, sh, r);
+    sh.uniforms.uDesat = { value: desat };
+    sh.uniforms.uGrime = { value: grime };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + AGED_VS_HEAD).replace(
+      '#include <worldpos_vertex>',
+      `#include <worldpos_vertex>
+      {
+        vec4 ap = vec4(transformed, 1.0);
+        #ifdef USE_INSTANCING
+          ap = instanceMatrix * ap;
+        #endif
+        vAgedP = (modelMatrix * ap).xyz;
+      }`
+    );
+    sh.fragmentShader = sh.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        varying vec3 vAgedP;
+        uniform float uDesat, uGrime;
+        float aHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+        float aNoise(vec3 x) {
+          vec3 i = floor(x), f = fract(x);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(aHash(i), aHash(i + vec3(1, 0, 0)), f.x), mix(aHash(i + vec3(0, 1, 0)), aHash(i + vec3(1, 1, 0)), f.x), f.y),
+                     mix(mix(aHash(i + vec3(0, 0, 1)), aHash(i + vec3(1, 0, 1)), f.x), mix(aHash(i + vec3(0, 1, 1)), aHash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+        }`
+      )
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        {
+          float blotch = aNoise(vAgedP * 0.9) * 0.6 + aNoise(vAgedP * 3.1) * 0.4;
+          float streak = aNoise(vec3(vAgedP.x * 7.0 + vAgedP.z * 7.0, vAgedP.y * 0.35, 0.0));
+          float g = 1.0 - uGrime * (0.55 * blotch + 0.45 * smoothstep(0.45, 0.95, streak));
+          float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum), uDesat) * g;
+        }`
+      );
+  };
+  mat.customProgramCacheKey = () => 'aged';
+}
+
 // —— 共用材质 ——
 let shared: Record<string, THREE.Material> | null = null;
 export function chineseMats() {
@@ -40,19 +88,30 @@ export function chineseMats() {
   const ch = caihuaTexture();
   ch.repeat.set(1 / 4, 1);
   shared = {
-    red: new THREE.MeshStandardMaterial({ color: '#8e2417', roughness: 0.42, normalMap: woodN, normalScale: new THREE.Vector2(0.25, 0.25) }),
-    redDark: new THREE.MeshStandardMaterial({ color: '#6a1a12', roughness: 0.5 }),
-    caihua: new THREE.MeshStandardMaterial({ map: ch, roughness: 0.65 }),
-    blue: new THREE.MeshStandardMaterial({ color: '#2b5684', roughness: 0.6 }),
-    green: new THREE.MeshStandardMaterial({ color: '#2c6a5e', roughness: 0.6 }),
+    // 朱漆：上了年头，颜色沉一些、不那么亮
+    red: new THREE.MeshStandardMaterial({ color: '#7a2a1d', roughness: 0.62, normalMap: woodN, normalScale: new THREE.Vector2(0.3, 0.3) }),
+    redDark: new THREE.MeshStandardMaterial({ color: '#5a1d15', roughness: 0.65 }),
+    caihua: new THREE.MeshStandardMaterial({ map: ch, roughness: 0.75 }),
+    blue: new THREE.MeshStandardMaterial({ color: '#3a5670', roughness: 0.7 }),
+    green: new THREE.MeshStandardMaterial({ color: '#3d6256', roughness: 0.7 }),
     gold: new THREE.MeshStandardMaterial({ color: '#c99a42', metalness: 0.85, roughness: 0.35 }),
-    // 汉白玉：偏白、细腻，只借一点灰泥的法线做表面起伏
-    marble: new THREE.MeshStandardMaterial({ color: '#ebe7df', roughness: 0.55, normalMap: plasterN, normalScale: new THREE.Vector2(0.4, 0.4) }),
-    marbleSide: new THREE.MeshStandardMaterial({ color: '#e2ddd3', roughness: 0.6, normalMap: plasterN, normalScale: new THREE.Vector2(0.5, 0.5) }),
-    redWall: pbr('plaster', { metersPerTile: 2.5, color: '#9a3324' }),
-    geshan: new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.55, emissive: '#f4e6c8', emissiveIntensity: 0.05 }),
+    // 汉白玉：风吹日晒后偏暖的灰白，只借一点灰泥的法线做表面起伏
+    marble: new THREE.MeshStandardMaterial({ color: '#d4cec2', roughness: 0.78, normalMap: plasterN, normalScale: new THREE.Vector2(0.5, 0.5) }),
+    marbleSide: new THREE.MeshStandardMaterial({ color: '#c7c0b3', roughness: 0.82, normalMap: plasterN, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    redWall: pbr('plaster', { metersPerTile: 2.5, color: '#8a3a2a' }),
+    geshan: new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.65, emissive: '#f4e6c8', emissiveIntensity: 0.05 }),
     bronze: new THREE.MeshStandardMaterial({ color: '#5b4a33', metalness: 0.85, roughness: 0.42 }),
   };
+  // 做旧：按世界坐标叠一层斑驳和竖向的雨痕，颜色略褪；彩画褪得多一些
+  aged(shared.red as THREE.MeshStandardMaterial, 0.12, 0.22);
+  aged(shared.redDark as THREE.MeshStandardMaterial, 0.1, 0.2);
+  aged(shared.caihua as THREE.MeshStandardMaterial, 0.3, 0.2);
+  aged(shared.blue as THREE.MeshStandardMaterial, 0.2, 0.2);
+  aged(shared.green as THREE.MeshStandardMaterial, 0.2, 0.2);
+  aged(shared.marble as THREE.MeshStandardMaterial, 0.0, 0.16);
+  aged(shared.marbleSide as THREE.MeshStandardMaterial, 0.0, 0.2);
+  aged(shared.redWall as THREE.MeshStandardMaterial, 0.1, 0.18);
+  aged(shared.geshan as THREE.MeshStandardMaterial, 0.18, 0.16);
   return shared;
 }
 
@@ -644,7 +703,8 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const wallCz = (wallZ0 + wallZ1) / 2;
   const tbTex = thousandBuddhaTexture();
   tbTex.repeat.set(wallLen / 3.2, (H.colH - 1.6) / 3.2);
-  const tbMat = new THREE.MeshStandardMaterial({ map: tbTex, roughness: 0.75, emissive: '#ffffff', emissiveMap: tbTex, emissiveIntensity: 0.08 });
+  const tbMat = new THREE.MeshStandardMaterial({ map: tbTex, roughness: 0.8, emissive: '#ffffff', emissiveMap: tbTex, emissiveIntensity: 0.03 });
+  aged(tbMat, 0.25, 0.18);
   for (const sx of [-1, 1]) {
     const x = sx * H.wallX;
     const w = mesh(worldBox(0.4, H.colH, wallLen, 1), M.redWall);
@@ -666,14 +726,18 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const cloudTex = redGoldCloudTexture();
   cloudTex.repeat.set(7, 2);
   const screenH = ceilY - H.baseH - H.altarH - 0.2;
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(H.altarX1 - H.altarX0 + 1, screenH), new THREE.MeshStandardMaterial({ map: cloudTex, roughness: 0.7, emissive: '#2a0a06', emissiveIntensity: 0.4 }));
+  const screenMat = new THREE.MeshStandardMaterial({ map: cloudTex, roughness: 0.75, color: '#b8a89a', emissive: '#2a0a06', emissiveIntensity: 0.25 });
+  aged(screenMat, 0.3, 0.16);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(H.altarX1 - H.altarX0 + 1, screenH), screenMat);
   screen.position.set(0, H.baseH + H.altarH + screenH / 2, H.colZBack + 0.5);
   group.add(screen);
 
   // —— 天花：井口天花 + 彩画大梁 ——
   const coffer = cofferTexture();
   coffer.repeat.set(1 / 1.6, 1 / 1.6);
-  const ceil = new THREE.Mesh(worldBox(H.wallX * 2, 0.08, H.colZFront - H.colZBack, 1), new THREE.MeshStandardMaterial({ map: coffer, roughness: 0.8, emissive: '#ffffff', emissiveMap: coffer, emissiveIntensity: 0.06 }));
+  const ceilMat = new THREE.MeshStandardMaterial({ map: coffer, roughness: 0.85, emissive: '#ffffff', emissiveMap: coffer, emissiveIntensity: 0.04 });
+  aged(ceilMat, 0.25, 0.14);
+  const ceil = new THREE.Mesh(worldBox(H.wallX * 2, 0.08, H.colZFront - H.colZBack, 1), ceilMat);
   ceil.position.set(0, ceilY + 0.04, cz);
   ceil.receiveShadow = true;
   group.add(ceil);
@@ -753,7 +817,8 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     group.add(hg);
   }
   // 经幡：佛坛前左右各三条
-  const banMat = new THREE.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.8, side: THREE.DoubleSide });
+  const banMat = new THREE.MeshStandardMaterial({ map: bannerTexture(), roughness: 0.85, side: THREE.DoubleSide, color: '#c8bcb0' });
+  aged(banMat, 0.3, 0.1);
   const fringeMat = new THREE.MeshStandardMaterial({ color: '#e0b23c', side: THREE.DoubleSide, roughness: 0.8 });
   for (const x of [-11.5, -8.6, -6.0, 6.0, 8.6, 11.5]) {
     const ban = mesh(new THREE.CylinderGeometry(0.26, 0.26, 3.0, 12, 1, true), banMat, false);
@@ -898,8 +963,9 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   ].map((g) => g.toNonIndexed()))!;
   const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, map: cushionTexture() });
   const cushions = new THREE.InstancedMesh(cushionGeo, cushionMat, CUSHIONS.length);
-  const cA = new THREE.Color('#c08a2c');
-  const cB = cA.clone().lerp(new THREE.Color('#9b3b24'), 0.18);
+  // 蒲团：香蒲草编的土黄，隔排是旧了的绛红布面
+  const cA = new THREE.Color('#9c7a46');
+  const cB = new THREE.Color('#7e4630');
   const m4 = new THREE.Matrix4();
   CUSHIONS.forEach((c, i) => {
     m4.makeTranslation(c.x, H.baseH + 0.06, c.z + 0.18);

@@ -1,67 +1,22 @@
-// 枫树、松树、莲池、石头、飘落的枫叶
+// 银杏、枫树、松树（ez-tree 长出的写实树）、莲池、石头、飘落的叶子
 import * as THREE from 'three';
 import { MAPLES, PINES, ROCKS, POND, COURT } from '../layout';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { pbr } from './pbr';
 import { rockGeometry, rockMaterial } from './rock';
 import { buildLotus } from './lotus';
-import { foliageClusterTexture, ginkgoClusterTexture, woodTexture, rng } from '../textures';
+import { rng } from '../textures';
 import { mesh } from './util';
-
-const windUniform = { value: 0 };
-
-// 给叶片材质加一点随风摆动
-function addSway(mat: THREE.Material, amount = 0.06) {
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uWind = windUniform;
-    shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uWind;')
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-        #ifdef USE_INSTANCING
-          vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-          float ph = ip.x * 0.37 + ip.z * 0.21;
-          transformed.x += sin(uWind * 1.3 + ph) * ${amount.toFixed(3)} * (position.y + 0.5);
-          transformed.z += cos(uWind * 1.1 + ph * 1.7) * ${amount.toFixed(3)} * 0.7 * (position.y + 0.5);
-        #endif`
-      );
-  };
-}
-
-function branchTube(points: THREE.Vector3[], r0: number) {
-  const curve = new THREE.CatmullRomCurve3(points);
-  const geo = new THREE.TubeGeometry(curve, 10, r0, 7, false);
-  // 越往上越细
-  const pos = geo.attributes.position as THREE.BufferAttribute;
-  const ring = 8;
-  for (let i = 0; i < pos.count; i++) {
-    const seg = Math.floor(i / ring);
-    const t = seg / 10;
-    const c = curve.getPointAt(Math.min(1, t));
-    const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).sub(c).multiplyScalar(1 - t * 0.65).add(c);
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
+import { makeVariant, plantTrees, treeWind, type TreeVariant, type TreePlace } from './trees';
+import { bakeImpostor, whenTexturesReady } from './impostor';
 
 export interface NatureBuild {
   update(dt: number, t: number): void;
   leafSpawns: THREE.Vector3[];
 }
 
-export function buildNature(scene: THREE.Scene): NatureBuild {
+export function buildNature(scene: THREE.Scene, o: { renderer: THREE.WebGLRenderer; heightAt(x: number, z: number): number; size: number; lite: boolean }): NatureBuild {
   const group = new THREE.Group();
   const r = rng(101);
-  const barkMat = new THREE.MeshStandardMaterial({ map: woodTexture(9, ['#3b2a22', '#2a1d17', '#4a372b']), roughness: 0.95 });
-
-  // 枫树
-  const clusterTex = foliageClusterTexture(4);
-  const leafMat = new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.85 });
-  addSway(leafMat, 0.05);
-  const leafDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: clusterTex, alphaTest: 0.45 });
-  const perTree = 70;
+  // —— 树：院中的银杏（金黄）与枫树（红、橙），墙外一圈林子，几棵松 ——
   const outer: [number, number, number][] = [];
   {
     const rr = rng(77);
@@ -83,94 +38,106 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   }
   const allMaples = [...MAPLES, ...outer.filter((_, i) => i % 3 !== 2)];
   const outerPines = outer.filter((_, i) => i % 3 === 2);
-  const barkGeos: THREE.BufferGeometry[] = [];
-  const clusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.5, 1.5), leafMat, allMaples.length * perTree);
-  // 银杏：扇形小叶，金黄色，树冠更高更收
-  const gTex = ginkgoClusterTexture(6);
-  const gMat = new THREE.MeshStandardMaterial({ map: gTex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 0.8 });
-  addSway(gMat, 0.05);
-  const gClusters = new THREE.InstancedMesh(new THREE.PlaneGeometry(1.4, 1.4), gMat, allMaples.length * perTree);
-  gClusters.customDepthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: gTex, alphaTest: 0.45 });
-  gClusters.castShadow = true;
-  gClusters.receiveShadow = true;
   const gPal = ['#e8c23a', '#f0d24e', '#d9a82a', '#e0b838', '#c9a032'].map((h) => new THREE.Color(h));
-  const isGinkgo = (i: number) => i % 4 !== 3;
-  let gi = 0;
-  clusters.customDepthMaterial = leafDepth;
-  clusters.castShadow = true;
-  clusters.receiveShadow = true;
   const palettes = [
     ['#b8321f', '#cf4a24', '#a8281c', '#d9642a'],
     ['#d9792a', '#e0952f', '#c9612a', '#e8ad3a'],
     ['#c9a238', '#ddb840', '#b88a2c', '#d9762c'],
   ].map((p) => p.map((h) => new THREE.Color(h)));
+  const isGinkgo = (i: number) => i % 4 !== 3;
+  const kinds = {
+    ginkgo: [
+      makeVariant({ preset: 'Ash Medium', seed: 11, height: 12.5, tint: 0xf2c544, bark: 0xbfb2a0 }),
+      makeVariant({ preset: 'Ash Medium', seed: 29, height: 11.5, tint: 0xe9b93a, bark: 0xbfb2a0 }),
+    ],
+    maple: [
+      makeVariant({ preset: 'Oak Medium', seed: 5, height: 8.5, tint: 0xd8502c, bark: 0x9a8878 }),
+      makeVariant({ preset: 'Oak Medium', seed: 17, height: 8, tint: 0xe38a34, bark: 0x9a8878 }),
+    ],
+    pine: [makeVariant({ preset: 'Pine Medium', seed: 3, height: 13 })],
+  };
+  // 墙外那一圈离得远一些，用小号、分段更少的树
+  const far = {
+    ginkgo: [makeVariant({ preset: 'Ash Small', seed: 41, height: 10, tint: 0xf0c040, bark: 0xbfb2a0, lite: true })],
+    maple: [makeVariant({ preset: 'Oak Small', seed: 23, height: 7, tint: 0xd4542a, bark: 0x9a8878, lite: true }), makeVariant({ preset: 'Oak Small', seed: 31, height: 7, tint: 0xe39a38, bark: 0x9a8878, lite: true })],
+    pine: [makeVariant({ preset: 'Pine Small', seed: 7, height: 11, lite: true })],
+  };
+  const places = new Map<TreeVariant, TreePlace[]>();
+  const put = (v: TreeVariant, p: TreePlace) => {
+    if (!places.has(v)) places.set(v, []);
+    places.get(v)!.push(p);
+  };
   const leafSpawns: THREE.Vector3[] = [];
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const e = new THREE.Euler();
-  let ci = 0;
-  allMaples.forEach(([x, z, s], ti) => {
-    const ginkgo = isGinkgo(ti);
-    const pal = ginkgo ? gPal : palettes[ti % 3];
-    const trunkTop = new THREE.Vector3(x + (r() - 0.5) * 0.2, (ginkgo ? 3.2 : 2.2) * s, z + (r() - 0.5) * 0.2);
-    barkGeos.push(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + (r() - 0.5) * 0.3, 1.1 * s, z), trunkTop], 0.2 * s));
-    const tips: THREE.Vector3[] = [];
-    for (let b = 0; b < 5; b++) {
-      const a = (b / 5) * Math.PI * 2 + r();
-      const len = (ginkgo ? 0.9 + r() * 0.6 : 1.3 + r() * 0.9) * s;
-      const tip = new THREE.Vector3(trunkTop.x + Math.cos(a) * len, trunkTop.y + (ginkgo ? 0.6 + r() * 2.2 : 0.9 + r() * 1.3) * s, trunkTop.z + Math.sin(a) * len);
-      const mid = trunkTop.clone().lerp(tip, 0.5).add(new THREE.Vector3(0, 0.3, 0));
-      barkGeos.push(branchTube([trunkTop.clone(), mid, tip], 0.09 * s));
-      tips.push(tip);
+  allMaples.forEach(([x, z, sc], ti) => {
+    const g = isGinkgo(ti);
+    // 手机上院子里也用小号的树，省一半多的三角形
+    const set = ti < MAPLES.length && !o.lite ? kinds : far;
+    const pool = g ? set.ginkgo : set.maple;
+    const v = pool[ti % pool.length];
+    const s = (sc / 1.15) * (0.85 + r() * 0.3);
+    const k = 0.85 + r() * 0.3;
+    put(v, { x, z, s, yaw: r() * Math.PI * 2, tint: new THREE.Color(k, k * (0.95 + r() * 0.1), k) });
+    if (ti < MAPLES.length) leafSpawns.push(new THREE.Vector3(x, v.height * s * 0.7, z));
+  });
+  for (const [x, z, sc] of PINES) put((o.lite ? far : kinds).pine[0], { x, z, s: (sc / 1.3) * (0.85 + r() * 0.3), yaw: r() * Math.PI * 2 });
+  for (const [x, z, sc] of outerPines) put(far.pine[0], { x, z, s: (sc / 1.3) * (0.85 + r() * 0.3), yaw: r() * Math.PI * 2 });
+  let treeTris = 0;
+  for (const [v, list] of places) {
+    plantTrees(group, v, list);
+    treeTris += v.tris * list.length;
+  }
+  (window as unknown as { __treeTris: number }).__treeTris = treeTris;
+
+  // 山坡上的林子：贴图下载好后把几种样板「拍」成图，铺几千棵
+  const forestKinds: { v: TreeVariant; gray: boolean; w: number; tint: string[] }[] = [
+    { v: far.ginkgo[0], gray: true, w: 0.22, tint: ['#ffffff', '#f0e0c0'] },
+    { v: far.maple[0], gray: true, w: 0.2, tint: ['#ffffff', '#e8c0a8'] },
+    { v: far.maple[1], gray: true, w: 0.18, tint: ['#ffffff', '#f0d8b0'] },
+    { v: far.pine[0], gray: false, w: 0.4, tint: ['#ffffff', '#c8d0c0'] },
+  ];
+  whenTexturesReady([...forestKinds.flatMap((k) => [k.v.leafMat.map, k.v.barkMat.map])], () => {
+    const rr = rng(313);
+    const NF = o.lite ? 1800 : 4200;
+    const meshes = forestKinds.map((k) => {
+      const imp = bakeImpostor(o.renderer, k.v, k.gray);
+      const im = new THREE.InstancedMesh(imp.geometry, imp.material, NF);
+      im.count = 0;
+      im.frustumCulled = false;
+      im.receiveShadow = true;
+      return im;
+    });
+    const fm = new THREE.Matrix4(), fq = new THREE.Quaternion(), fs = new THREE.Vector3(), fp = new THREE.Vector3(), fc = new THREE.Color();
+    const half = o.size / 2 - 6;
+    const total = forestKinds.reduce((a2, k) => a2 + k.w, 0);
+    for (let k = 0; k < NF * 3; k++) {
+      const a2 = rr() * Math.PI * 2;
+      const dist = 14 + Math.pow(rr(), 1.3) * 340;
+      const x = Math.cos(a2) * (COURT.x1 + 2.5 + dist), z = (COURT.z0 + COURT.z1) / 2 + Math.sin(a2) * ((COURT.z1 - COURT.z0) / 2 + 2.5 + dist);
+      if (Math.abs(x) > half || Math.abs(z) > half) continue;
+      const h = o.heightAt(x, z);
+      if (h > 175) continue;
+      // 越高越偏松杉（青色），低处多秋叶
+      let pick = rr() * total * (1 - Math.min(0.6, h / 300));
+      let ki = 0;
+      while (ki < forestKinds.length - 1 && pick > forestKinds[ki].w) pick -= forestKinds[ki++].w;
+      if (h > 90 && rr() < 0.6) ki = forestKinds.length - 1;
+      const im = meshes[ki];
+      if (im.count >= NF) continue;
+      const sc = (0.9 + rr() * 0.7) * (dist > 150 ? 1.5 : 1);
+      fq.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rr() * Math.PI);
+      fm.compose(fp.set(x, h - 0.3, z), fq, fs.set(sc, sc * (0.85 + rr() * 0.3), sc));
+      im.setMatrixAt(im.count, fm);
+      const tint = forestKinds[ki].tint;
+      im.setColorAt(im.count++, fc.set(tint[Math.floor(rr() * tint.length)]).multiplyScalar(0.8 + rr() * 0.3));
     }
-    const crownC = new THREE.Vector3(trunkTop.x, trunkTop.y + (ginkgo ? 2.4 : 1.5) * s, trunkTop.z);
-    if (ginkgo) tips.push(new THREE.Vector3(trunkTop.x, trunkTop.y + 3.6 * s, trunkTop.z));
-    tips.push(crownC);
-    if (ti < MAPLES.length) leafSpawns.push(crownC);
-    for (let k = 0; k < perTree; k++) {
-      const tip = tips[k % tips.length];
-      const spread = ginkgo ? 1.5 : 2.2;
-      const p = tip.clone().add(new THREE.Vector3((r() - 0.5) * spread * s, (r() - 0.4) * 1.4 * s, (r() - 0.5) * spread * s));
-      e.set(r() * Math.PI, r() * Math.PI * 2, r() * Math.PI);
-      q.setFromEuler(e);
-      const sc = (0.8 + r() * 0.7) * s;
-      m.compose(p, q, new THREE.Vector3(sc, sc, sc));
-      const col = pal[Math.floor(r() * pal.length)].clone().multiplyScalar(0.85 + r() * 0.3);
-      if (ginkgo) {
-        gClusters.setMatrixAt(gi, m);
-        gClusters.setColorAt(gi, col);
-        gi++;
-      } else {
-        clusters.setMatrixAt(ci, m);
-        clusters.setColorAt(ci, col);
-        ci++;
-      }
+    for (const im of meshes) {
+      im.instanceMatrix.needsUpdate = true;
+      if (im.instanceColor) im.instanceColor.needsUpdate = true;
+      group.add(im);
     }
   });
-  clusters.count = ci;
-  gClusters.count = gi;
-  group.add(clusters, gClusters);
-  group.add(mesh(mergeGeometries(barkGeos), barkMat));
-
-  // 松树（伞形树冠）
-  const pineMat = new THREE.MeshStandardMaterial({ color: '#2f4a2c', roughness: 0.95, flatShading: true });
-  const pineBark = new THREE.MeshStandardMaterial({ map: woodTexture(12, ['#6b3a26', '#4f2a1c', '#7a4a30']), roughness: 0.9 });
-  const blob = new THREE.IcosahedronGeometry(1, 1);
-  const pineBarkGeos: THREE.BufferGeometry[] = [];
-  const pineCrowns: THREE.BufferGeometry[] = [];
-  for (const [x, z, s] of [...PINES, ...outerPines]) {
-    const lean = (r() - 0.5) * 1.2;
-    const top = new THREE.Vector3(x + lean, 6.5 * s, z + (r() - 0.5) * 1.2);
-    pineBarkGeos.push(branchTube([new THREE.Vector3(x, -0.1, z), new THREE.Vector3(x + lean * 0.3, 3 * s, z), top], 0.26 * s));
-    for (let k = 0; k < 6; k++) {
-      const b = blob.clone();
-      b.scale((1.6 + r()) * s, (0.55 + r() * 0.3) * s, (1.6 + r()) * s);
-      b.translate(top.x + (r() - 0.5) * 2.6 * s, top.y + (r() - 0.6) * 1.6 * s, top.z + (r() - 0.5) * 2.6 * s);
-      pineCrowns.push(b);
-    }
-  }
-  group.add(mesh(mergeGeometries(pineBarkGeos), pineBark));
-  group.add(mesh(mergeGeometries(pineCrowns), pineMat));
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
 
   // 石头：每处一块大石，旁边散两三块小石
   const rockMat = rockMaterial('#ffffff', 1.8, 0.3);
@@ -264,7 +231,7 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   return {
     leafSpawns,
     update(dt, t) {
-      windUniform.value = t;
+      treeWind(t);
       for (let i = 0; i < N; i++) {
         const L = leaves[i];
         L.life += dt;

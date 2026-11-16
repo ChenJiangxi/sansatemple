@@ -73,7 +73,13 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 打开网页先是开场标题，点「入山门」进寺（同时打开声音）。链接带 `?nointro` 可以跳过开场。
 
-画面经过后期处理：泛光（只有灯火、烛火这类足够亮的东西会晕开）、按时段变化的调色、暗角和纸纹颗粒；帧率长期偏低时会自动降分辨率、再不行关掉泛光。设置里的「画质」可以直接选「流畅」。
+画面走写实路线：
+- 天空按太阳位置做大气散射（three.js 的 Sky，自带会飘的云），环境光也由这片天空生成，早晚光色随时间变；
+- 院墙外是几百米外抬起的群山，坡上几千棵秋林（用写实树的样板预先「拍」成图，十字面片摆放），陡坡和山顶露出岩石；
+- 院里的银杏、枫树、松树用 ez-tree 长出写实枝叶，随风轻摆；
+- 僧人是真实比例（约 1.68 米），长到脚踝的海青、带袖兜的宽袖、能弯的手肘膝盖，头部用人头扫描；
+- 殿宇材质做旧：朱漆压暗、彩画褪色、汉白玉偏暖灰，叠一层斑驳和雨痕；
+- 后期：环境光遮蔽（墙角、檐下自然变暗）、泛光（只给灯火）、色调映射与按时段调色。帧率长期偏低时会自动降分辨率、再不行关掉泛光；设置里的「画质」可以直接选「流畅」。手机上树和远景林子会自动减量。
 
 ## 寺院布局（汉传佛寺）
 
@@ -89,11 +95,14 @@ server/server.mjs   静态文件 + WebSocket：5 个房间×50 人，位置快�
                     座位占用由服务器裁决，两处香炉的香 3 分钟后燃尽，撞钟同房间都听得到
 src/main.ts         场景组装、玩家移动、镜头、点击交互、联机同步
 src/layout.ts       场景布局、可走区域、碰撞、网格寻路（A*，自动绕开水池石塔柱子）
-src/monk.ts         小和尚模型（海青长袍、宽袖、搭左肩的袈裟和钩环、颈挂念珠）与程序动画（走、合十、礼拜、打坐、木鱼、念珠、上香）
+src/monk.ts         僧人的姿势系统与程序动画（走、合十、礼拜、打坐、木鱼、念珠、上香、读经、喝茶……）；保留了旧的 Q 版身体
+src/body-real.ts    真实比例的身体：海青、宽袖、袈裟、念珠的几何体，扫描人头的加载与修整
 src/world/          环境与昼夜、大雄宝殿（重檐、彩画斗栱、格扇门、须弥座栏杆）、佛像与背光、
                     配殿与钟鼓楼、银杏与放生池、灯笼宫灯、双塔、香炉、寺墙山门、石拱桥
 src/overlays.ts     木鱼（红漆鳞纹、木槌真实落点）、念珠（佛头、佛塔、流苏）的特写画面
-src/world/post.ts   后期：泛光、色调映射、调色、暗角、纸纹颗粒，按帧耗时自动调画质
+src/world/post.ts   后期：环境光遮蔽（N8AO）、泛光、色调映射、调色、暗角，按帧耗时自动调画质
+src/world/trees.ts  写实树：ez-tree 长样板、换 PBR 材质、实例化摆放、随风摆；ez-textures.ts 只按需加载用到的树皮和叶片
+src/world/impostor.ts 远山林子：把树的样板拍成图，用十字面片铺几千棵
 src/world/pond.ts   放生池：镜面倒影水面、细浪与涟漪、锦鲤（七个品种、半透明鳍）、鱼食、莲花河灯
 src/world/life.ts   萤火虫、燕子、蝴蝶
 src/world/shrines.ts 河灯台、签筒桌
@@ -118,6 +127,9 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/fonts/title.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | [SIL OFL](https://openfontlicense.org/) | 只取「山寺」两字 |
 | `public/fonts/seal.woff2` | [LXGW WenKai TC](https://github.com/lxgw/LxgwWenkaiTC)（霞鹜文楷） | SIL OFL | 只取印文和签号用到的字 |
+| `public/models/head/` | Lee Perry-Smith「Infinite, 3D Head Scan」（triplegangers.com，经 three.js 示例分发） | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | 运行时切掉肩颈、贴图上淡化胡茬，作所有僧人的头 |
+| `public/tex/tree/` | ez-tree 自带：橡树树皮（Poly Haven）、松树树皮（TextureCan）、树叶 | CC0 / MIT | 只留用到的几张，缩到 512 像素 |
+| `public/tex/linen_*.jpg` | Poly Haven「Rough Linen」 | CC0 | 只用法线和粗糙度，缩到 512 像素，作僧袍布纹 |
 | `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
 

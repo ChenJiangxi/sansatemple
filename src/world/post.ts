@@ -1,4 +1,4 @@
-// 画面后期：场景先画进 HDR 缓冲 → 泛光（只有灯笼、烛火、香头这类足够亮的东西会晕开）→ 色调映射 →
+// 画面后期：场景先画进 HDR 缓冲并算环境光遮蔽（墙角、檐下、物体接地处自然变暗）→ 泛光（只有灯笼、烛火、香头这类足够亮的东西会晕开）→ 色调映射 →
 // 调色（饱和度、对比度、冷暖、暗部抬升）+ 暗角 + 一层静止的纸纹颗粒。
 // 帧耗时长期偏高时自动降分辨率，再不行就关掉泛光；用户也可以在设置里直接选「流畅」。
 import * as THREE from 'three';
@@ -7,6 +7,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { N8AOPass } from 'n8ao';
 
 export type Quality = 'high' | 'low';
 
@@ -59,7 +60,7 @@ const GradeShader = {
     uContrast: { value: 1 },
     uLift: { value: 0 },
     uVignette: { value: 0.3 },
-    uGrain: { value: 0.045 },
+    uGrain: { value: 0.0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -91,6 +92,7 @@ export class PostFX {
   quality: Quality;
   private composer: EffectComposer;
   private bloom: UnrealBloomPass;
+  private ao: N8AOPass;
   private grade: ShaderPass;
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
@@ -113,7 +115,17 @@ export class PostFX {
     const saved = localStorage.getItem('sansa.quality');
     this.quality = saved === 'low' ? 'low' : 'high';
     this.composer = new EffectComposer(renderer);
-    this.composer.addPass(new RenderPass(scene, camera));
+    // 环境光遮蔽代替普通的场景渲染：半径按米算，手机上用半分辨率
+    const ao = new N8AOPass(scene, camera, innerWidth, innerHeight);
+    ao.configuration.aoRadius = 1.6;
+    ao.configuration.distanceFalloff = 1.0;
+    ao.configuration.intensity = 2.6;
+    ao.configuration.gammaCorrection = false;
+    ao.configuration.halfRes = isTouch;
+    ao.setQualityMode(isTouch ? 'Performance' : 'Medium');
+    this.ao = ao;
+    this.composer.addPass(ao);
+    void RenderPass;
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.5, 1.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
