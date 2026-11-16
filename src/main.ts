@@ -167,9 +167,9 @@ async function start() {
   // 金身佛像用室内环境光反射
   hall.group.traverse((o) => {
     const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-    if (m && (m as any).isMeshStandardMaterial && m.metalness >= 0.75) {
+    if (m && (m as any).isMeshStandardMaterial && m.metalness >= 0.75 && !m.userData.keepEnv) {
       m.envMap = roomEnv;
-      m.envMapIntensity = 1.5;
+      m.envMapIntensity = 1.15;
     }
   });
 

@@ -73,8 +73,10 @@ export function mandorla(w: number, h: number) {
   const pos = geo.attributes.position as THREE.BufferAttribute;
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + w * 0.6) / (w * 1.2), pos.getY(i) / h);
-  const face = new THREE.MeshStandardMaterial({ map: mandorlaTexture(), metalness: 0.75, roughness: 0.42, envMapIntensity: 1.2 });
-  const rim = new THREE.MeshStandardMaterial({ color: '#d1a24a', metalness: 0.9, roughness: 0.32 });
+  // 背光面积大，反射太亮会糊成一片白光、再被泛光晕开；所以比佛身哑一些、反射弱一些
+  const face = new THREE.MeshStandardMaterial({ map: mandorlaTexture(), metalness: 0.7, roughness: 0.58, envMapIntensity: 0.45 });
+  const rim = new THREE.MeshStandardMaterial({ color: '#d1a24a', metalness: 0.85, roughness: 0.42, envMapIntensity: 0.7 });
+  face.userData.keepEnv = rim.userData.keepEnv = true;
   return mesh(geo, [face, rim], false);
 }
 
