@@ -16,7 +16,9 @@ const ROOMS = 5;
 const CAPACITY = 50;
 const TICK_MS = 120;
 const INCENSE_MS = 3 * 60 * 1000;
-const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense']);
+const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune']);
+const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
+const LANTERN_MAX = 30;
 const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d)$/;
 const PLACES = new Set(['yard', 'altar']);
 
@@ -28,6 +30,7 @@ const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.mp4': 'video/mp4',
+  '.woff2': 'font/woff2',
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.webmanifest': 'application/manifest+json',
@@ -36,7 +39,7 @@ const MIME = {
 
 /** @type {Map<number, {players: Map<string, any>, incense: any[]}>} */
 const rooms = new Map();
-for (let i = 1; i <= ROOMS; i++) rooms.set(i, { players: new Map(), incense: [] });
+for (let i = 1; i <= ROOMS; i++) rooms.set(i, { players: new Map(), incense: [], lanterns: [] });
 
 function roomList() {
   return [...rooms.entries()].map(([id, r]) => ({ id, count: r.players.size, capacity: CAPACITY }));
@@ -194,6 +197,10 @@ function broadcast(room, obj, except) {
   for (const p of room.players.values()) if (p.ws !== except && p.ws.readyState === 1) p.ws.send(data);
 }
 
+function lanternMsg(room) {
+  return { t: 'lanterns', now: Date.now(), list: room.lanterns.map((l) => ({ id: l.id, by: l.by, owner: l.owner, seed: l.seed, start: l.start, until: l.until })) };
+}
+
 function incenseMsg(room) {
   return { t: 'incense', now: Date.now(), list: room.incense.map((i) => ({ id: i.id, by: i.by, owner: i.owner, until: i.until, start: i.start, place: i.place })) };
 }
@@ -238,14 +245,15 @@ wss.on('connection', (ws) => {
       room.players.set(me.id, me);
       send(ws, { t: 'welcome', id: me.id, room: id, capacity: CAPACITY });
       send(ws, incenseMsg(room));
+      send(ws, lanternMsg(room));
       return;
     }
     if (!me) return;
 
     switch (msg.t) {
       case 'state':
-        me.x = num(msg.x, -40, 40);
-        me.z = num(msg.z, -40, 40);
+        me.x = num(msg.x, -46, 46);
+        me.z = num(msg.z, -38, 70);
         me.yaw = num(msg.yaw, -100, 100);
         me.a = ACTIONS.has(msg.a) ? msg.a : 'idle';
         me.n = Math.floor(num(msg.n, 0, 100000));
@@ -276,6 +284,15 @@ wss.on('connection', (ws) => {
         broadcast(room, incenseMsg(room));
         break;
       }
+      case 'lantern': {
+        // 放河灯：每人同时只能有一盏在水上，整个房间最多 30 盏
+        const t = Date.now();
+        if (room.lanterns.some((l) => l.owner === me.id && l.until > t)) return;
+        room.lanterns.push({ id: crypto.randomBytes(4).toString('hex'), by: me.name, owner: me.id, seed: Math.random(), start: t, until: t + LANTERN_MS });
+        if (room.lanterns.length > LANTERN_MAX) room.lanterns.shift();
+        broadcast(room, lanternMsg(room));
+        break;
+      }
       case 'bell': {
         // 撞钟 / 击鼓：转告房间里其他人（钟 15 秒一次，鼓 3.5 秒一次）
         const t = Date.now();
@@ -304,6 +321,9 @@ setInterval(() => {
     const before = room.incense.length;
     room.incense = room.incense.filter((i) => i.until > now);
     if (room.incense.length !== before) broadcast(room, incenseMsg(room));
+    const lb = room.lanterns.length;
+    room.lanterns = room.lanterns.filter((l) => l.until > now);
+    if (room.lanterns.length !== lb) broadcast(room, lanternMsg(room));
     if (!room.players.size) continue;
     const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n]);
     broadcast(room, { t: 'snap', p });

@@ -784,7 +784,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
 
   const pewter = new THREE.MeshStandardMaterial({ color: '#a88848', metalness: 0.8, roughness: 0.4 });
   const candleMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.4 });
-  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffd28a' });
+  const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1.55, 0.65) });
   const addCandle = (x: number, y: number, z: number, stand = 0.42, h = 0.3) => {
     const holder = mesh(lathe([[0, 0], [0.11, 0], [0.12, 0.04], [0.04, 0.1], [0.035, stand * 0.6], [0.09, stand * 0.66], [0.12, stand - 0.02], [0.11, stand], [0, stand]], 16), pewter);
     holder.position.set(x, y, z);

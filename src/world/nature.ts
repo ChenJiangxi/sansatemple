@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { MAPLES, PINES, ROCKS, POND, COURT } from '../layout';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { pbr } from './pbr';
-import { foliageClusterTexture, ginkgoClusterTexture, waterNormalTexture, woodTexture, rng } from '../textures';
+import { foliageClusterTexture, ginkgoClusterTexture, woodTexture, rng } from '../textures';
 import { mesh } from './util';
 
 const windUniform = { value: 0 };
@@ -197,16 +197,7 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
   basin.scale.set(POND.rx, 0.9, POND.rz);
   basin.position.set(POND.x, 0, POND.z);
   group.add(basin);
-  const wn = waterNormalTexture();
-  const water = new THREE.Mesh(
-    new THREE.CircleGeometry(1, 48),
-    new THREE.MeshStandardMaterial({ color: '#30504a', roughness: 0.06, metalness: 0.1, normalMap: wn, normalScale: new THREE.Vector2(0.35, 0.35), transparent: true, opacity: 0.9, envMapIntensity: 1.1 })
-  );
-  water.rotation.x = -Math.PI / 2;
-  water.scale.set(POND.rx, POND.rz, 1);
-  water.position.set(POND.x, -0.16, POND.z);
-  water.receiveShadow = true;
-  group.add(water);
+  // 水面在 pond.ts（会倒映的镜面水）
   const edgeMat = pbr('stonewall', { metersPerTile: 0.9, color: '#9d988d' });
   const edgeN = 46;
   for (let i = 0; i < edgeN; i++) {
@@ -293,7 +284,6 @@ export function buildNature(scene: THREE.Scene): NatureBuild {
     leafSpawns,
     update(dt, t) {
       windUniform.value = t;
-      wn.offset.set(t * 0.012, t * 0.007);
       for (let i = 0; i < N; i++) {
         const L = leaves[i];
         L.life += dt;

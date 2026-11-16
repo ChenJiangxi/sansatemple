@@ -10,11 +10,19 @@ import { buildProps } from './world/props';
 import { buildBuildings } from './world/buildings';
 import { IncenseSpot } from './world/incense';
 import { placeStatues } from './world/statues';
+import { PostFX } from './world/post';
+import { buildPond } from './world/pond';
+import { buildLife } from './world/life';
+import { buildShrines } from './world/shrines';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
-import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION } from './monk';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, type Seat, heightAt, canStep, planRoute } from './layout';
+import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
+import { progress, today as localToday, type SealId } from './progress';
+import { sealPop, showFortune, titleCard, loadUiFonts } from './ui-extra';
+import { LOTS } from './fortune';
+import { getLang } from './i18n';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, type Seat, heightAt, canStep, planRoute } from './layout';
 import { audio } from './audio';
-import { Net, type IncenseItem, type IncensePlace } from './net';
+import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
 import { UI, type Visitor, escapeHtml } from './ui';
 
@@ -33,9 +41,10 @@ function fail(err: unknown) {
 const STATUS_KEY: Record<Action, Key> = {
   idle: 'statusIdle', walk: 'statusWalk', bow: 'statusBow', hapjang: 'statusHapjang', sit: 'statusSit', bench: 'statusSit',
   moktak: 'statusMoktak', rosary: 'statusRosary', incense: 'statusIncense',
+  lantern: 'statusLantern', feed: 'statusFeed', fortune: 'statusFortune',
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = localToday; // 按本地日期算「今天」
 function loadBows() {
   try {
     const v = JSON.parse(localStorage.getItem('sansa.bows') || 'null');
@@ -100,7 +109,24 @@ async function start() {
   scene.environment = pmrem.fromEquirectangular(skyTex).texture;
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 900);
 
+  const post = new PostFX(renderer, scene, camera, isTouch);
+  const PR = Math.min(devicePixelRatio, isTouch ? 1.5 : 1.75);
+  post.setSize(innerWidth, innerHeight, PR);
   const env = new Environment(scene, renderer);
+  // 金身、铜器的环境反射：夜里跟着天色变暗，不然佛像会在黑夜里白得刺眼
+  const goldNight = () => {
+    const night = THREE.MathUtils.clamp((env.lanternLevel - 0.6) / 1.8, 0, 1);
+    scene.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!m || !(m as any).isMeshStandardMaterial || m.envMap !== roomEnv) return;
+      m.userData.baseEnvI ??= m.envMapIntensity;
+      m.envMapIntensity = m.userData.baseEnvI * (1 - 0.7 * night);
+    });
+  };
+  env.onLook = (l) => {
+    post.setLook(l);
+    goldNight();
+  };
   const timeParam = new URL(location.href).searchParams.get('time') as TimeMode | null;
   env.setMode(timeParam && ['auto', 'dawn', 'day', 'dusk', 'night'].includes(timeParam) ? timeParam : (localStorage.getItem('sansa.time') as TimeMode) || 'auto');
   if (isTouch) env.sun.shadow.mapSize.set(1024, 1024);
@@ -109,6 +135,9 @@ async function start() {
   const nature = buildNature(scene);
   const props = buildProps(scene);
   const buildings = buildBuildings(scene);
+  const pond = buildPond(scene, { isTouch, lanternFrom: { x: LANTERN_STAND.standX, z: LANTERN_STAND.standZ + 0.9 } });
+  const life = buildLife(scene);
+  const shrines = buildShrines(scene);
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
@@ -125,7 +154,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, pond.water];
 
   // —— 叠加层与界面 ——
   const stage = new OverlayStage(app);
@@ -142,6 +171,10 @@ async function start() {
   let moktakAuto = 0;
   let overlay: null | 'moktak' | 'rosary' = null;
   let running = true;
+  // 开场标题：调试视角和 ?nointro 时跳过
+  const sp0 = new URL(location.href).searchParams;
+  let intro = !(sp0.has('debugview') || sp0.has('nointro'));
+  loadUiFonts();
 
   const ui = new UI(app, {
     dock: (k) => {
@@ -204,6 +237,8 @@ async function start() {
       });
     },
     getShadows: () => shadowsOn,
+    setQuality: (q) => post.setQuality(q),
+    getQuality: () => post.quality,
     statusAction: () => {
       if (player.seat || claimed) standUp();
     },
@@ -236,7 +271,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -252,8 +287,22 @@ async function start() {
     sessionBows++;
     bowsToday++;
     localStorage.setItem('sansa.bows', JSON.stringify({ date: today(), n: bowsToday }));
+    progress.add('bow');
+    award('bow');
     refreshStatus();
   };
+
+  // —— 寺游印谱：第一次做到某件事时盖一方印 ——
+  function award(id: SealId) {
+    if (!progress.stamp(id)) return;
+    sealPop(ui.root, id, ui.sealsBtn);
+    audio.bell(0.28);
+    ui.refreshSeals();
+    if (progress.count() === 12) {
+      sealPop(ui.root, id, ui.sealsBtn, true);
+      setTimeout(() => audio.templeBell(0.5), 2600);
+    }
+  }
 
   function refreshStatus() {
     if (me.action === 'bow') ui.setStatus('bowCount', 'stop', { n: sessionBows + 1 });
@@ -263,6 +312,9 @@ async function start() {
     else if (intent === 'incense') ui.setStatus('incenseWalking');
     else if (intent === 'bell') ui.setStatus('bellWalking');
     else if (intent === 'drum') ui.setStatus('drumWalking');
+    else if (intent === 'lantern') ui.setStatus('statusLantern');
+    else if (intent === 'feed') ui.setStatus('statusFeed');
+    else if (intent === 'fortune') ui.setStatus('statusFortune');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -410,10 +462,32 @@ async function start() {
 
   // 上香时的特写镜头：在香炉斜前方，略高于小和尚，看向双手与香炉之间
   const cine = { on: false, blend: 0, pos: new THREE.Vector3(), look: new THREE.Vector3() };
+  let cineMode: null | 'incense' | 'lantern' | 'intro' = null;
+  const cineValid = () => (cineMode === 'intro' ? intro : cineMode !== null && me.action === cineMode);
   function endIncenseScene() {
     cine.on = false;
+    cineMode = null;
     ui.showCaption(null);
     ui.root.classList.remove('cine');
+  }
+
+  if (intro) {
+    ui.root.classList.add('intro');
+    cineMode = 'intro';
+    cine.on = true;
+    cine.blend = 1;
+  }
+  function enterTemple() {
+    intro = false;
+    ui.root.classList.remove('intro');
+    endIncenseScene();
+    if (!audio.enabled) audio.enable();
+    progress.visit();
+    ui.replayHint();
+    setTimeout(() => award('gate'), 1600);
+    setTimeout(() => {
+      if (progress.count() < 12 && !overlay) ui.toast(t('sealsHint'), 6500);
+    }, 14000);
   }
 
   function requestIncense(place: IncensePlace) {
@@ -450,6 +524,7 @@ async function start() {
       else cine.pos.set(burner.x + 2.15, fy + 2.35, burner.z - 1.45); // 大鼎口沿高 1.4 m：镜头要高过口沿，才看得到香灰和人
       cine.look.set((burner.x + spot.x) / 2, (burner.y + fy + 0.9) / 2, (burner.z + spot.z) / 2 + 0.1);
       cine.on = true;
+      cineMode = 'incense';
       ui.root.classList.add('cine');
       ui.showCaption(t('incenseTitle'), t('incenseSub'));
     });
@@ -460,7 +535,152 @@ async function start() {
       me.setAction(baseAction());
       endIncenseScene();
       ui.toast(t('incenseOffered'), 3600);
+      progress.add('incense');
+      award('incense');
     }
+  }
+
+  // —— 放河灯：走到池边的河灯台，捧灯跪下，把灯放进水里 ——
+  let lanternList: LanternMsg[] = [];
+  let lanternOffset = 0;
+  const pushLanterns = () =>
+    pond.setLanterns(
+      lanternList.map((l) => ({ id: l.id, seed: l.seed, start: l.start, until: l.until, mine: l.owner === (net.id || 'me') })),
+      Date.now() + lanternOffset
+    );
+  net.on('lanterns', (list, now) => {
+    lanternOffset = now - Date.now();
+    lanternList = list;
+    pushLanterns();
+  });
+  function requestLantern() {
+    const now = Date.now() + lanternOffset;
+    if (lanternList.some((l) => l.owner === (net.id || 'me') && l.until > now)) {
+      ui.toast(t('lanternFloating'));
+      return;
+    }
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    intent = 'lantern';
+    refreshStatus();
+    walkTo(LANTERN_STAND.standX, LANTERN_STAND.standZ, () => {
+      intent = null;
+      player.x = LANTERN_STAND.standX;
+      player.z = LANTERN_STAND.standZ;
+      player.yaw = LANTERN_STAND.yaw;
+      me.onLanternRelease = () => {
+        if (net.online) net.floatLantern();
+        else {
+          const t0 = Date.now();
+          lanternList = [...lanternList, { id: 'local' + t0, by: name, owner: 'me', seed: Math.random(), start: t0, until: t0 + 8 * 60000 }];
+          pushLanterns();
+        }
+        pond.lanternDrop();
+        audio.bead();
+      };
+      me.setAction('lantern');
+      refreshStatus();
+      // 镜头：从水面上低低地回望岸边
+      const fy = heightAt(player.x, player.z);
+      cine.pos.set(player.x + 2.4, fy + 1.05, player.z + 3.4);
+      cine.look.set(player.x, fy + 0.45, player.z + 0.5);
+      cine.on = true;
+      cineMode = 'lantern';
+      ui.root.classList.add('cine');
+      ui.showCaption(t('lanternTitle'), t('lanternSub'));
+    });
+  }
+
+  // —— 喂锦鲤：走到离点中位置最近的岸边，把鱼食撒出去 ——
+  function bankPoint(px: number, pz: number) {
+    let a = Math.atan2((pz - POND.z) / POND.rz, (px - POND.x) / POND.rx);
+    let x = POND.x + Math.cos(a) * (POND.rx + 0.75);
+    let z = POND.z + Math.sin(a) * (POND.rz + 0.75);
+    // 不要站在桥头正中
+    if (Math.abs(x) < 2.6) {
+      a += x >= 0 ? 0.35 : -0.35;
+      x = POND.x + Math.cos(a) * (POND.rx + 0.75);
+      z = POND.z + Math.sin(a) * (POND.rz + 0.75);
+    }
+    return { x, z };
+  }
+  function requestFeed(px: number, pz: number) {
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    const k = Math.hypot((px - POND.x) / POND.rx, (pz - POND.z) / POND.rz);
+    if (k > 0.88) {
+      px = POND.x + ((px - POND.x) / k) * 0.88;
+      pz = POND.z + ((pz - POND.z) / k) * 0.88;
+    }
+    const near = Math.hypot((player.x - POND.x) / (POND.rx + 1.6), (player.z - POND.z) / (POND.rz + 1.6)) < 1;
+    const toss = () => {
+      intent = null;
+      player.yaw = Math.atan2(px - player.x, pz - player.z);
+      me.onFeedToss = () => {
+        pond.feed(px, pz);
+        audio.bead();
+        progress.add('koi');
+        award('koi');
+        setTimeout(() => ui.toast(t('feedDone')), 900);
+      };
+      me.setAction('feed');
+      refreshStatus();
+    };
+    intent = 'feed';
+    refreshStatus();
+    if (near) toss();
+    else {
+      const b = bankPoint(px, pz);
+      walkTo(b.x, b.z, toss);
+    }
+  }
+
+  // —— 求签：观音殿前，摇签筒，掉出一支签；一天一支 ——
+  let fortuneOpen = false;
+  function requestFortune() {
+    const done = progress.fortuneToday();
+    if (done !== null) {
+      fortuneOpen = true;
+      showFortune(ui.root, done, true, getLang()).then(() => (fortuneOpen = false));
+      return;
+    }
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    intent = 'fortune';
+    refreshStatus();
+    walkTo(FORTUNE.standX, FORTUNE.standZ, () => {
+      intent = null;
+      player.x = FORTUNE.standX;
+      player.z = FORTUNE.standZ;
+      player.yaw = FORTUNE.yaw;
+      ui.showCaption(t('fortuneTitle'), t('fortuneSub'));
+      me.onFortuneDrop = () => {
+        audio.moktak('effects', 0, 0.35);
+        const n = Math.floor(Math.random() * LOTS.length);
+        progress.setFortune(n);
+        setTimeout(() => {
+          ui.showCaption(null);
+          fortuneOpen = true;
+          showFortune(ui.root, n, false, getLang()).then(() => {
+            fortuneOpen = false;
+            award('fortune');
+          });
+        }, 900);
+      };
+      me.setAction('fortune');
+      refreshStatus();
+    });
+  }
+  // 新动作做完：回到原来的状态
+  function checkNewActionsDone() {
+    if (me.action === 'lantern' && me.actionTime >= LANTERN_DURATION) {
+      me.setAction(baseAction());
+      endIncenseScene();
+      ui.toast(t('lanternReleased'), 4200);
+      progress.add('lantern');
+      award('lantern');
+    } else if (me.action === 'feed' && me.actionTime >= FEED_DURATION) me.setAction(baseAction());
+    else if (me.action === 'fortune' && me.actionTime >= FORTUNE_DURATION) me.setAction(baseAction());
   }
 
   // —— 钟楼：撞钟 ——
@@ -484,6 +704,8 @@ async function start() {
       me.setAction('hapjang');
       refreshStatus();
       b.strike();
+      progress.add(kind);
+      award(kind);
       setTimeout(() => {
         if (kind === 'bell') audio.templeBell();
         else audio.drum();
@@ -526,6 +748,8 @@ async function start() {
     audio.moktak();
     moktakCount++;
     ui.setMoktak(!!moktakAuto, moktakCount);
+    progress.add('moktak');
+    if (moktakCount >= 30) award('moktak');
   }
   function toggleMoktakAuto() {
     if (moktakAuto) {
@@ -543,7 +767,9 @@ async function start() {
     beadCount++;
     audio.bead();
     ui.setRosary(beadCount);
+    progress.add('beads');
     if (beadCount % 108 === 0) {
+      award('beads');
       audio.bell(0.4);
       ui.toast(t('rosaryRoundDone', { n: beadCount / 108 }));
     }
@@ -708,6 +934,11 @@ async function start() {
     if (cv && cv.length === 3 && cv.every(Number.isFinite)) [cam.yaw, cam.pitch, cam.dist] = cv;
     const inc = sp.get('incense');
     if (inc === 'altar' || inc === 'yard') setTimeout(() => requestIncense(inc), 1200);
+    // 调试：?debugview&do=lantern|feed|fortune 直接做一次
+    const act = sp.get('do');
+    if (act === 'lantern') setTimeout(requestLantern, 1200);
+    if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
+    if (act === 'fortune') setTimeout(requestFortune, 1200);
   }
   const camRay = new THREE.Raycaster();
   const tmpV = new THREE.Vector3();
@@ -731,7 +962,13 @@ async function start() {
     const inside = pos.x > -HALL.wallX && pos.x < HALL.wallX && pos.z > HALL.backZ && pos.z < HALL.colZFront;
     if (inside) pos.y = Math.min(pos.y, HALL.baseH + HALL.colH + 0.6);
     pos.y = Math.max(pos.y, heightAt(pos.x, pos.z) + 0.3);
-    if (cine.on && me.action !== 'incense') endIncenseScene();
+    if (cine.on && !cineValid()) endIncenseScene();
+    if (cineMode === 'intro') {
+      // 开场：从山门方向远远望着大殿，镜头慢慢横移
+      const a = 0.42 * Math.sin(elapsed * 0.045) - 0.12;
+      cine.pos.set(Math.sin(a) * 34, 10.5, 24 + Math.cos(a) * 34);
+      cine.look.set(0, 4.2, 0);
+    }
     cine.blend = Math.max(0, Math.min(1, cine.blend + (cine.on ? dt / 1.1 : -dt / 0.9)));
     if (cine.blend > 0) {
       const e = cine.blend * cine.blend * (3 - 2 * cine.blend);
@@ -785,7 +1022,7 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay) return;
+    if (overlay || fortuneOpen || intro) return;
     const p = pick(cx, cy);
     if (!p) return;
     if (p.interact?.type === 'seat') {
@@ -799,6 +1036,18 @@ async function start() {
     }
     if (p.interact?.type === 'bell' || p.interact?.type === 'drum') {
       strikeInstrument(p.interact.type);
+      return;
+    }
+    if (p.interact?.type === 'lantern') {
+      requestLantern();
+      return;
+    }
+    if (p.interact?.type === 'fortune') {
+      requestFortune();
+      return;
+    }
+    if (p.interact?.type === 'pond') {
+      requestFeed(p.point.x, p.point.z);
       return;
     }
     cancelIntent();
@@ -857,6 +1106,9 @@ async function start() {
     } else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
     else if (it?.type === 'bell') label = t('ringBell');
     else if (it?.type === 'drum') label = t('beatDrum');
+    else if (it?.type === 'lantern') label = t('tipLantern');
+    else if (it?.type === 'fortune') label = t('tipFortune');
+    else if (it?.type === 'pond') label = t('tipPond');
     canvas.classList.toggle('point', !!label);
     ui.showTooltip(label, e.clientX, e.clientY);
   });
@@ -933,6 +1185,23 @@ async function start() {
   addEventListener('blur', () => keys.clear());
 
   // —— 每帧更新 ——
+  // 静坐满一分钟；从池子一头走过石拱桥到另一头
+  let sitTime = 0;
+  let bridgeFrom = 0;
+  function trackSeals(dt: number) {
+    if (intro) return;
+    if (player.seat && (me.action === 'sit' || me.action === 'bench')) {
+      sitTime += dt;
+      if (sitTime >= 60) award('sit');
+    } else sitTime = 0;
+    const onBridge = player.x > BRIDGE.x0 && player.x < BRIDGE.x1 && player.z > BRIDGE.z0 && player.z < BRIDGE.z1;
+    if (onBridge && !bridgeFrom) bridgeFrom = player.z < POND.z ? -1 : 1;
+    if (!onBridge && bridgeFrom) {
+      if ((player.z < POND.z ? -1 : 1) !== bridgeFrom && Math.abs(player.x) < 4) award('bridge');
+      bridgeFrom = 0;
+    }
+  }
+
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
@@ -1058,7 +1327,7 @@ async function start() {
   addEventListener('resize', () => {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
+    post.setSize(innerWidth, innerHeight, PR);
   });
   document.addEventListener('visibilitychange', () => {
     audio.pauseForHidden(document.hidden);
@@ -1070,6 +1339,9 @@ async function start() {
   // 调试：?debugview&slowmo=0.2 慢放
   const slowmo = new URL(location.href).searchParams.has('debugview') ? Number(new URL(location.href).searchParams.get('slowmo')) || 1 : 1;
   let elapsed = 0;
+  let goldDone = false;
+  const sunDir = new THREE.Vector3();
+  const sunCol = new THREE.Color();
   let envTimer = 0;
   let booted = false;
   function frame() {
@@ -1079,9 +1351,15 @@ async function start() {
     elapsed += dt;
     updatePlayer(dt);
     checkIncenseDone();
+    checkNewActionsDone();
+    trackSeals(dt);
     updateRemotes(dt);
     updateCamera(dt);
     nature.update(dt, elapsed);
+    life.update(dt, elapsed, env.lanternLevel, camera.position);
+    sunDir.copy(env.sun.position).sub(env.sun.target.position).normalize();
+    sunCol.copy(env.sun.color).multiplyScalar(env.sun.intensity);
+    pond.update(dt, elapsed, env.lanternLevel, sunDir, sunCol);
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     buildings.bell.update(dt);
@@ -1094,19 +1372,21 @@ async function start() {
       marker.scale.setScalar(1 + (1 - markerLife) * 0.6);
     }
     envTimer += dt;
-    if (envTimer > 30) {
+    if (envTimer > 30 || (!goldDone && elapsed > 6)) {
       envTimer = 0;
+      goldDone = true;
       env.update();
       props.setLanternLevel(env.lanternLevel);
     }
     env.sky.position.copy(camera.position);
-    renderer.render(scene, camera);
+    post.render(dt / slowmo);
     stage.render(dt);
     updateTags();
     net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday });
     if (!booted) {
       booted = true;
       bootEl.classList.add('gone');
+      if (intro) setTimeout(() => titleCard(app, isTouch, enterTemple), 500);
       setTimeout(() => bootEl.remove(), 1000);
     }
   }

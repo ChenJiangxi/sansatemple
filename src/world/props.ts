@@ -240,7 +240,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   interactives.push(burner);
   const yardIncense = new IncenseSpot(group, INCENSE.x, 0.18 + ding.ashY, INCENSE.z, 0.68, 24, 0.45);
   const flames: THREE.Mesh[] = [];
-  const flameMat = new THREE.MeshBasicMaterial({ color: '#ffd27e' });
+  const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.0, 1.3, 0.55) });
   const candleMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.5 });
   const waxMat = new THREE.MeshStandardMaterial({ color: '#d0392c', roughness: 0.35, emissive: '#3a0805', emissiveIntensity: 0.4 });
   const ironMat = new THREE.MeshStandardMaterial({ color: '#2a2420', metalness: 0.55, roughness: 0.55 });
@@ -488,7 +488,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       night.setLevel(level);
       pagodaLampMat.emissiveIntensity = 0.1 + Math.max(0, (level - 0.6) / 1.8) * 2.4;
       lanternMat.emissiveIntensity = 0.25 + level * 0.9;
-      silk.emissiveIntensity = 0.15 + level * 0.8;
+      silk.emissiveIntensity = 0.12 + Math.min(level, 2.4) * 0.38;
       for (const l of pathLights) l.intensity = Math.max(0, level - 0.8) * 7;
     },
     setIncense(list) {

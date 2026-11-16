@@ -1,5 +1,6 @@
 // 天空、光照、昼夜、远山与地面
 import * as THREE from 'three';
+import type { Look } from './post';
 import { rng } from '../textures';
 import { pbr, loadTexture } from './pbr';
 import { HALL, COURT, POND, BELL, DRUM, SIDE_HALLS, BRIDGE } from '../layout';
@@ -22,14 +23,22 @@ interface Preset {
   stars: number;
   envI: number; // 环境反射强度
   bgI: number; // 背景照片亮度
+  // 后期调色：泛光强度与门槛、冷暖、饱和度、对比度、暗部抬升、暗角
+  bloom: number;
+  thr: number;
+  tint: THREE.Color;
+  sat: number;
+  con: number;
+  lift: number;
+  vig: number;
 }
 
 const C = (h: string) => new THREE.Color(h);
 const PRESETS: Record<Exclude<TimeMode, 'auto'>, Preset> = {
-  dawn: { skyTop: C('#7b8fb5'), skyHorizon: C('#f2c6a0'), fog: C('#b8a08a'), sun: C('#ffc58f'), sunI: 1.6, hemiSky: C('#b9c4dc'), hemiGround: C('#6b5a48'), hemiI: 0.9, elev: 0.18, azim: 1.9, lantern: 0.9, exposure: 1.0, stars: 0.1, envI: 0.35, bgI: 0.7 },
-  day: { skyTop: C('#7fa6cf'), skyHorizon: C('#dfe7e6'), fog: C('#a39686'), sun: C('#fff1dc'), sunI: 2.9, hemiSky: C('#cfe0ef'), hemiGround: C('#7a6a50'), hemiI: 1.05, elev: 0.85, azim: 2.4, lantern: 0.25, exposure: 1.0, stars: 0, envI: 0.55, bgI: 1.0 },
-  dusk: { skyTop: C('#4b5a86'), skyHorizon: C('#f0a070'), fog: C('#8a6a58'), sun: C('#ff9a5a'), sunI: 1.5, hemiSky: C('#9c8fb0'), hemiGround: C('#4e3d33'), hemiI: 0.75, elev: 0.12, azim: 3.9, lantern: 1.3, exposure: 1.05, stars: 0.15, envI: 0.25, bgI: 0.45 },
-  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 1.0, hemiSky: C('#41528a'), hemiGround: C('#221d18'), hemiI: 0.58, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.1, stars: 1, envI: 0.05, bgI: 0.07 },
+  dawn: { skyTop: C('#7b8fb5'), skyHorizon: C('#f2c6a0'), fog: C('#b8a08a'), sun: C('#ffc58f'), sunI: 1.6, hemiSky: C('#b9c4dc'), hemiGround: C('#6b5a48'), hemiI: 0.9, elev: 0.18, azim: 1.9, lantern: 0.9, exposure: 1.0, stars: 0.1, envI: 0.35, bgI: 0.7, bloom: 0.5, thr: 1.3, tint: C('#fff1e0'), sat: 1.06, con: 1.04, lift: 0.03, vig: 0.32 },
+  day: { skyTop: C('#7fa6cf'), skyHorizon: C('#dfe7e6'), fog: C('#a39686'), sun: C('#fff1dc'), sunI: 2.9, hemiSky: C('#cfe0ef'), hemiGround: C('#7a6a50'), hemiI: 1.05, elev: 0.85, azim: 2.4, lantern: 0.25, exposure: 1.0, stars: 0, envI: 0.55, bgI: 1.0, bloom: 0.28, thr: 2.4, tint: C('#fff7ec'), sat: 1.08, con: 1.05, lift: 0.0, vig: 0.26 },
+  dusk: { skyTop: C('#4b5a86'), skyHorizon: C('#f0a070'), fog: C('#8a6a58'), sun: C('#ff9a5a'), sunI: 1.5, hemiSky: C('#9c8fb0'), hemiGround: C('#4e3d33'), hemiI: 0.75, elev: 0.12, azim: 3.9, lantern: 1.3, exposure: 1.05, stars: 0.15, envI: 0.25, bgI: 0.45, bloom: 0.65, thr: 1.25, tint: C('#ffe6d2'), sat: 1.1, con: 1.06, lift: 0.03, vig: 0.36 },
+  night: { skyTop: C('#0b1328'), skyHorizon: C('#2a3550'), fog: C('#141a24'), sun: C('#9fb4ff'), sunI: 1.15, hemiSky: C('#4a5c96'), hemiGround: C('#26201a'), hemiI: 0.7, elev: 0.7, azim: 4.2, lantern: 2.4, exposure: 1.2, stars: 1, envI: 0.05, bgI: 0.07, bloom: 0.8, thr: 1.3, tint: C('#e4ecff'), sat: 1.02, con: 1.03, lift: 0.09, vig: 0.38 },
 };
 
 function presetForHour(h: number): Preset {
@@ -53,6 +62,7 @@ function lerpPreset(a: Preset, b: Preset, t: number): Preset {
     skyTop: lc(a.skyTop, b.skyTop), skyHorizon: lc(a.skyHorizon, b.skyHorizon), fog: lc(a.fog, b.fog), sun: lc(a.sun, b.sun),
     sunI: ln(a.sunI, b.sunI), hemiSky: lc(a.hemiSky, b.hemiSky), hemiGround: lc(a.hemiGround, b.hemiGround), hemiI: ln(a.hemiI, b.hemiI),
     elev: ln(a.elev, b.elev), azim: ln(a.azim, b.azim), lantern: ln(a.lantern, b.lantern), exposure: ln(a.exposure, b.exposure), stars: ln(a.stars, b.stars), envI: ln(a.envI, b.envI), bgI: ln(a.bgI, b.bgI),
+    bloom: ln(a.bloom, b.bloom), thr: ln(a.thr, b.thr), tint: lc(a.tint, b.tint), sat: ln(a.sat, b.sat), con: ln(a.con, b.con), lift: ln(a.lift, b.lift), vig: ln(a.vig, b.vig),
   };
 }
 
@@ -62,6 +72,8 @@ export class Environment {
   sky: THREE.Mesh;
   skyMat: THREE.ShaderMaterial;
   lanternLevel = 0.3;
+  look!: Look;
+  onLook?: (l: Look) => void;
   mode: TimeMode = 'auto';
   private scene: THREE.Scene;
   private renderer: THREE.WebGLRenderer;
@@ -162,6 +174,8 @@ export class Environment {
     this.lanternLevel = p.lantern;
     this.scene.environmentIntensity = p.envI;
     this.scene.backgroundIntensity = p.bgI;
+    this.look = { bloom: p.bloom, threshold: p.thr, tint: p.tint.clone(), sat: p.sat, contrast: p.con, lift: p.lift, vignette: p.vig };
+    this.onLook?.(this.look);
   }
 
   // 阴影范围跟着玩家走（按阴影贴图的像素对齐，避免移动时阴影闪烁）

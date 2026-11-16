@@ -7,6 +7,8 @@ import { buildHall } from '../../src/world/hall';
 import { buildNature } from '../../src/world/nature';
 import { buildProps } from '../../src/world/props';
 import { buildBuildings } from '../../src/world/buildings';
+import { buildPond } from '../../src/world/pond';
+import { buildLife } from '../../src/world/life';
 import { IncenseSpot, type IncenseView } from '../../src/world/incense';
 import { placeStatues } from '../../src/world/statues';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from '../../src/world/pbr';
@@ -77,6 +79,10 @@ async function main() {
   const nature = buildNature(scene);
   const props = buildProps(scene);
   const buildings = buildBuildings(scene);
+  const pond = buildPond(scene, { isTouch: false, lanternFrom: { x: -6.15, z: 47.65 } });
+  const life = buildLife(scene);
+  const sunDir = new THREE.Vector3();
+  const sunCol = new THREE.Color();
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
   hall.group.traverse((o) => {
@@ -168,6 +174,10 @@ async function main() {
   function tickWorld(dt: number) {
     elapsed += dt;
     nature.update(dt, elapsed);
+    life.update(dt, elapsed, env.lanternLevel, camera.position);
+    sunDir.copy(env.sun.position).sub(env.sun.target.position).normalize();
+    sunCol.copy(env.sun.color).multiplyScalar(env.sun.intensity);
+    pond.update(dt, elapsed, env.lanternLevel, sunDir, sunCol);
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     buildings.bell.update(dt);

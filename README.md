@@ -34,8 +34,16 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 | 合十 | 3 | 底栏「合十」 |
 | 木鱼（可自动敲） | 5，空格敲 | 点木鱼 |
 | 坐下 / 上香 / 撞钟 / 击鼓 | 点蒲团、石凳 / 点院中或佛前香炉（镜头自动切到特写）/ 点钟楼的钟 / 点鼓楼的鼓 | 同左 |
+| 放河灯 | 点放生池边的「河燈」台：捧灯跪下，把莲花灯放进水里，同一房间的人都看得见，漂 8 分钟 | 同左 |
+| 喂锦鲤 | 点放生池的水面：走到岸边撒鱼食，锦鲤会游过来 | 同左 |
+| 求签 | 点观音殿前的签筒：摇出一支签（二十四支，唐宋诗与禅偈），一天一支 | 同左 |
+| 寺游印谱 | 右上角的印章按钮：十二处功课各盖一方印，十二印集齐为「圆满」；下面是功德簿（累计次数） | 同左 |
 
-时间跟随本地时钟：清晨、白天、傍晚、夜晚光线不同，夜里红灯笼和宫灯会亮。
+时间跟随本地时钟：清晨、白天、傍晚、夜晚光线不同。入夜后红灯笼、宫灯、配殿门窗、石灯和塔灯会亮，放生池上有寺里放的莲花河灯，岸边有萤火虫；白天有燕子和蝴蝶。
+
+打开网页先是开场标题，点「入山门」进寺（同时打开声音）。链接带 `?nointro` 可以跳过开场。
+
+画面经过后期处理：泛光（只有灯火、烛火这类足够亮的东西会晕开）、按时段变化的调色、暗角和纸纹颗粒；帧率长期偏低时会自动降分辨率、再不行关掉泛光。设置里的「画质」可以直接选「流畅」。
 
 ## 寺院布局（汉传佛寺）
 
@@ -55,6 +63,13 @@ src/monk.ts         小和尚模型（海青长袍、宽袖、搭左肩的袈裟
 src/world/          环境与昼夜、大雄宝殿（重檐、彩画斗栱、格扇门、须弥座栏杆）、佛像与背光、
                     配殿与钟鼓楼、银杏与放生池、灯笼宫灯、双塔、香炉、寺墙山门、石拱桥
 src/overlays.ts     木鱼（红漆鳞纹、木槌真实落点）、念珠（佛头、佛塔、流苏）的特写画面
+src/world/post.ts   后期：泛光、色调映射、调色、暗角、纸纹颗粒，按帧耗时自动调画质
+src/world/pond.ts   放生池：镜面倒影水面、细浪与涟漪、锦鲤、鱼食、莲花河灯
+src/world/life.ts   萤火虫、燕子、蝴蝶
+src/world/shrines.ts 河灯台、签筒桌
+src/progress.ts     本地存档：寺游印谱、功德簿、今天的签
+src/fortune.ts      二十四支签的签诗与解签
+src/ui-extra.ts     开场标题、印谱、得印动画、签文卡片
 src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、鼓、普通话「南无阿弥陀佛」念佛
 src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 ```
@@ -66,6 +81,9 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/buddha.glb` | [Korean Buddha Iron Statue](https://sketchfab.com/3d-models/korean-buddha-iron-statue-872b44150e12431a898d0b8057705770) by artfletch（高丽铁佛扫描） | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | 去掉贴图、改为金身、减面到 9 万三角形、meshopt 压缩 |
 | `public/models/disciple.glb` | [1997.11 Standing Bodhisattva](https://sketchfab.com/3d-models/199711-standing-bodhisattva-1a57a0d6609145b486ed5b1d3e9ec7fb)，Cleveland Museum of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上；作迦叶、阿难二尊者用，右侧一尊镜像 |
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
+| `public/fonts/title.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | [SIL OFL](https://openfontlicense.org/) | 只取「山寺」两字 |
+| `public/fonts/seal.woff2` | [LXGW WenKai TC](https://github.com/lxgw/LxgwWenkaiTC)（霞鹜文楷） | SIL OFL | 只取印文和签号用到的字 |
+| `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
 
 署名也写在游戏「设置」面板底部。换模型时用 `node tools/prep-statue.mjs 输入.glb 输出.glb 目标三角形数` 处理。

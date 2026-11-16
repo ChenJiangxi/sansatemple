@@ -171,3 +171,82 @@ canvas.main.point { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .toast, .scrim, .overlay-canvas, .hint, .dock-btn { transition: none; }
 }
+
+/* —— 寺游印谱 —— */
+.panel-seals { right: 14px; width: min(92vw, 420px); }
+.sealbook { padding: 0 16px 4px; max-height: min(70vh, 640px); overflow-y: auto; }
+.sealbook-progress { margin: 2px 2px 12px; font-size: 13px; color: var(--ink-muted); }
+.seal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; padding: 0 !important; }
+.seal-grid li { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; }
+.seal-grid img, .seal-empty { width: 58px; height: 58px; }
+.seal-grid img { filter: drop-shadow(0 1px 1px rgba(80, 20, 10, 0.25)); }
+.seal-empty {
+  display: flex; align-items: center; justify-content: center; border: 1.5px dashed rgba(120, 100, 80, 0.38); border-radius: 6px;
+  font-family: SansaSeal, serif; font-size: 18px; line-height: 1.1; color: rgba(120, 100, 80, 0.32); writing-mode: vertical-rl; letter-spacing: 2px;
+}
+.seal-grid b { font-size: 12.5px; font-weight: 600; }
+.seal-grid small { font-size: 10.5px; line-height: 1.35; color: var(--ink-muted); }
+.seal-grid li.got small { color: #a34a3a; }
+.merit { margin-top: 16px; border-top: 1px solid rgba(0, 0, 0, 0.08); padding-top: 10px; }
+.merit h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
+.merit ul { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 0 !important; font-size: 12.5px; color: var(--ink); }
+.icon-btn.ping { animation: ping 0.9s ease; }
+@keyframes ping { 30% { transform: scale(1.25); color: #f0b35c; } }
+
+/* 得印：先重重盖下来，再缩小飞走 */
+.seal-pop { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; z-index: 8; }
+.seal-pop img { width: 168px; height: 168px; opacity: 0; transform: scale(1.9) rotate(-8deg); transition: transform 0.32s cubic-bezier(0.2, 1.4, 0.4, 1), opacity 0.2s ease; filter: drop-shadow(0 6px 18px rgba(60, 10, 0, 0.45)); }
+.seal-pop p { margin: 0; padding: 8px 16px; border-radius: 999px; background: rgba(24, 22, 18, 0.62); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); font-size: 14px; letter-spacing: 0.5px; opacity: 0; transition: opacity 0.5s ease 0.25s; }
+.seal-pop.in img { opacity: 1; transform: scale(1) rotate(-4deg); }
+.seal-pop.in p { opacity: 1; }
+.seal-pop.out img { transition: transform 0.75s cubic-bezier(0.5, 0, 0.6, 1), opacity 0.75s ease; opacity: 0.2; }
+.seal-pop.out p { opacity: 0; transition: opacity 0.4s ease; }
+
+/* —— 签文 —— */
+.fortune-back { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(12, 10, 8, 0.45); opacity: 0; transition: opacity 0.4s ease; z-index: 9; }
+.fortune-back.in { opacity: 1; }
+.fortune {
+  width: min(88vw, 360px); max-height: 88vh; overflow-y: auto; padding: 22px 26px 22px; border-radius: 6px; color: #3a2a1e; text-align: center;
+  background: #f3e9d2 linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.04)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4), inset 0 0 0 6px #f3e9d2, inset 0 0 0 7.5px #b3261e;
+  transform: translateY(18px) scale(0.98); transition: transform 0.5s cubic-bezier(0.2, 1, 0.3, 1);
+}
+.fortune-back.in .fortune { transform: none; }
+.fortune header { display: flex; align-items: baseline; justify-content: center; gap: 14px; }
+.f-no { font-family: SansaSeal, serif; font-size: 26px; letter-spacing: 2px; }
+.f-grade { font-family: SansaSeal, serif; font-size: 17px; color: #fff3e0; background: #b3261e; padding: 1px 9px 2px; border-radius: 3px; letter-spacing: 3px; }
+.f-sub { margin: 4px 0 0; font-size: 12px; color: #8a6e58; }
+.f-poem { margin: 18px 0 6px; font-family: SansaPoem, 'Songti SC', serif; font-size: 25px; line-height: 1.75; letter-spacing: 2px; }
+.f-poem p { margin: 0; }
+.f-by { margin: 4px 0 0; font-size: 12.5px; color: #8a6e58; }
+.fortune hr { border: 0; height: 1px; background: rgba(120, 60, 30, 0.25); margin: 16px 18px; }
+.f-read { margin: 0; font-size: 14.5px; line-height: 1.8; }
+.f-note { margin: 12px 0 0; font-size: 12px; line-height: 1.6; color: #8a6e58; }
+.f-keep { margin-top: 18px; height: 42px; padding: 0 30px; border-radius: 999px; background: #b3261e; color: #fff3e0; font-size: 14.5px; letter-spacing: 2px; }
+
+/* —— 开场标题 —— */
+.title-card {
+  position: absolute; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: linear-gradient(180deg, rgba(10, 8, 6, 0.55) 0%, rgba(10, 8, 6, 0.12) 45%, rgba(10, 8, 6, 0.5) 100%);
+  transition: opacity 1s ease;
+}
+.title-card.out { opacity: 0; pointer-events: none; }
+.tc-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; color: #fbf3e2; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55); }
+.tc-name { position: relative; margin: 0; font-family: SansaTitle, serif; font-weight: 400; font-size: clamp(84px, 16vw, 150px); line-height: 1; letter-spacing: 6px; opacity: 0; filter: blur(10px); transition: opacity 2.2s ease, filter 2.6s ease; }
+.tc-seal { position: absolute; right: -54px; top: 18px; width: 50px; height: 50px; opacity: 0; transition: opacity 0.3s ease 2.2s; }
+.tc-tag { margin: 0; font-size: 15px; letter-spacing: 4px; opacity: 0; transition: opacity 1.2s ease 1.4s; }
+.tc-enter {
+  margin-top: 18px; height: 50px; padding: 0 34px; border-radius: 999px; font-size: 16px; letter-spacing: 4px; color: #fbf3e2;
+  background: rgba(30, 24, 18, 0.45); border: 1px solid rgba(251, 243, 226, 0.55); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur);
+  opacity: 0; transition: opacity 1s ease 2s, background 0.2s ease;
+}
+.tc-enter:hover { background: rgba(179, 38, 30, 0.6); }
+.tc-ctl { margin: 0; font-size: 12.5px; letter-spacing: 1px; color: rgba(251, 243, 226, 0.75); opacity: 0; transition: opacity 1s ease 2.4s; }
+.title-card.in .tc-name { opacity: 1; filter: none; }
+.title-card.in .tc-seal, .title-card.in .tc-tag, .title-card.in .tc-enter, .title-card.in .tc-ctl { opacity: 1; }
+.hud.intro > * { opacity: 0 !important; pointer-events: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .seal-pop img, .seal-pop p, .fortune, .fortune-back, .title-card, .tc-name { transition: none; }
+}
+
+#app:has(.hud.intro) .tags { opacity: 0; }

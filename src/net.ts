@@ -20,6 +20,15 @@ export interface RoomInfo {
 
 export type IncensePlace = 'yard' | 'altar';
 
+export interface LanternMsg {
+  id: string;
+  by: string;
+  owner: string;
+  seed: number;
+  start: number;
+  until: number;
+}
+
 export interface IncenseItem {
   id: string;
   place?: IncensePlace;
@@ -37,6 +46,7 @@ type Events = {
   incense: (list: IncenseItem[], serverNow: number) => void;
   claim: (seat: string, ok: boolean) => void;
   bell: (from: string, kind: 'bell' | 'drum') => void;
+  lanterns: (list: LanternMsg[], serverNow: number) => void;
 };
 
 export class Net {
@@ -136,6 +146,9 @@ export class Net {
         case 'claim':
           this.emit('claim', msg.seat, msg.ok);
           break;
+        case 'lanterns':
+          this.emit('lanterns', msg.list, msg.now);
+          break;
         case 'bell':
           this.emit('bell', msg.from, msg.kind === 'drum' ? 'drum' : 'bell');
           break;
@@ -209,6 +222,10 @@ export class Net {
 
   offerIncense(place: IncensePlace) {
     this.send({ t: 'incense', place });
+  }
+
+  floatLantern() {
+    this.send({ t: 'lantern' });
   }
 
   ringBell(kind: 'bell' | 'drum' = 'bell') {

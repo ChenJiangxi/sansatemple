@@ -138,7 +138,7 @@ export function buildNightLights(scene: THREE.Scene) {
     setLevel(level: number) {
       const n = Math.min(1, Math.max(0, (level - 0.6) / 1.8));
       lanternMat.emissiveIntensity = 0.15 + n * 1.8;
-      lampLightMat.emissiveIntensity = 0.1 + n * 2.2;
+      lampLightMat.emissiveIntensity = 0.1 + n * 1.1;
       geshan.emissiveIntensity = n * 0.75;
       glowMat.opacity = n * 0.85;
       poolMat.opacity = n * 0.7;

@@ -144,6 +144,10 @@ export const SIDE_LAMPS: [number, number][] = [
   [-17, 52.2], [17, 52.2], [-16, 45.5], [16, 45.5],
 ];
 
+// 放生池边的河灯台（放河灯）与观音殿前的签筒（求签）：桌子位置、玩家站的位置和朝向
+export const LANTERN_STAND = { x: -7.7, z: 46.0, standX: -6.15, standZ: 46.75, yaw: 0 };
+export const FORTUNE = { x: -22.4, z: -1.0, standX: -21.25, standZ: -1.0, yaw: -Math.PI / 2 };
+
 // 地上的方形纸灯
 export const GROUND_LAMPS: [number, number][] = [
   [-5.8, 2.6], [5.8, 2.6], [-12, 2.6], [12, 2.6], [-3.4, 10.5], [3.4, 10.5],
@@ -162,6 +166,8 @@ for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const [x, z] of STONE_LANTERNS) circles.push({ x, z, r: 0.45 });
 for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
 for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
+boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });
+boxes.push({ x0: FORTUNE.x - 0.38, x1: FORTUNE.x + 0.38, z0: FORTUNE.z - 0.38, z1: FORTUNE.z + 0.38 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
 for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
 // 香炉两旁的烛台架

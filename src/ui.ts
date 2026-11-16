@@ -1,5 +1,6 @@
 // 界面层：顶部两组胶囊按钮、底部动作栏、提示与面板。全部原生 DOM。
 import { t, getLang, setLang, onLangChange, LANG_LABELS, type Lang, type Key } from './i18n';
+import { sealBook } from './ui-extra';
 
 const svg = (body: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -21,6 +22,7 @@ export const ICON = {
   back: svg('<path d="M19 12H5m5-5-5 5 5 5"/>', 16),
   temple: svg('<path d="M2 11c5-1 8-4 10-7 2 3 5 6 10 7M4 12h16M7 13v7m10-7v7M4 20h16M10 15h4v5"/>', 32),
   incense: svg('<path d="M12 3c1 1.5-1 2.5 0 4M9 5c.7 1-.7 1.8 0 3M15 5c.7 1-.7 1.8 0 3"/><path d="M6 13h12l-1.5 5h-9z"/><path d="M12 9v4M9 10v3M15 10v3"/>', 18),
+  seal: svg('<rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M9 8.5v7M15 8.5v7M9 12h6"/>'),
   sit: svg('<circle cx="12" cy="6" r="2.5"/><path d="M5 18.5c1.8-1.6 4.2-2.5 7-2.5s5.2.9 7 2.5M8.5 15l1-3.5h5l1 3.5"/>', 18),
 };
 
@@ -42,6 +44,8 @@ export interface UIHandlers {
   getTime(): string;
   setShadows(on: boolean): void;
   getShadows(): boolean;
+  setQuality(q: 'high' | 'low'): void;
+  getQuality(): 'high' | 'low';
   statusAction(): void;
   moktakStrike(): void;
   moktakAuto(): void;
@@ -72,6 +76,7 @@ export class UI {
   private countBtn!: HTMLButtonElement;
   private soundBtn!: HTMLButtonElement;
   private settingsBtn!: HTMLButtonElement;
+  sealsBtn!: HTMLButtonElement;
   private exitBtn!: HTMLButtonElement;
   private chantBtn!: HTMLButtonElement;
   private hint!: HTMLElement;
@@ -138,7 +143,9 @@ export class UI {
     this.soundBtn.onclick = () => this.h.toggleSound();
     this.settingsBtn = el('button', 'icon-btn', ICON.settings);
     this.settingsBtn.onclick = () => this.togglePanel('settings', this.settingsBtn);
-    right.append(this.soundBtn, this.settingsBtn);
+    this.sealsBtn = el('button', 'icon-btn', ICON.seal);
+    this.sealsBtn.onclick = () => this.togglePanel('seals', this.sealsBtn);
+    right.append(this.sealsBtn, this.soundBtn, this.settingsBtn);
     this.chantBtn = el('button', 'pill chant-btn');
     this.chantBtn.onclick = () => this.h.toggleChant();
 
@@ -221,7 +228,7 @@ export class UI {
     document.addEventListener('pointerdown', (e) => {
       if (!this.panelKind) return;
       const tgt = e.target as Node;
-      if (this.panel.contains(tgt) || this.roomBtn.contains(tgt) || this.countBtn.contains(tgt) || this.settingsBtn.contains(tgt)) return;
+      if (this.panel.contains(tgt) || this.roomBtn.contains(tgt) || this.countBtn.contains(tgt) || this.settingsBtn.contains(tgt) || this.sealsBtn.contains(tgt)) return;
       this.closePanel();
     });
     // 提示几秒后淡出
@@ -235,6 +242,7 @@ export class UI {
     };
     set(this.exitBtn, 'exit');
     set(this.settingsBtn, 'settings');
+    set(this.sealsBtn, 'sealsTitle');
     this.dockBtns.forEach((b, k) => {
       (b.querySelector('span') as HTMLElement).textContent = t(k === 'bow' && b.classList.contains('active') ? 'stop' : k);
       b.setAttribute('aria-label', t(k === 'bow' && b.classList.contains('active') ? 'stop' : k));
@@ -352,7 +360,7 @@ export class UI {
     return !!this.panelKind;
   }
 
-  togglePanel(kind: 'servers' | 'visitors' | 'settings', from?: HTMLElement) {
+  togglePanel(kind: 'servers' | 'visitors' | 'settings' | 'seals', from?: HTMLElement) {
     if (this.panelKind === kind) {
       this.closePanel();
       return;
@@ -363,6 +371,17 @@ export class UI {
     this.panel.className = `panel panel-${kind}`;
     this.renderPanel();
     (this.panel.querySelector('button, input, select') as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+
+  // 进寺后重新显示一次操作提示
+  replayHint() {
+    this.hint.classList.remove('fade');
+    setTimeout(() => this.hint.classList.add('fade'), 9000);
+  }
+
+  // 印谱面板开着时，盖了新印就刷新
+  refreshSeals() {
+    if (this.panelKind === 'seals') this.renderPanel();
   }
 
   closePanel() {
@@ -434,6 +453,10 @@ export class UI {
       const foot = el('p', 'panel-foot muted');
       foot.textContent = t('visitorsHint');
       p.appendChild(foot);
+    } else if (this.panelKind === 'seals') {
+      p.setAttribute('aria-label', t('sealsTitle'));
+      p.appendChild(this.header(t('sealsTitle')));
+      p.appendChild(sealBook());
     } else if (this.panelKind === 'settings') {
       p.setAttribute('aria-label', t('settingsTitle'));
       p.appendChild(this.header(t('settingsTitle')));
@@ -499,6 +522,14 @@ export class UI {
       };
       shRow.appendChild(sw);
       body.appendChild(shRow);
+
+      const qRow = el('div', 'set-row');
+      qRow.innerHTML = `<span class="set-label"><strong>${t('quality')}</strong><small>${t('qualityDesc')}</small></span>`;
+      const qs = el('select');
+      for (const [k, key] of [['high', 'qualityHigh'], ['low', 'qualityLow']] as const) qs.add(new Option(t(key), k, false, k === this.h.getQuality()));
+      qs.onchange = () => this.h.setQuality(qs.value as 'high' | 'low');
+      qRow.appendChild(qs);
+      body.appendChild(qRow);
 
       const details = el('details', 'controls');
       details.innerHTML = `<summary>${t('controls')}</summary><p>${t('controlsBody')}</p>`;

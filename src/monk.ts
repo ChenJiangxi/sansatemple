@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 
-export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense';
+export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune';
 
 interface Pose {
   drop: number; // 胯部下沉
@@ -96,6 +96,60 @@ function incensePose(t: number): { pose: Pose; prop: [number, number, number] } 
   }
   return { pose: mk({}), prop: [0, 0.1, 0.36] };
 }
+
+// 通用的关键帧插值：[时间, 姿势, 道具位置]
+type Keys = [number, Pose, [number, number, number]][];
+function keyed(keys: Keys, t: number): { pose: Pose; prop: [number, number, number] } {
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [t0, p0, a0] = keys[i];
+    const [t1, p1, a1] = keys[i + 1];
+    if (t >= t0 && t <= t1) {
+      const k = ease((t - t0) / (t1 - t0));
+      return { pose: lerpPose(p0, p1, k), prop: [a0[0] + (a1[0] - a0[0]) * k, a0[1] + (a1[1] - a0[1]) * k, a0[2] + (a1[2] - a0[2]) * k] };
+    }
+  }
+  const last = keys[keys.length - 1];
+  return { pose: last[1], prop: last[2] };
+}
+
+// 放河灯：捧灯 → 跪下 → 俯身把灯放进水里 → 跪着合十 → 起身
+export const LANTERN_DURATION = 5.2;
+export const LANTERN_RELEASE_TIME = 2.4;
+const KNEEL: Partial<Pose> = { drop: KNEEL_DROP, legL: 1.5, legR: 1.5 };
+const LANTERN_KEYS: Keys = [
+  [0, mk({}), [0, 0.1, 0.22]],
+  [0.6, mk({ ...INC_HOLD, wrist: -0.4 }), [0, 0.12, 0.27]],
+  [1.4, mk({ ...INC_HOLD, wrist: -0.4, ...KNEEL, torso: 0.1 }), [0, 0.12, 0.27]],
+  [2.4, mk({ armLp: -0.85, armRp: -0.85, armLy: -0.45, armRy: 0.45, ...KNEEL, torso: 0.8, head: 0.45 }), [0, -0.05, 0.42]],
+  [3.1, mk({ ...HAP, ...KNEEL, torso: 0.1 }), [0, -0.05, 0.42]],
+  [4.1, mk({ ...HAP, ...KNEEL, torso: 0.4, head: 0.25 }), [0, -0.05, 0.42]],
+  [4.6, mk({ ...HAP, ...KNEEL, torso: 0.1 }), [0, -0.05, 0.42]],
+  [5.2, mk({}), [0, -0.05, 0.42]],
+];
+
+// 喂鱼：右手往后一扬，再向前上方撒出去
+export const FEED_DURATION = 1.7;
+export const FEED_TOSS_TIME = 0.8;
+const FEED_KEYS: Keys = [
+  [0, mk({}), [0, 0, 0]],
+  [0.45, mk({ armRp: 0.7, armRy: 0.25, armLp: -0.6, armLy: -0.4, torso: -0.05 }), [0, 0, 0]],
+  [0.8, mk({ armRp: -1.7, armRy: 0.35, armLp: -0.6, armLy: -0.4, torso: 0.18, head: 0.15 }), [0, 0, 0]],
+  [1.15, mk({ armRp: -1.3, armRy: 0.3, armLp: -0.5, armLy: -0.4, torso: 0.1 }), [0, 0, 0]],
+  [1.7, mk({}), [0, 0, 0]],
+];
+
+// 求签：捧起签筒 → 低头前倾、快速摇 → 掉出一支签 → 合十
+export const FORTUNE_DURATION = 3.8;
+export const FORTUNE_DROP_TIME = 2.6;
+const TUBE: Partial<Pose> = { armLp: -1.0, armRp: -1.0, armLy: -0.7, armRy: 0.7, wrist: -0.3 };
+const FORTUNE_KEYS: Keys = [
+  [0, mk({}), [0, 0.08, 0.24]],
+  [0.6, mk({ ...TUBE }), [0, 0.14, 0.3]],
+  [0.9, mk({ ...TUBE, torso: 0.28, head: 0.25 }), [0, 0.12, 0.32]],
+  [2.6, mk({ ...TUBE, torso: 0.28, head: 0.25 }), [0, 0.12, 0.32]],
+  [3.0, mk({ ...HAP, torso: 0.1 }), [0, 0.12, 0.32]],
+  [3.8, mk({}), [0, 0.12, 0.32]],
+];
 
 // 汉传僧装：黄色海青（宽袖、交领右衽、长及脚面），外披红褐色福田袈裟（搭左肩、斜过右腋，左胸有钩环），
 // 颈挂念珠，白绑腿，深色僧鞋
@@ -455,6 +509,11 @@ export class Monk {
   private incenseProp: THREE.Group;
   private planted = false;
   onIncensePlant?: () => void;
+  onLanternRelease?: () => void;
+  onFeedToss?: () => void;
+  onFortuneDrop?: () => void;
+  private lanternProp: THREE.Group;
+  private tubeProp: THREE.Group;
   private pose: Pose = mk({});
   private walkPhase = Math.random() * 6;
   private tap = 0;
@@ -542,6 +601,44 @@ export class Monk {
     this.incenseProp.visible = false;
     this.torso.add(this.incenseProp);
 
+    // 手里捧的莲花河灯
+    this.lanternProp = new THREE.Group();
+    {
+      const petal = new THREE.MeshStandardMaterial({ color: '#f4c3cf', roughness: 0.7, emissive: '#ff9a7a', emissiveIntensity: 0.15 });
+      for (let k = 0; k < 8; k++) {
+        const pe = new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), petal);
+        pe.scale.set(0.022, 0.06, 0.012);
+        const a = (k / 8) * Math.PI * 2;
+        pe.position.set(Math.cos(a) * 0.035, 0.02, Math.sin(a) * 0.035);
+        pe.lookAt(Math.cos(a) * 0.2, 0.2, Math.sin(a) * 0.2);
+        this.lanternProp.add(pe);
+      }
+      const leaf = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.07, 0.01, 16), new THREE.MeshStandardMaterial({ color: '#3d6a2a', roughness: 0.8 }));
+      this.lanternProp.add(leaf);
+      const fl = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 4).scale(1, 1.8, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.9, 0.7) }));
+      fl.position.y = 0.05;
+      this.lanternProp.add(fl);
+    }
+    this.lanternProp.visible = false;
+    this.torso.add(this.lanternProp);
+
+    // 竹签筒
+    this.tubeProp = new THREE.Group();
+    {
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.037, 0.15, 14), new THREE.MeshStandardMaterial({ color: '#b98a4a', roughness: 0.6 }));
+      tube.position.y = 0.06;
+      this.tubeProp.add(tube);
+      const stickMat = new THREE.MeshStandardMaterial({ color: '#d8bf8a', roughness: 0.7 });
+      for (let i = 0; i < 9; i++) {
+        const st = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.17, 0.002), stickMat);
+        const a = i * 2.3;
+        st.position.set(Math.cos(a) * 0.018, 0.13 + (i % 3) * 0.008, Math.sin(a) * 0.018);
+        this.tubeProp.add(st);
+      }
+    }
+    this.tubeProp.visible = false;
+    this.torso.add(this.tubeProp);
+
     // 脚下的圆形软阴影（让角色不显得飘）
     const blob = new THREE.Mesh(new THREE.CircleGeometry(0.32, 20), M.shadow);
     blob.rotation.x = -Math.PI / 2;
@@ -573,6 +670,8 @@ export class Monk {
     this.malletProp.visible = this.action === 'moktak';
     this.beadsProp.visible = this.action === 'rosary';
     this.incenseProp.visible = this.action === 'incense' && this.actionTime < INCENSE_PLANT_TIME;
+    this.lanternProp.visible = this.action === 'lantern' && this.actionTime < LANTERN_RELEASE_TIME;
+    this.tubeProp.visible = this.action === 'fortune' && this.actionTime < FORTUNE_DURATION - 0.6;
 
     switch (this.action) {
       case 'walk': {
@@ -615,6 +714,44 @@ export class Monk {
           this.onIncensePlant?.();
         }
         rate = 14;
+        break;
+      }
+      case 'lantern': {
+        const r = keyed(LANTERN_KEYS, Math.min(t, LANTERN_DURATION));
+        target = r.pose;
+        this.lanternProp.position.set(...r.prop);
+        this.lanternProp.rotation.x = -this.pose.torso;
+        if (!this.planted && t >= LANTERN_RELEASE_TIME) {
+          this.planted = true;
+          this.onLanternRelease?.();
+        }
+        rate = 12;
+        break;
+      }
+      case 'feed': {
+        target = keyed(FEED_KEYS, Math.min(t, FEED_DURATION)).pose;
+        if (!this.planted && t >= FEED_TOSS_TIME) {
+          this.planted = true;
+          this.onFeedToss?.();
+        }
+        rate = 16;
+        break;
+      }
+      case 'fortune': {
+        const r = keyed(FORTUNE_KEYS, Math.min(t, FORTUNE_DURATION));
+        target = r.pose;
+        // 摇签：手臂和签筒快速前后晃
+        const shaking = t > 0.9 && t < FORTUNE_DROP_TIME;
+        const sh = shaking ? Math.sin(t * 34) * 0.13 : 0;
+        target.armLp += sh;
+        target.armRp += sh;
+        this.tubeProp.position.set(...r.prop);
+        this.tubeProp.rotation.x = -this.pose.torso + (t > 0.7 && t < FORTUNE_DROP_TIME + 0.2 ? 0.75 + sh * 1.5 : 0);
+        if (!this.planted && t >= FORTUNE_DROP_TIME) {
+          this.planted = true;
+          this.onFortuneDrop?.();
+        }
+        rate = 18;
         break;
       }
       case 'sit': {
