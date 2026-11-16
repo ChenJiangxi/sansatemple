@@ -512,6 +512,23 @@ export class AudioEngine {
     this.emit();
   }
 
+  // 大殿共修时的诵经：音量随离大殿的远近变化（level 0..1）；共修结束时收掉
+  serviceChanting = false;
+  serviceChant(on: boolean, level = 1) {
+    if (!this.ctx) return;
+    if (on) {
+      if (!this.chanting) {
+        this.startChant();
+        this.serviceChanting = this.chanting;
+      }
+      if (this.serviceChanting) this.buses.chant.gain.setTargetAtTime(this.volumes.chant * level, this.ctx.currentTime, 0.6);
+    } else if (this.serviceChanting) {
+      this.serviceChanting = false;
+      this.stopChant();
+      this.buses.chant.gain.setTargetAtTime(this.volumes.chant, this.ctx.currentTime, 0.3);
+    }
+  }
+
   stopChant() {
     if (!this.chanting) return;
     this.chanting = false;

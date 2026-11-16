@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 
-export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune';
+export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune' | 'sweep';
 
 interface Pose {
   drop: number; // 胯部下沉
@@ -491,6 +491,20 @@ function geo() {
   return (sharedGeo ??= buildGeo());
 }
 
+// 身份：玩家（黄海青、红袈裟）、常住僧（褐色常服，不披袈裟）、老和尚（深黄海青、红袈裟，个子略大）
+export type MonkStyle = 'guest' | 'resident' | 'elder';
+const styleMats: Partial<Record<MonkStyle, { robe: THREE.Material }>> = {};
+function robeFor(style: MonkStyle, base: THREE.Material) {
+  if (style === 'guest') return base;
+  const hit = styleMats[style];
+  if (hit) return hit.robe;
+  const m = (base as THREE.MeshPhysicalMaterial).clone();
+  m.color.set(style === 'resident' ? '#8a785e' : '#c9963e');
+  m.sheenColor.set(style === 'resident' ? '#d9c8a6' : '#ffe2a8');
+  styleMats[style] = { robe: m };
+  return m;
+}
+
 export class Monk {
   root = new THREE.Group();
   private hips = new THREE.Group();
@@ -525,8 +539,13 @@ export class Monk {
   private lastBowCycle = -1;
   private touchedThisCycle = false;
 
-  constructor() {
-    const M = mats();
+  readonly style: MonkStyle;
+  private broomProp: THREE.Group | null = null;
+  constructor(style: MonkStyle = 'guest') {
+    this.style = style;
+    const M = { ...mats() };
+    M.robe = robeFor(style, M.robe);
+    const noKasaya = style === 'resident';
     const G = geo();
     const mesh = (g: THREE.BufferGeometry, m: THREE.Material, shadow = true) => {
       const o = new THREE.Mesh(g, m);
@@ -546,12 +565,14 @@ export class Monk {
     }
 
     // 下摆：海青长到脚面，袈裟盖到小腿
-    this.skirt.add(mesh(G.skirt, M.robe), mesh(G.skirtKasaya, M.kasaya));
+    this.skirt.add(mesh(G.skirt, M.robe));
+    if (!noKasaya) this.skirt.add(mesh(G.skirtKasaya, M.kasaya));
     this.hips.add(this.skirt);
 
     // 上身
     this.hips.add(this.torso);
-    this.torso.add(mesh(G.robe, M.robe), mesh(G.kasaya, M.kasaya), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.ring, M.gold, false), mesh(G.mala, M.bead, false));
+    this.torso.add(mesh(G.robe, M.robe), mesh(G.collar, M.collar, false), mesh(G.inner, M.legging, false), mesh(G.mala, M.bead, false));
+    if (!noKasaya) this.torso.add(mesh(G.kasaya, M.kasaya), mesh(G.ring, M.gold, false));
 
     // 头
     this.headG.position.y = 0.42;
@@ -571,7 +592,8 @@ export class Monk {
       g.add(mesh(G.sleeveOuter, M.robe), mesh(G.sleeve, M.lining, false), h);
       this.torso.add(g);
     }
-    this.armL.add(mesh(G.shoulderCap, M.kasaya));
+    if (!noKasaya) this.armL.add(mesh(G.shoulderCap, M.kasaya));
+    if (style === 'elder') this.root.scale.setScalar(1.08);
 
     // 手里的木鱼、木槌与念珠（只在对应动作时显示）
     this.moktakProp = new THREE.Group();
@@ -647,6 +669,25 @@ export class Monk {
     this.root.add(blob);
   }
 
+  // 扫地僧的竹扫帚（只有用到时才做）
+  private broom() {
+    if (this.broomProp) return this.broomProp;
+    const g = new THREE.Group();
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.82, 6), new THREE.MeshStandardMaterial({ color: '#a8874f', roughness: 0.7 }));
+    stick.position.set(0, -0.28, 0.24);
+    stick.rotation.x = 0.7;
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 10, 1, true), new THREE.MeshStandardMaterial({ color: '#8f7a46', roughness: 0.95, side: THREE.DoubleSide }));
+    head.scale.set(1, 1, 0.45);
+    head.position.set(0, -0.56, 0.5);
+    head.rotation.x = 0.7 + Math.PI;
+    g.add(stick, head);
+    g.position.set(0, 0.2, 0.18);
+    g.visible = false;
+    this.torso.add(g);
+    this.broomProp = g;
+    return g;
+  }
+
   setAction(a: Action) {
     if (a === this.action) return;
     this.action = a;
@@ -672,6 +713,7 @@ export class Monk {
     this.incenseProp.visible = this.action === 'incense' && this.actionTime < INCENSE_PLANT_TIME;
     this.lanternProp.visible = this.action === 'lantern' && this.actionTime < LANTERN_RELEASE_TIME;
     this.tubeProp.visible = this.action === 'fortune' && this.actionTime < FORTUNE_DURATION - 0.6;
+    if (this.broomProp) this.broomProp.visible = this.action === 'sweep';
 
     switch (this.action) {
       case 'walk': {
@@ -752,6 +794,15 @@ export class Monk {
           this.onFortuneDrop?.();
         }
         rate = 18;
+        break;
+      }
+      case 'sweep': {
+        // 双手握扫帚，左右扫
+        const sw = Math.sin(t * 2.3);
+        target = mk({ armLp: -0.75, armRp: -0.6, armLy: -0.4 + sw * 0.22, armRy: 0.4 + sw * 0.22, torso: 0.28, head: 0.25, bob: Math.abs(sw) * 0.006 });
+        const b = this.broom();
+        b.rotation.y = sw * 0.45;
+        rate = 10;
         break;
       }
       case 'sit': {

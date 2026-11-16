@@ -102,6 +102,7 @@ export function sealImage(text: string, size = 128, gold = false): string {
 // —— 印谱面板的内容 ——
 const MERIT: [MeritKey, Key][] = [
   ['visits', 'meritVisits'],
+  ['service', 'meritService'],
   ['bow', 'meritBow'],
   ['incense', 'meritIncense'],
   ['moktak', 'meritMoktak'],
@@ -253,4 +254,27 @@ export function titleCard(parent: HTMLElement, touch: boolean, onEnter: () => vo
   document.addEventListener('keydown', onKey);
   btn.onclick = go;
   setTimeout(() => btn.focus({ preventScroll: true }), 1500);
+}
+
+// —— 共修提示条：屏幕上方一行，带「去礼佛」按钮 ——
+export function serviceChip(parent: HTMLElement, onGo: () => void) {
+  const chip = el('div', 'pill service-chip');
+  chip.hidden = true;
+  const text = el('span', 'svc-text');
+  const btn = el('button', 'svc-go');
+  btn.onclick = onGo;
+  chip.append(text, btn);
+  parent.appendChild(chip);
+  let last = '';
+  return {
+    set(msg: string | null, go: string | null) {
+      const key = `${msg}|${go}`;
+      if (key === last) return;
+      last = key;
+      chip.hidden = !msg;
+      text.textContent = msg ?? '';
+      btn.hidden = !go;
+      btn.textContent = go ?? '';
+    },
+  };
 }

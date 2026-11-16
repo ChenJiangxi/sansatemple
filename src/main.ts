@@ -14,13 +14,14 @@ import { PostFX } from './world/post';
 import { buildPond } from './world/pond';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
+import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
 import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
 import { progress, today as localToday, type SealId } from './progress';
-import { sealPop, showFortune, titleCard, loadUiFonts } from './ui-extra';
+import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, type Seat, heightAt, canStep, planRoute } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, type Seat, heightAt, canStep, planRoute } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -41,7 +42,7 @@ function fail(err: unknown) {
 const STATUS_KEY: Record<Action, Key> = {
   idle: 'statusIdle', walk: 'statusWalk', bow: 'statusBow', hapjang: 'statusHapjang', sit: 'statusSit', bench: 'statusSit',
   moktak: 'statusMoktak', rosary: 'statusRosary', incense: 'statusIncense',
-  lantern: 'statusLantern', feed: 'statusFeed', fortune: 'statusFortune',
+  lantern: 'statusLantern', feed: 'statusFeed', fortune: 'statusFortune', sweep: 'statusIdle',
 };
 
 const today = localToday; // 按本地日期算「今天」
@@ -138,6 +139,14 @@ async function start() {
   const pond = buildPond(scene, { isTouch, lanternFrom: { x: LANTERN_STAND.standX, z: LANTERN_STAND.standZ + 0.9 } });
   const life = buildLife(scene);
   const shrines = buildShrines(scene);
+  const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
+  const residents = buildResidents(scene, {
+    bell: buildings.bell,
+    drum: buildings.drum,
+    onBell: () => setTimeout(() => audio.templeBell(distGain(BELL.x, BELL.z)), 1050),
+    onDrum: () => setTimeout(() => audio.drum(distGain(DRUM.x, DRUM.z) * 0.8), 320),
+    onQing: () => audio.bell(0.4 * distGain(0, -16)),
+  });
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
@@ -154,7 +163,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, pond.water];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, pond.water];
 
   // —— 叠加层与界面 ——
   const stage = new OverlayStage(app);
@@ -174,6 +183,7 @@ async function start() {
   // 开场标题：调试视角和 ?nointro 时跳过
   const sp0 = new URL(location.href).searchParams;
   let intro = !(sp0.has('debugview') || sp0.has('nointro'));
+  const svcShift = sp0.has('svc') ? Number(sp0.get('svc')) - ((Date.now() / 1000) % 3600) : 0;
   loadUiFonts();
 
   const ui = new UI(app, {
@@ -188,6 +198,11 @@ async function start() {
       else await audio.enable();
     },
     toggleChant: async () => {
+      if (audio.serviceChanting) {
+        audio.serviceChant(false);
+        svcMutedHour = Math.floor(svcNow() / 3600000);
+        return;
+      }
       if (!audio.enabled) await audio.enable();
       if (audio.chanting) audio.stopChant();
       else audio.startChant();
@@ -251,6 +266,7 @@ async function start() {
       refreshStatus();
       ui.setMoktak(!!moktakAuto, moktakCount);
       ui.setRosary(beadCount);
+      renderNpcTags();
     },
   });
   audio.onChange(() => ui.setSound(audio.enabled, audio.chanting));
@@ -291,6 +307,69 @@ async function start() {
     award('bow');
     refreshStatus();
   };
+
+  // —— 常住僧人：名字标签、说话气泡、整点共修 ——
+  const ROLE_KEY: Record<Role, Key> = {
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', assembly: 'roleWeina',
+  };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum' };
+  const npcUi = residents.list
+    .filter((r) => r.role !== 'assembly')
+    .map((r) => {
+      const tag = document.createElement('div');
+      tag.className = 'tag npc';
+      const bubble = document.createElement('div');
+      bubble.className = 'npc-bubble';
+      bubble.style.opacity = '0';
+      ui.tags.append(tag, bubble);
+      return { r, tag, bubble, until: 0, line: 0 };
+    });
+  function renderNpcTags() {
+    for (const n of npcUi) n.tag.textContent = t(ROLE_KEY[n.r.role]);
+  }
+  renderNpcTags();
+  function say(role: Role, idx?: number) {
+    const n = npcUi.find((x) => x.r.role === role);
+    const key = LINES_KEY[role];
+    if (!n || !key) return;
+    const lines = t(key).split('|');
+    const i = idx ?? (role === 'elder' ? n.line++ % lines.length : Math.floor(Math.random() * lines.length));
+    n.bubble.textContent = lines[i];
+    n.until = performance.now() + 4500;
+  }
+  const chip = serviceChip(ui.root, () => {
+    if (me.action !== 'bow' && intent !== 'bow') toggleBow();
+  });
+  const svcNow = () => Date.now() + serverOffset + svcShift * 1000;
+  let svcMutedHour = -1;
+  let svcToastHour = -1;
+  let svcJoinedHour = -1;
+  let svcTick = 0;
+  function updateService(dt: number) {
+    svcTick += dt;
+    if (svcTick < 0.5) return;
+    svcTick = 0;
+    const nowMs = svcNow();
+    const hourN = Math.floor(nowMs / 3600000);
+    const ph = residents.phase((nowMs / 1000) % 3600);
+    const bowing = me.action === 'bow' || intent === 'bow';
+    if (ph.kind === 'chant') chip.set(t('serviceNow'), bowing ? null : t('serviceGo'));
+    else if (ph.kind !== 'idle' && ph.kind !== 'disperse') chip.set(t('serviceSoon', { m: Math.max(1, Math.ceil(ph.toStart / 60)) }), bowing ? null : t('serviceGo'));
+    else chip.set(null, null);
+    if (intro) return;
+    if (ph.kind === 'chant') {
+      if (svcToastHour !== hourN) {
+        svcToastHour = hourN;
+        if (!bowing) ui.toast(t('serviceStarted'), 5200);
+      }
+      if (me.action === 'bow' && svcJoinedHour !== hourN) {
+        svcJoinedHour = hourN;
+        progress.add('service');
+        ui.toast(t('serviceJoined'), 4200);
+      }
+      if (audio.enabled && svcMutedHour !== hourN) audio.serviceChant(true, THREE.MathUtils.clamp(1.1 - Math.hypot(player.x, player.z + 12) / 50, 0.08, 1));
+    } else audio.serviceChant(false);
+  }
 
   // —— 寺游印谱：第一次做到某件事时盖一方印 ——
   function award(id: SealId) {
@@ -939,6 +1018,8 @@ async function start() {
     if (act === 'lantern') setTimeout(requestLantern, 1200);
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
+    const sayRole = sp.get('say');
+    if (sayRole) setTimeout(() => say(sayRole as Role), 1500);
   }
   const camRay = new THREE.Raycaster();
   const tmpV = new THREE.Vector3();
@@ -1042,6 +1123,10 @@ async function start() {
       requestLantern();
       return;
     }
+    if (p.interact?.type === 'npc') {
+      say(p.interact.role as Role);
+      return;
+    }
     if (p.interact?.type === 'fortune') {
       requestFortune();
       return;
@@ -1109,6 +1194,7 @@ async function start() {
     else if (it?.type === 'lantern') label = t('tipLantern');
     else if (it?.type === 'fortune') label = t('tipFortune');
     else if (it?.type === 'pond') label = t('tipPond');
+    else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
     canvas.classList.toggle('point', !!label);
     ui.showTooltip(label, e.clientX, e.clientY);
   });
@@ -1314,6 +1400,21 @@ async function start() {
     el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -100%)`;
   }
   function updateTags() {
+    const now = performance.now();
+    for (const n of npcUi) {
+      const m = n.r.monk.root;
+      const low = n.r.monk.action === 'sit' || n.r.monk.action === 'bow';
+      const y = m.position.y + (low ? 1.2 : 1.55) * m.scale.y;
+      if (!m.visible || overlay || intro) {
+        n.tag.style.opacity = '0';
+        n.bubble.style.opacity = '0';
+        continue;
+      }
+      placeTag(n.tag, m.position.x, y, m.position.z, 13);
+      if (now < n.until) {
+        placeTag(n.bubble, m.position.x, y + 0.42, m.position.z, 30);
+      } else n.bubble.style.opacity = '0';
+    }
     const lift = me.action === 'bow' || me.action === 'sit' ? 1.15 : 1.5;
     placeTag(myTag, player.x, player.y + lift, player.z, 60);
     myTag.style.visibility = overlay ? 'hidden' : 'visible';
@@ -1353,6 +1454,9 @@ async function start() {
     checkIncenseDone();
     checkNewActionsDone();
     trackSeals(dt);
+    residents.update(dt, svcNow(), camera.position);
+    if (!intro && residents.greet(player.x, player.z, elapsed)) say('greeter', 0);
+    updateService(dt);
     updateRemotes(dt);
     updateCamera(dt);
     nature.update(dt, elapsed);

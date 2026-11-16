@@ -250,3 +250,15 @@ canvas.main.point { cursor: pointer; }
 }
 
 #app:has(.hud.intro) .tags { opacity: 0; }
+
+/* —— 常住僧人：名字标签和说话气泡 —— */
+.tag.npc { padding: 3px 9px; background: rgba(92, 70, 46, 0.88); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25); color: #f6ecd8; font-size: 11px; letter-spacing: 1px; }
+.npc-bubble {
+  position: absolute; left: 0; top: 0; max-width: 220px; padding: 8px 12px; border-radius: 12px; background: rgba(250, 245, 233, 0.95); color: #3a2a1e;
+  font-size: 13.5px; line-height: 1.55; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); pointer-events: none; will-change: transform; white-space: normal; transition: opacity 0.4s ease;
+}
+.npc-bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(250, 245, 233, 0.95); }
+/* —— 共修提示条 —— */
+.service-chip { position: absolute; left: 50%; top: calc(64px + var(--safe-t)); transform: translateX(-50%); height: 40px; padding: 0 6px 0 16px; gap: 10px; font-size: 13px; white-space: nowrap; }
+.svc-go { height: 30px; padding: 0 14px; border-radius: 999px; background: rgba(179, 38, 30, 0.85); color: #fff3e0; font-size: 12.5px; }
+@media (max-width: 560px) { .service-chip { top: calc(60px + var(--safe-t)); font-size: 12px; } }
