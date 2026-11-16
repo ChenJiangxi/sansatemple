@@ -2,7 +2,7 @@
 // 黄色寺墙、三开间山门、放生池上的石拱桥
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { HALL, COURT, INCENSE, PAGODAS, BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
+import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng } from '../textures';
 import { mesh, worldBox, lathe } from './util';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
@@ -335,7 +335,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   // —— 石凳 ——
-  for (const b of BENCHES) {
+  for (const b of [...BENCHES, ...NPC_BENCHES]) {
     const g = new THREE.Group();
     const top = mesh(worldBox(2.2, 0.14, 0.55, 1), stoneMat);
     top.position.y = 0.4;

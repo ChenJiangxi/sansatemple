@@ -39,7 +39,8 @@ function fail(err: unknown) {
   msg.innerHTML = `<a href="">${t('retry')}</a>`;
 }
 
-const STATUS_KEY: Record<Action, Key> = {
+// 玩家只会用到前面这些；僧人的日常动作在玩家列表里一律算「闲逛」
+const STATUS_KEY: Partial<Record<Action, Key>> = {
   idle: 'statusIdle', walk: 'statusWalk', bow: 'statusBow', hapjang: 'statusHapjang', sit: 'statusSit', bench: 'statusSit',
   moktak: 'statusMoktak', rosary: 'statusRosary', incense: 'statusIncense',
   lantern: 'statusLantern', feed: 'statusFeed', fortune: 'statusFortune', sweep: 'statusIdle',
@@ -146,6 +147,7 @@ async function start() {
     onBell: () => setTimeout(() => audio.templeBell(distGain(BELL.x, BELL.z)), 1050),
     onDrum: () => setTimeout(() => audio.drum(distGain(DRUM.x, DRUM.z) * 0.8), 320),
     onQing: () => audio.bell(0.4 * distGain(0, -16)),
+    onFeed: (x, z) => pond.feed(x, z),
   });
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
@@ -310,9 +312,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', assembly: 'roleWeina',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -322,10 +324,18 @@ async function start() {
       bubble.className = 'npc-bubble';
       bubble.style.opacity = '0';
       ui.tags.append(tag, bubble);
-      return { r, tag, bubble, until: 0, line: 0 };
+      return { r, tag, bubble, until: 0, line: 0, label: '' as string | undefined, lastAmbient: -1e9 };
     });
+  // 头顶：职名 · 正在做的事
+  function npcTagText(n: (typeof npcUi)[number]) {
+    const role = t(ROLE_KEY[n.r.role]);
+    return n.r.label ? `${role} · ${t(`act_${n.r.label}` as Key)}` : role;
+  }
   function renderNpcTags() {
-    for (const n of npcUi) n.tag.textContent = t(ROLE_KEY[n.r.role]);
+    for (const n of npcUi) {
+      n.label = n.r.label;
+      n.tag.textContent = npcTagText(n);
+    }
   }
   renderNpcTags();
   // who：角色（同角色取第一位）或点中的那位僧人的编号
@@ -338,6 +348,19 @@ async function start() {
     const i = idx ?? (role === 'elder' ? n.line++ % lines.length : Math.floor(Math.random() * lines.length));
     n.bubble.textContent = lines[i];
     n.until = performance.now() + 4500;
+  }
+  // 僧人做事时自言自语：只在你走得够近时冒一句，每人二十秒内最多一句
+  function murmur(id: number, key: string) {
+    const n = npcUi.find((x) => x.r.id === id);
+    if (!n || intro || overlay) return;
+    const m = n.r.monk.root;
+    if (!m.visible || Math.hypot(player.x - m.position.x, player.z - m.position.z) > 14) return;
+    const now = performance.now();
+    if (now - n.lastAmbient < 20000 || now < n.until || Math.random() > 0.75) return;
+    n.lastAmbient = now;
+    const lines = t(key as Key).split('|');
+    n.bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
+    n.until = now + 4200;
   }
   const chip = serviceChip(ui.root, () => {
     if (me.action !== 'bow' && intent !== 'bow') toggleBow();
@@ -996,7 +1019,7 @@ async function start() {
   net.connect(name, urlRoom);
 
   setInterval(() => {
-    const list: Visitor[] = [{ name, me: true, status: t(STATUS_KEY[me.action]), bows: bowsToday }];
+    const list: Visitor[] = [{ name, me: true, status: t(STATUS_KEY[me.action] ?? 'statusIdle'), bows: bowsToday }];
     for (const r of remotes.values()) list.push({ name: r.name, me: false, status: t(STATUS_KEY[r.a] ?? 'statusIdle'), bows: r.n });
     ui.setVisitors(list);
   }, 1000);
@@ -1020,6 +1043,10 @@ async function start() {
     if (act === 'lantern') setTimeout(requestLantern, 1200);
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
+    // 调试：?hideme 截图时把自己藏起来
+    if (sp.has('hideme')) me.root.scale.setScalar(0.001);
+    const rt = Number(sp.get('routine'));
+    if (sp.has('routine') && Number.isFinite(rt)) residents.setDebugTime(rt);
     const sayRole = sp.get('say');
     if (sayRole) setTimeout(() => say(sayRole as Role), 1500);
   }
@@ -1405,12 +1432,17 @@ async function start() {
     const now = performance.now();
     for (const n of npcUi) {
       const m = n.r.monk.root;
-      const low = n.r.monk.action === 'sit' || n.r.monk.action === 'bow';
+      const a = n.r.monk.action;
+      const low = a === 'sit' || a === 'bow' || a === 'read' || a === 'tea' || a === 'teach' || a === 'fill';
       const y = m.position.y + (low ? 1.2 : 1.55) * m.scale.y;
       if (!m.visible || overlay || intro) {
         n.tag.style.opacity = '0';
         n.bubble.style.opacity = '0';
         continue;
+      }
+      if (n.label !== n.r.label) {
+        n.label = n.r.label;
+        n.tag.textContent = npcTagText(n);
       }
       placeTag(n.tag, m.position.x, y, m.position.z, 13);
       if (now < n.until) {
@@ -1456,7 +1488,7 @@ async function start() {
     checkIncenseDone();
     checkNewActionsDone();
     trackSeals(dt);
-    residents.update(dt, svcNow(), camera.position, player);
+    for (const e of residents.update(dt, svcNow(), camera.position, player)) murmur(e.id, e.key);
     if (!intro && residents.greet(player.x, player.z, elapsed)) say('greeter', 0);
     updateService(dt);
     updateRemotes(dt);

@@ -93,6 +93,12 @@ const BENCH_DEFS = [
   { x: -15, z: 38, yaw: Math.PI * 0.5 },
 ];
 export const BENCHES = BENCH_DEFS;
+// 东边银杏下一张石凳，常住僧人读经、歇脚用（不进玩家座位表）
+export const NPC_BENCHES = [{ x: 7.6, z: 29.4, yaw: -Math.PI * 0.75 }];
+export function benchSeat(b: { x: number; z: number; yaw: number }, off: number) {
+  const x = b.x + Math.cos(b.yaw) * off, z = b.z - Math.sin(b.yaw) * off;
+  return { x, z, yaw: b.yaw, ax: x + Math.sin(b.yaw) * 0.9, az: z + Math.cos(b.yaw) * 0.9 };
+}
 export const BENCH_SEATS: Seat[] = BENCH_DEFS.flatMap((b, bi) =>
   [-0.55, 0.55].map((off, si) => {
     const cx = b.x + Math.cos(b.yaw) * off;
@@ -161,6 +167,7 @@ for (const [x, z, s] of PINES) circles.push({ x, z, r: 0.5 * s });
 for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const sx of [-1, 1]) for (const z of [11, 22, 33, 43.5]) circles.push({ x: sx * 2.75, z, r: 0.28 });
 for (const [x, z] of GROUND_LAMPS) circles.push({ x, z, r: 0.25 });
+for (const b of NPC_BENCHES) for (const off of [-0.6, 0.6]) circles.push({ ...benchSeat(b, off), r: 0.42 });
 for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });
 boxes.push({ x0: FORTUNE.x - 0.38, x1: FORTUNE.x + 0.38, z0: FORTUNE.z - 0.38, z1: FORTUNE.z + 0.38 });

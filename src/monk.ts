@@ -3,7 +3,12 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 
-export type Action = 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune' | 'sweep';
+export type Action =
+  | 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune' | 'sweep'
+  // 常住僧人的日常：坐着读经、喝茶、讲经；站着浇水、擦拭、奉茶；跪着打水；提壶走、端茶走、拨念珠走
+  | 'read' | 'tea' | 'teach' | 'water' | 'wipe' | 'serve' | 'fill' | 'canwalk' | 'tray' | 'beadwalk';
+// 会移动脚步的动作（走路的几种样子）
+export const GAITS: Action[] = ['walk', 'canwalk', 'tray', 'beadwalk'];
 
 interface Pose {
   drop: number; // 胯部下沉
@@ -149,6 +154,17 @@ const FORTUNE_KEYS: Keys = [
   [2.6, mk({ ...TUBE, torso: 0.28, head: 0.25 }), [0, 0.12, 0.32]],
   [3.0, mk({ ...HAP, torso: 0.1 }), [0, 0.12, 0.32]],
   [3.8, mk({}), [0, 0.12, 0.32]],
+];
+
+// 喝茶（坐着）：茶杯在膝上 → 举到嘴边抿一口 → 放回，8 秒一轮
+const TEA_CYCLE = 8;
+const TEA_KEYS: Keys = [
+  [0, mk({ armRp: -0.85, armRy: 0.55, armLp: -0.8, armLy: -0.62, wrist: -0.6 }), [-0.03, 0.02, 0.2]],
+  [3.0, mk({ armRp: -0.85, armRy: 0.55, armLp: -0.8, armLy: -0.62, wrist: -0.6 }), [-0.03, 0.02, 0.2]],
+  [3.9, mk({ armRp: -1.95, armRy: 0.62, armLp: -0.8, armLy: -0.62, wrist: -0.9, head: -0.12 }), [-0.02, 0.3, 0.2]],
+  [5.2, mk({ armRp: -1.95, armRy: 0.62, armLp: -0.8, armLy: -0.62, wrist: -0.9, head: -0.15 }), [-0.02, 0.3, 0.2]],
+  [6.2, mk({ armRp: -0.85, armRy: 0.55, armLp: -0.8, armLy: -0.62, wrist: -0.6 }), [-0.03, 0.02, 0.2]],
+  [TEA_CYCLE, mk({ armRp: -0.85, armRy: 0.55, armLp: -0.8, armLy: -0.62, wrist: -0.6 }), [-0.03, 0.02, 0.2]],
 ];
 
 // 汉传僧装：黄色海青（宽袖、交领右衽、长及脚面），外披红褐色福田袈裟（搭左肩、斜过右腋，左胸有钩环），
@@ -491,16 +507,17 @@ function geo() {
   return (sharedGeo ??= buildGeo());
 }
 
-// 身份：玩家（黄海青、红袈裟）、常住僧（褐色常服，不披袈裟）、老和尚（深黄海青、红袈裟，个子略大）
-export type MonkStyle = 'guest' | 'resident' | 'elder';
+// 身份：玩家（黄海青、红袈裟）、常住僧（褐色常服，不披袈裟）、老和尚（深黄海青、红袈裟，个子略大）、
+// 小沙弥（浅灰常服，个子小一圈）
+export type MonkStyle = 'guest' | 'resident' | 'elder' | 'novice';
 const styleMats: Partial<Record<MonkStyle, { robe: THREE.Material }>> = {};
 function robeFor(style: MonkStyle, base: THREE.Material) {
   if (style === 'guest') return base;
   const hit = styleMats[style];
   if (hit) return hit.robe;
   const m = (base as THREE.MeshPhysicalMaterial).clone();
-  m.color.set(style === 'resident' ? '#8a785e' : '#c9963e');
-  m.sheenColor.set(style === 'resident' ? '#d9c8a6' : '#ffe2a8');
+  m.color.set(style === 'resident' ? '#8a785e' : style === 'novice' ? '#a49c8c' : '#c9963e');
+  m.sheenColor.set(style === 'elder' ? '#ffe2a8' : '#d9c8a6');
   styleMats[style] = { robe: m };
   return m;
 }
@@ -540,12 +557,17 @@ export class Monk {
   private touchedThisCycle = false;
 
   readonly style: MonkStyle;
+  // 坐着的动作坐在哪：石凳（腿垂下）或地上蒲团（盘腿）
+  seatKind: 'bench' | 'floor' = 'bench';
   private broomProp: THREE.Group | null = null;
+  private extra: Partial<Record<'book' | 'cup' | 'can' | 'tray' | 'cloth', THREE.Object3D>> = {};
+  private page: THREE.Object3D | null = null;
+  private stream: THREE.Object3D | null = null;
   constructor(style: MonkStyle = 'guest') {
     this.style = style;
     const M = { ...mats() };
     M.robe = robeFor(style, M.robe);
-    const noKasaya = style === 'resident';
+    const noKasaya = style === 'resident' || style === 'novice';
     const G = geo();
     const mesh = (g: THREE.BufferGeometry, m: THREE.Material, shadow = true) => {
       const o = new THREE.Mesh(g, m);
@@ -594,6 +616,7 @@ export class Monk {
     }
     if (!noKasaya) this.armL.add(mesh(G.shoulderCap, M.kasaya));
     if (style === 'elder') this.root.scale.setScalar(1.08);
+    if (style === 'novice') this.root.scale.setScalar(0.84);
 
     // 手里的木鱼、木槌与念珠（只在对应动作时显示）
     this.moktakProp = new THREE.Group();
@@ -688,8 +711,90 @@ export class Monk {
     return g;
   }
 
-  setAction(a: Action) {
-    if (a === this.action) return;
+  // 日常用到的小道具：第一次用到时才做
+  private prop(kind: 'book' | 'cup' | 'can' | 'tray' | 'cloth') {
+    const hit = this.extra[kind];
+    if (hit) return hit;
+    const std = (color: string, rough = 0.7, metal = 0) => new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+    const g = new THREE.Group();
+    if (kind === 'book') {
+      // 经折装的经本：靛蓝封面、米色经页，中间一页会翻
+      const cover = std('#2c3a5c', 0.8), paper = std('#efe6cf', 0.9);
+      for (const sx of [-1, 1]) {
+        const half = new THREE.Group();
+        const c = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.006, 0.12), cover);
+        c.position.x = sx * 0.043;
+        const pg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.008, 0.112), paper);
+        pg.position.set(sx * 0.042, 0.006, 0);
+        half.add(c, pg);
+        half.rotation.z = -sx * 0.2;
+        g.add(half);
+      }
+      const pivot = new THREE.Group();
+      const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.002, 0.11), paper);
+      leaf.position.set(0.04, 0, 0);
+      pivot.add(leaf);
+      pivot.position.y = 0.012;
+      pivot.rotation.z = -0.2;
+      g.add(pivot);
+      this.page = pivot;
+      this.torso.add(g);
+    } else if (kind === 'cup') {
+      // 青瓷小茶杯
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.022, 0.04, 14, 1, true), new THREE.MeshStandardMaterial({ color: '#a9c2b0', roughness: 0.25, side: THREE.DoubleSide }));
+      const tea = new THREE.Mesh(new THREE.CircleGeometry(0.027, 14), std('#8a6a2a', 0.2));
+      tea.rotation.x = -Math.PI / 2;
+      tea.position.y = 0.012;
+      g.add(cup, tea);
+      this.torso.add(g);
+    } else if (kind === 'tray') {
+      // 木托盘上一壶一杯
+      const tray = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.015, 0.16), std('#6b3a1e', 0.55));
+      const pot = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), std('#5a3524', 0.4));
+      pot.scale.set(1, 0.8, 1);
+      pot.position.set(-0.05, 0.035, 0);
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.009, 0.05, 6), std('#5a3524', 0.4));
+      spout.position.set(-0.005, 0.045, 0);
+      spout.rotation.z = -0.9;
+      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.016, 0.03, 12), std('#a9c2b0', 0.25));
+      cup.position.set(0.06, 0.022, 0.01);
+      g.add(tray, pot, spout, cup);
+      this.torso.add(g);
+    } else if (kind === 'can') {
+      // 铜喷壶：壶身、长嘴、提梁；浇水时壶嘴下有一道水
+      const brass = std('#8a6a3a', 0.4, 0.7);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.12, 14), brass);
+      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.16, 8), brass);
+      spout.position.set(0, 0.02, 0.1);
+      spout.rotation.x = 1.0;
+      const handle = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.007, 6, 14, Math.PI), brass);
+      handle.position.set(0, 0.06, -0.01);
+      handle.rotation.y = Math.PI / 2;
+      const water = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.012, 0.55, 6, 1, true), new THREE.MeshStandardMaterial({ color: '#cfe6f0', transparent: true, opacity: 0.55, roughness: 0.1, depthWrite: false }));
+      water.position.y = -0.27;
+      const streamPivot = new THREE.Group();
+      streamPivot.position.set(0, 0.08, 0.17);
+      streamPivot.add(water);
+      streamPivot.visible = false;
+      g.add(body, spout, handle, streamPivot);
+      this.stream = streamPivot;
+      g.position.set(0, -0.06, 0.02);
+      this.handR.add(g);
+    } else {
+      const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.02, 0.06), std('#e8e2d2', 0.95));
+      cloth.position.set(0, -0.06, 0.03);
+      g.add(cloth);
+      this.handR.add(g);
+    }
+    // Q 版身材头大手短，道具按真实尺寸会被脑袋挡住，放大一些
+    g.scale.setScalar({ book: 1.8, cup: 1.9, tray: 1.45, can: 1.35, cloth: 1.6 }[kind]);
+    g.visible = false;
+    this.extra[kind] = g;
+    return g;
+  }
+
+  setAction(a: Action, restart = false) {
+    if (a === this.action && !restart) return;
     this.action = a;
     this.actionTime = 0;
     this.lastBowCycle = -1;
@@ -714,15 +819,102 @@ export class Monk {
     this.lanternProp.visible = this.action === 'lantern' && this.actionTime < LANTERN_RELEASE_TIME;
     this.tubeProp.visible = this.action === 'fortune' && this.actionTime < FORTUNE_DURATION - 0.6;
     if (this.broomProp) this.broomProp.visible = this.action === 'sweep';
+    const want = { book: this.action === 'read', cup: this.action === 'tea', can: this.action === 'water' || this.action === 'fill' || this.action === 'canwalk', tray: this.action === 'tray' || this.action === 'serve', cloth: this.action === 'wipe' };
+    for (const k of Object.keys(want) as (keyof typeof want)[]) {
+      if (want[k]) this.prop(k).visible = true;
+      else if (this.extra[k]) this.extra[k]!.visible = false;
+    }
+    if (this.action === 'beadwalk') this.beadsProp.visible = true;
+    if (this.stream) this.stream.visible = this.action === 'water';
+    const seated = this.seatKind === 'bench'
+      ? { drop: 0.46 - HIP + 0.03, legL: -1.35, legR: -1.35, legSpread: 0 }
+      : { drop: -(HIP - 0.16), legL: -1.45, legR: -1.45, legSpread: 0.75 };
 
     switch (this.action) {
-      case 'walk': {
+      case 'walk':
+      case 'canwalk':
+      case 'tray':
+      case 'beadwalk': {
         this.walkPhase += dt * (5 + this.speed * 2.6);
         const s = Math.sin(this.walkPhase);
         const amp = Math.min(1, this.speed / 2);
-        // 走路时双手仍交叠在身前，只随步子轻轻晃
-        target = mk({ legL: s * 0.55 * amp, legR: -s * 0.55 * amp, armLp: -1.0 + s * 0.07 * amp, armRp: -1.0 - s * 0.07 * amp, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, torso: 0.05, sway: s * 0.045 * amp });
+        const legs = { legL: s * 0.55 * amp, legR: -s * 0.55 * amp, bob: Math.abs(Math.cos(this.walkPhase)) * 0.035 * amp, sway: s * 0.045 * amp };
+        if (this.action === 'canwalk') {
+          // 右手提着喷壶垂在身侧，壶跟着步子轻轻晃
+          target = mk({ ...legs, armRp: -0.15 + s * 0.05, armRy: 0.05, armRr: -0.12, wrist: 0, armLp: -1.0 + s * 0.07 * amp, torso: 0.04 });
+          const can = this.prop('can');
+          can.rotation.x = -(this.pose.armRp + this.pose.wrist + this.pose.torso) + s * 0.06;
+        } else if (this.action === 'tray') {
+          // 双手平端托盘，走得稳
+          target = mk({ ...legs, bob: legs.bob * 0.5, armLp: -1.3, armRp: -1.3, armLy: -0.3, armRy: 0.3, wrist: -0.15, torso: 0.02 });
+          const tr = this.prop('tray');
+          tr.position.set(0, 0.07, 0.3);
+          tr.rotation.x = -this.pose.torso;
+        } else if (this.action === 'beadwalk') {
+          target = mk({ ...legs, armLp: -1.05, armRp: -1.1, armLy: -0.7, armRy: 0.75, wrist: -0.4, head: 0.2, torso: 0.05 });
+        } else {
+          // 走路时双手仍交叠在身前，只随步子轻轻晃
+          target = mk({ ...legs, armLp: -1.0 + s * 0.07 * amp, armRp: -1.0 - s * 0.07 * amp, torso: 0.05 });
+        }
         rate = 14;
+        break;
+      }
+      case 'read': {
+        // 坐着捧经本，每 9 秒翻一页
+        const ct = t % 9;
+        const flip = ct > 7.6 ? ease(Math.min(1, (ct - 7.6) / 0.9)) : 0;
+        target = mk({ ...seated, armLp: -1.2, armRp: -1.2 - (flip > 0 && flip < 1 ? 0.12 : 0), armLy: -0.42, armRy: 0.42 + Math.sin(flip * Math.PI) * 0.25, wrist: -0.35, head: 0.42, torso: 0.08, bob: Math.sin(t * 1.1) * 0.005 });
+        const b = this.prop('book');
+        b.position.set(0, 0.13, 0.3);
+        b.rotation.set(-this.pose.torso - 0.6, 0, 0);
+        if (this.page) this.page.rotation.z = -0.2 + flip * (Math.PI + 0.4);
+        break;
+      }
+      case 'tea': {
+        const r = keyed(TEA_KEYS, t % TEA_CYCLE);
+        target = { ...r.pose, ...seated, bob: Math.sin(t * 1.1) * 0.005 };
+        const c = this.prop('cup');
+        c.position.set(...r.prop);
+        c.rotation.x = -this.pose.torso;
+        rate = 12;
+        break;
+      }
+      case 'teach': {
+        // 坐着说话：右手抬起、掌心朝上比划，头轻轻点
+        target = mk({ ...seated, armRp: -1.45 + Math.sin(t * 1.3) * 0.18, armRy: 0.25 + Math.sin(t * 0.7) * 0.12, wrist: -1.1, armLp: -0.8, armLy: -0.62, head: 0.05 + Math.sin(t * 0.9) * 0.08, torso: 0.04 });
+        break;
+      }
+      case 'water': {
+        // 举壶浇树：壶嘴朝下，手腕慢慢摆
+        target = mk({ armRp: -0.95, armRy: 0.28, wrist: -0.2, armLp: -0.9, armLy: -0.5, torso: 0.18, head: 0.3 });
+        const can = this.prop('can');
+        const tilt = 0.85 + Math.sin(t * 1.4) * 0.12;
+        can.rotation.x = -(this.pose.armRp + this.pose.wrist + this.pose.torso) + tilt;
+        if (this.stream) this.stream.rotation.x = -tilt;
+        rate = 8;
+        break;
+      }
+      case 'fill': {
+        // 跪在池边，把壶按进水里灌满
+        target = mk({ ...KNEEL, armRp: -0.55, armRy: 0.15, wrist: 0, armLp: -0.9, armLy: -0.5, torso: 0.75, head: 0.45 });
+        const can = this.prop('can');
+        can.rotation.x = -(this.pose.armRp + this.pose.wrist + this.pose.torso) + 0.9 + Math.sin(t * 2) * 0.1;
+        rate = 8;
+        break;
+      }
+      case 'wipe': {
+        // 俯身用布画圈擦
+        const w = t * 4.2;
+        target = mk({ armRp: -1.15 + Math.sin(w) * 0.12, armRy: 0.45 + Math.cos(w) * 0.25, wrist: -0.2, armLp: -1.05, armLy: -0.35, torso: 0.35, head: 0.3, bob: Math.abs(Math.sin(w)) * 0.004 });
+        rate = 12;
+        break;
+      }
+      case 'serve': {
+        // 双手奉上托盘，微微欠身
+        target = mk({ armLp: -1.5, armRp: -1.5, armLy: -0.28, armRy: 0.28, wrist: -0.1, torso: 0.3, head: 0.25 });
+        const tr = this.prop('tray');
+        tr.position.set(0, 0.12, 0.36);
+        tr.rotation.x = -this.pose.torso;
         break;
       }
       case 'bow': {
