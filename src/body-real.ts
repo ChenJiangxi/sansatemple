@@ -5,7 +5,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
-export const REAL = true;
+// 默认用 Q 版小和尚（用户觉得更可爱）；网址加 ?real 可以看真实比例的身体
+export const REAL = typeof location !== 'undefined' && new URLSearchParams(location.search).has('real');
 export const R = {
   hip: 0.88, // 站立时胯的高度
   neck: 0.545, // 上身坐标里脖子根的高度

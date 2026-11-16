@@ -7,7 +7,7 @@ import { Environment, buildTerrain, type TimeMode } from './world/environment';
 import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
 import { preloadTreeTextures } from './world/ez-textures';
-import { loadHead } from './body-real';
+import { loadHead, REAL } from './body-real';
 import { buildProps } from './world/props';
 import { buildBuildings } from './world/buildings';
 import { IncenseSpot } from './world/incense';
@@ -114,7 +114,7 @@ async function start() {
   // 贴图、僧人的头、树皮树叶一起在加载画面里下载好
   await Promise.all([
     preloadTextures((d, n) => (bootMsg.textContent = `${t('opening')} · ${Math.round((d / n) * 100)}%`)),
-    loadHead().catch(() => {}),
+    REAL ? loadHead().catch(() => {}) : Promise.resolve(),
     preloadTreeTextures(),
   ]);
   const scene = new THREE.Scene();
@@ -1037,7 +1037,7 @@ async function start() {
   }, 1000);
 
   // —— 镜头 ——
-  const cam = { yaw: 0, pitch: 0.22, dist: isTouch ? 5.4 : 4.6, tx: player.x, ty: 1.4, tz: player.z };
+  const cam = REAL ? { yaw: 0, pitch: 0.22, dist: isTouch ? 5.4 : 4.6, tx: player.x, ty: 1.4, tz: player.z } : { yaw: 0, pitch: 0.3, dist: isTouch ? 6.4 : 5.6, tx: player.x, ty: 1, tz: player.z };
   // 调试：?debugview&at=x,z&cam=yaw,pitch,dist 直接跳到某个位置
   if (new URL(location.href).searchParams.has('debugview')) {
     const sp = new URL(location.href).searchParams;
@@ -1077,8 +1077,9 @@ async function start() {
     const k = 1 - Math.exp(-dt * 9);
     cam.tx += (player.x - cam.tx) * k;
     cam.tz += (player.z - cam.tz) * k;
-    // 镜头看向胸口偏上（真人比例），跪拜、打坐时跟着降低
-    const targetY = player.y + (me.action === 'bow' || me.action === 'sit' ? 0.8 : 1.4);
+    // 镜头看向胸口偏上，跪拜、打坐时跟着降低（Q 版和真人比例各一套高度）
+    const low = me.action === 'bow' || me.action === 'sit';
+    const targetY = player.y + (REAL ? (low ? 0.8 : 1.4) : low ? 0.55 : 0.95);
     cam.ty += (targetY - cam.ty) * k;
     tmpT.set(cam.tx, cam.ty, cam.tz);
     const cp = Math.cos(cam.pitch);
@@ -1376,7 +1377,7 @@ async function start() {
     }
     const moving = !!(dx || dz);
     if (moving) {
-      const speed = 2.1;
+      const speed = REAL ? 2.1 : 2.7;
       const step = Math.min(speed * dt, 0.2);
       let nx = player.x + dx * step;
       let nz = player.z + dz * step;
@@ -1455,7 +1456,7 @@ async function start() {
       const m = n.r.monk.root;
       const a = n.r.monk.action;
       const low = a === 'sit' || a === 'bow' || a === 'read' || a === 'tea' || a === 'teach' || a === 'fill';
-      const y = m.position.y + (low ? 1.25 : 1.95) * m.scale.y;
+      const y = m.position.y + (REAL ? (low ? 1.25 : 1.95) : low ? 1.2 : 1.55) * m.scale.y;
       if (!m.visible || overlay || intro) {
         n.tag.style.opacity = '0';
         n.bubble.style.opacity = '0';
@@ -1470,11 +1471,11 @@ async function start() {
         placeTag(n.bubble, m.position.x, y + 0.42, m.position.z, 30);
       } else n.bubble.style.opacity = '0';
     }
-    const lift = me.action === 'bow' || me.action === 'sit' ? 1.25 : 1.95;
+    const lift = me.action === 'bow' || me.action === 'sit' ? (REAL ? 1.25 : 1.15) : REAL ? 1.95 : 1.5;
     placeTag(myTag, player.x, player.y + lift, player.z, 60);
     myTag.style.visibility = overlay ? 'hidden' : 'visible';
     for (const r of remotes.values()) {
-      const y = r.monk.root.position.y + (r.a === 'bow' || r.a === 'sit' ? 1.25 : 1.95);
+      const y = r.monk.root.position.y + (r.a === 'bow' || r.a === 'sit' ? (REAL ? 1.25 : 1.15) : REAL ? 1.95 : 1.5);
       placeTag(r.tag, r.x, y, r.z, 24);
       r.tag.style.visibility = overlay ? 'hidden' : 'visible';
     }
