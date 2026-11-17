@@ -663,6 +663,20 @@ function cushionTexture() {
   return t;
 }
 
+// 草编蒲团的形状（高 0.184 米，顶面中间略鼓）和贴图：大殿、配殿、老和尚身下都用这一种
+let cushionGeoCache: THREE.BufferGeometry | null = null;
+export function cushionGeometry() {
+  return (cushionGeoCache ??= lathe([[0, 0], [0.3, 0], [0.33, 0.015], [0.348, 0.045], [0.355, 0.085], [0.348, 0.125], [0.325, 0.158], [0.28, 0.176], [0.2, 0.184], [0.1, 0.182], [0, 0.178]], 48).toNonIndexed());
+}
+let cushionTexCache: THREE.Texture | null = null;
+const cushionTex = () => (cushionTexCache ??= cushionTexture());
+export function cushionMesh(color = '#a8844c') {
+  const m = new THREE.Mesh(cushionGeometry(), new THREE.MeshStandardMaterial({ color, roughness: 0.92, map: cushionTex() }));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
 // 木鱼的漆面：深枣红底，描金的鱼鳞纹，用旧了的地方漆色发暗
 function muyuTexture() {
   const c = document.createElement('canvas');
@@ -1207,10 +1221,8 @@ export function buildHall(scene: THREE.Scene): HallBuild {
 
   // —— 圆蒲团：一个实例化网格，点中时用 instanceId 找回座位 ——
   // 蒲团：顶面中间略凹、四周鼓起，侧边一道滚边，顶上八道放射缝线和一圈绗线
-  const cushionGeo = mergeGeometries([
-    lathe([[0, 0], [0.3, 0], [0.33, 0.015], [0.348, 0.045], [0.355, 0.085], [0.348, 0.125], [0.325, 0.158], [0.28, 0.176], [0.2, 0.184], [0.1, 0.182], [0, 0.178]], 48),
-  ].map((g) => g.toNonIndexed()))!;
-  const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, map: cushionTexture() });
+  const cushionGeo = cushionGeometry();
+  const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, map: cushionTex() });
   const cushions = new THREE.InstancedMesh(cushionGeo, cushionMat, CUSHIONS.length);
   // 蒲团：香蒲草编的土黄，隔排是旧了的绛红布面
   const cA = new THREE.Color('#a8844c');

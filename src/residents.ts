@@ -11,6 +11,7 @@ import { Monk, GAITS, type Action, BOW_DURATION } from './monk';
 import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat } from './layout';
 import type { StrikeBuild } from './world/buildings';
 import { REAL } from './body-real';
+import { cushionMesh } from './world/hall';
 
 export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
@@ -183,17 +184,16 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   const elderPos = { x: -7.6, z: 29.6 };
   const elder = add('elder', 'elder', { ...elderPos, yaw: Math.PI * 0.75, action: 'sit' });
   elder.monk.seatKind = 'floor';
-  elder.lift = 0.13; // 蒲团高 0.14
+  elder.lift = 0.12; // 草编蒲团高 0.184，和大殿里坐蒲团的人一样坐在离蒲团底 0.12 处
   {
-    // 蒲团垫在臀下：盘腿时两腿往前伸，所以蒲团中心比身体中心略往后（沿老和尚朝向的反方向）
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.14, 24), new THREE.MeshStandardMaterial({ color: '#9c7a46', roughness: 0.95 }));
+    // 蒲团垫在臀下：盘腿时两腿往前伸，所以蒲团中心比身体中心略往前（沿老和尚的朝向）
+    const pad = cushionMesh();
     const ey0 = Math.PI * 0.75;
-    pad.position.set(elderPos.x - Math.sin(ey0) * 0.12, heightAt(elderPos.x, elderPos.z) + 0.07, elderPos.z - Math.cos(ey0) * 0.12);
-    pad.castShadow = true;
-    pad.receiveShadow = true;
+    pad.position.set(elderPos.x + Math.sin(ey0) * 0.14, heightAt(elderPos.x, elderPos.z), elderPos.z + Math.cos(ey0) * 0.14);
     scene.add(pad);
   }
-  const sweeper = add('sweeper', 'resident', { x: -6.5, z: 14, yaw: 0, action: 'sweep' });
+  // 扫地僧：起点在左塔门前石阶的东南角外（塔放大后，原来的位置落在石阶上）
+  const sweeper = add('sweeper', 'resident', { x: -5.0, z: 12.0, yaw: 0, action: 'sweep' });
   const bench = NPC_BENCHES[0];
   const seatA = benchSeat(bench, -0.55), seatB = benchSeat(bench, 0.55);
 
@@ -335,8 +335,8 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
 
   // —— 扫地僧：沿前院一圈，每到一处停下扫一会儿；扫完一圈到银杏下石凳歇脚喝茶 ——
   const sweepStops: P[] = [
-    { x: -6.5, z: 14 }, { x: -12, z: 22 }, { x: -14, z: 34 }, { x: -6, z: 40 }, { x: 6.5, z: 40 },
-    { x: 14, z: 33 }, { x: 12.5, z: 22 }, { x: 7, z: 13 }, { x: 0.5, z: 4.5 },
+    { x: -5.0, z: 12.0 }, { x: -12, z: 22 }, { x: -14, z: 34 }, { x: -6, z: 40 }, { x: 6.5, z: 40 },
+    { x: 14, z: 33 }, { x: 12.5, z: 22 }, { x: 6.0, z: 11.0 }, { x: 0.5, z: 4.5 },
   ];
   sweeper.prog = program(at(sweeper), [
     ...sweepStops.slice(1).flatMap((p, i): Step[] => [

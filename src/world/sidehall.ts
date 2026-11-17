@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { SH, hallWorld, HALLS, LIB_DESKS, LIB_DESK_Z, LIB_SEAT_Z } from '../layout';
-import { chineseMats } from './hall';
+import { chineseMats, cushionMesh } from './hall';
 import { mandorla } from './statues';
 import { mesh, worldBox } from './util';
 import { pbr } from './pbr';
@@ -113,10 +113,9 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       g.add(f);
     }
     // 三个蒲团
-    const padMat = new THREE.MeshStandardMaterial({ color: '#9c7a46', roughness: 0.95 });
     for (const sx of [-1.1, 0, 1.1]) {
-      const p = mesh(new THREE.CylinderGeometry(0.32, 0.34, 0.12, 20), padMat);
-      p.position.set(sx, fy + 0.06, -d.hz + 3.4);
+      const p = cushionMesh();
+      p.position.set(sx, fy + 0.02, -d.hz + 3.4);
       g.add(p);
     }
     // 殿内暖光
