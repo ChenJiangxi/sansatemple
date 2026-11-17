@@ -168,7 +168,7 @@ export function buildNature(scene: THREE.Scene, o: { renderer: THREE.WebGLRender
   group.add(basin);
   // 水面在 pond.ts（会倒映的镜面水）
   // 岸石：六种形状轮流用，每种一个实例化网格
-  const edgeMat = rockMaterial('#aaa498', 1.1, 0.5);
+  const edgeMat = rockMaterial('#bcb6aa', 1.1, 0.36);
   const edgeN = 46;
   const edgeGeos = [0, 1, 2, 3, 4, 5].map((k) => rockGeometry(100 + k, 3, 4));
   const edgeMeshes = edgeGeos.map((g) => {

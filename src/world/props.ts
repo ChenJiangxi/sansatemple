@@ -435,7 +435,8 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.0, 1.3, 0.55) });
   const candleMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.5 });
   const waxMat = new THREE.MeshStandardMaterial({ color: '#d0392c', roughness: 0.35, emissive: '#3a0805', emissiveIntensity: 0.4 });
-  const ironMat = new THREE.MeshStandardMaterial({ color: '#2a2420', metalness: 0.55, roughness: 0.55 });
+  // 烛台架：旧黄铜，被烟熏得发暗
+  const ironMat = new THREE.MeshStandardMaterial({ color: '#6a5232', metalness: 0.7, roughness: 0.48 });
   const glowTex = (() => {
     const c = document.createElement('canvas');
     c.width = c.height = 64;
@@ -450,7 +451,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   })();
   const glowMat = new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   for (const sx of [-1, 1]) {
-    // 三层阶梯式铁烛台：每层一道接蜡的铜槽，红烛高低错落，烛泪挂在烛身上
+    // 三层阶梯式铜烛台：每层一道接蜡的铜槽，红烛高低错落，烛泪挂在烛身上
     const rack = new THREE.Group();
     const frame: THREE.BufferGeometry[] = [];
     for (const lx of [-0.86, 0.86]) {

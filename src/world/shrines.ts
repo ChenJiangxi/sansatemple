@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { LANTERN_STAND, FORTUNE, heightAt } from '../layout';
-import { plaqueTexture } from '../textures';
+import { plaqueTexture, altarClothTexture } from '../textures';
 import { chineseMats } from './hall';
 import { lotusGeometry } from './pond';
 import { mesh } from './util';
@@ -14,7 +14,8 @@ function sign(text: string) {
   return m;
 }
 
-// 小方桌：桌面 + 四条腿 + 黄色桌围
+// 小方桌：桌面 + 四条腿 + 桌围（和大殿供桌同一种做旧的土黄缎子，垂下来有褶）
+let clothTex: THREE.Texture | null = null;
 function table(w: number, d: number, h: number) {
   const M = chineseMats();
   const g = new THREE.Group();
@@ -24,8 +25,13 @@ function table(w: number, d: number, h: number) {
   const legs: THREE.BufferGeometry[] = [];
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) legs.push(new THREE.BoxGeometry(0.05, h, 0.05).translate((sx * (w - 0.08)) / 2, h / 2, (sz * (d - 0.08)) / 2));
   g.add(mesh(mergeGeometries(legs)!, M.redDark));
-  const cloth = mesh(new THREE.BoxGeometry(w + 0.02, h * 0.55, 0.01), new THREE.MeshStandardMaterial({ color: '#d9a630', roughness: 0.85 }));
-  cloth.position.set(0, h - h * 0.3, d / 2 + 0.01);
+  const ch = h * 0.55;
+  const geo = new THREE.PlaneGeometry(w + 0.02, ch, 24, 2);
+  const p = geo.attributes.position as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) p.setZ(i, Math.sin((p.getX(i) / (w + 0.02)) * Math.PI * 10) * 0.008 * (0.3 + 0.7 * (ch / 2 - p.getY(i)) / ch));
+  geo.computeVertexNormals();
+  const cloth = mesh(geo, new THREE.MeshStandardMaterial({ map: (clothTex ??= altarClothTexture()), roughness: 0.85, side: THREE.DoubleSide }));
+  cloth.position.set(0, h - h * 0.3, d / 2 + 0.02);
   g.add(cloth);
   return g;
 }
