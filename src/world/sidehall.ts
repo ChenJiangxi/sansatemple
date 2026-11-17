@@ -6,11 +6,72 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { SH, hallWorld, HALLS, LIB_DESKS, LIB_DESK_Z, LIB_SEAT_Z } from '../layout';
 import { chineseMats, cushionMesh } from './hall';
+import { buildDing } from './bronze';
+import { altarClothTexture } from '../textures';
 import { mandorla } from './statues';
-import { mesh, worldBox } from './util';
+import { mesh, worldBox, lathe } from './util';
 import { pbr } from './pbr';
 
 export const LAMPS = 36;
+// 两座配殿共用的材质（第一次用到时建）
+let panelMat: THREE.Material | null = null;
+let clothMat: THREE.Material | null = null;
+let pewterMat: THREE.Material | null = null;
+let candleMatS: THREE.Material | null = null;
+let vaseMatS: THREE.Material | null = null;
+let lotusMatS: THREE.Material | null = null;
+let leafMatS: THREE.Material | null = null;
+let plateMatS: THREE.Material | null = null;
+const fruitMats: Record<string, THREE.Material> = {};
+
+// 佛坛束腰的正面：朱漆底上三块描金的开光（圆角框），框里一朵金色卷云
+function altarPanelTexture() {
+  const W = 1024, H = 160;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#7a2a1d';
+  g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,170,140,0.04)' : 'rgba(30,0,0,0.07)';
+    g.fillRect(Math.random() * W, Math.random() * H, 2 + Math.random() * 10, 1);
+  }
+  const gold = '#d9aa52';
+  for (let k = 0; k < 3; k++) {
+    const x = 40 + k * (W - 80) / 3 + 18, w = (W - 80) / 3 - 36, y = 24, h = H - 48, r = 22;
+    g.strokeStyle = gold;
+    g.lineWidth = 5;
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+    g.stroke();
+    // 卷云：两道向内卷的弧
+    const cx = x + w / 2, cy = y + h / 2;
+    g.lineWidth = 4;
+    for (const s of [-1, 1]) {
+      g.beginPath();
+      for (let i = 0; i <= 30; i++) {
+        const t = i / 30, a = t * Math.PI * 2.2, rr = 26 * (1 - t * 0.7);
+        const px = cx + s * (30 + Math.cos(a) * rr), py = cy + Math.sin(a) * rr * 0.6;
+        if (i) g.lineTo(px, py);
+        else g.moveTo(px, py);
+      }
+      g.stroke();
+    }
+  }
+  g.strokeStyle = gold;
+  g.lineWidth = 3;
+  g.strokeRect(10, 8, W - 20, H - 16);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
 
 interface HallBuild {
   g: THREE.Group;
@@ -58,13 +119,28 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       doorHits.push(doorHit);
       return;
     }
-    // 须弥座佛坛
-    const altar = mesh(worldBox(4.4, 0.95, 1.5, 1), M.red);
-    altar.position.set(0, fy + 0.475, -d.hz + 0.95);
-    g.add(altar);
-    const altarTop = mesh(worldBox(4.6, 0.08, 1.7, 1), M.gold);
-    altarTop.position.set(0, fy + 0.99, -d.hz + 0.95);
-    g.add(altarTop);
+    // 须弥座佛坛（朱漆）：底座、束腰（正面三块描金开光）、上下两道金线、台面；台面高 1.03
+    {
+      const az = -d.hz + 0.95;
+      const plinth = mesh(worldBox(4.6, 0.16, 1.7, 1), M.redDark);
+      plinth.position.set(0, fy + 0.08, az);
+      g.add(plinth);
+      // 束腰用 0–1 的贴图坐标，正面那张开光图正好铺满一面
+      const waist = mesh(new THREE.BoxGeometry(4.2, 0.72, 1.4), [M.red, M.red, M.red, M.red, (panelMat ??= new THREE.MeshStandardMaterial({ map: altarPanelTexture(), roughness: 0.55 })), M.red]);
+      waist.position.set(0, fy + 0.16 + 0.36, az);
+      g.add(waist);
+      const top = mesh(worldBox(4.5, 0.15, 1.6, 1), M.red);
+      top.position.set(0, fy + 0.955, az);
+      g.add(top);
+      for (const y of [0.17, 0.87]) {
+        const bead = mesh(new THREE.CylinderGeometry(0.025, 0.025, 4.3, 8).rotateZ(Math.PI / 2), M.gold, false);
+        bead.position.set(0, fy + y, az + 0.71);
+        g.add(bead);
+      }
+      const edge = mesh(worldBox(4.52, 0.025, 0.02, 1), M.gold, false);
+      edge.position.set(0, fy + 0.93, az + 0.8);
+      g.add(edge);
+    }
     // 背光
     const back = mandorla(2.6, 3.3);
     back.position.set(0, fy + 0.95, -d.hz + 0.35);
@@ -84,6 +160,8 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
         obj.traverse((o) => {
           const m = o as THREE.Mesh;
           if (!m.isMesh) return;
+          // 地藏像的扫描里带着一张很大的底板（几十个特别大的三角形，铺在佛坛上方像一张翘起的纸），剔掉
+          if (i === 1) dropHugeTriangles(m.geometry, 0.4, -0.3, 0.05);
           if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
           m.material = gold;
           m.castShadow = true;
@@ -95,22 +173,71 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
         g.add(obj);
       })
       .catch((e) => console.warn('配殿佛像加载失败', e));
-    // 供桌：黄桌围、铜香炉、一对红烛
-    const table = mesh(worldBox(2.0, 0.8, 0.55, 1), M.redDark);
-    table.position.set(0, fy + 0.4, -d.hz + 2.2);
-    g.add(table);
-    const burner = mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.16, 16), M.bronze);
-    burner.position.set(0, fy + 0.88, -d.hz + 2.2);
-    g.add(burner);
-    const candleMat = new THREE.MeshStandardMaterial({ color: '#b3261e', roughness: 0.6 });
+    // 供桌：朱漆桌面、做旧带褶的桌围；桌上小铜鼎、一对烛台、一对青瓷瓶插莲花、两盘供果
     const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.8, 0.6) });
-    for (const sx of [-0.7, 0.7]) {
-      const c = mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.28, 10), candleMat, false);
-      c.position.set(sx, fy + 0.94, -d.hz + 2.2);
-      g.add(c);
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.06, 8), flameMat);
-      f.position.set(sx, fy + 1.11, -d.hz + 2.2);
-      g.add(f);
+    {
+      const tz = -d.hz + 2.2, th = 0.8, ttop = fy + th;
+      const body = mesh(worldBox(2.0, th - 0.06, 0.55, 1), M.redDark);
+      body.position.set(0, fy + (th - 0.06) / 2, tz);
+      g.add(body);
+      const top = mesh(worldBox(2.2, 0.06, 0.66, 1), M.red);
+      top.position.set(0, ttop - 0.03, tz);
+      g.add(top);
+      const cg = new THREE.PlaneGeometry(2.08, th - 0.1, 40, 3);
+      const cp = cg.attributes.position as THREE.BufferAttribute;
+      for (let k = 0; k < cp.count; k++) cp.setZ(k, Math.sin((cp.getX(k) / 2.08) * Math.PI * 12) * 0.014 * (0.3 + 0.7 * ((th - 0.1) / 2 - cp.getY(k)) / (th - 0.1)));
+      cg.computeVertexNormals();
+      const cloth = mesh(cg, (clothMat ??= new THREE.MeshStandardMaterial({ map: altarClothTexture(), roughness: 0.85, side: THREE.DoubleSide })), false);
+      cloth.position.set(0, fy + (th - 0.1) / 2 + 0.02, tz + 0.3);
+      g.add(cloth);
+      const ding = buildDing({ front: i === 0 ? '慈航普度' : '幽冥教主', back: '南無阿彌陀佛', stubs: 24 }).group;
+      ding.scale.setScalar(0.26);
+      ding.position.set(0, ttop, tz);
+      g.add(ding);
+      const pewter = (pewterMat ??= new THREE.MeshStandardMaterial({ color: '#a88848', metalness: 0.8, roughness: 0.4 }));
+      const candleMat = (candleMatS ??= new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.4 }));
+      for (const sx of [-0.78, 0.78]) {
+        const holder = mesh(lathe([[0, 0], [0.08, 0], [0.09, 0.03], [0.03, 0.07], [0.026, 0.2], [0.07, 0.23], [0.09, 0.27], [0.08, 0.28], [0, 0.28]], 14), pewter);
+        holder.position.set(sx, ttop, tz - 0.08);
+        g.add(holder);
+        const c = mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.24, 10), candleMat, false);
+        c.position.set(sx, ttop + 0.28 + 0.12, tz - 0.08);
+        g.add(c);
+        const f = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6).scale(1, 2.3, 1), flameMat);
+        f.position.set(sx, ttop + 0.28 + 0.24 + 0.045, tz - 0.08);
+        g.add(f);
+      }
+      const vaseMat = (vaseMatS ??= new THREE.MeshPhysicalMaterial({ color: '#6f9a8c', roughness: 0.25, clearcoat: 0.8 }));
+      const lotusMat = (lotusMatS ??= new THREE.MeshStandardMaterial({ color: '#f0a8b8', roughness: 0.55 }));
+      const leafMat = (leafMatS ??= new THREE.MeshStandardMaterial({ color: '#3f6a3a', roughness: 0.7, side: THREE.DoubleSide }));
+      for (const sx of [-0.45, 0.45]) {
+        const vase = mesh(lathe([[0, 0], [0.06, 0], [0.09, 0.06], [0.085, 0.16], [0.04, 0.24], [0.035, 0.29], [0.055, 0.32], [0, 0.32]], 18), vaseMat);
+        vase.position.set(sx, ttop, tz - 0.16);
+        g.add(vase);
+        const stem = mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.28, 5), leafMat, false);
+        stem.position.set(sx, ttop + 0.44, tz - 0.16);
+        g.add(stem);
+        const bud = mesh(new THREE.SphereGeometry(0.055, 10, 8).scale(1, 1.4, 1), lotusMat, false);
+        bud.position.set(sx, ttop + 0.6, tz - 0.16);
+        g.add(bud);
+        const leaf = mesh(new THREE.CircleGeometry(0.1, 12), leafMat, false);
+        leaf.rotation.set(-1.1, 0, sx * 0.8);
+        leaf.position.set(sx + Math.sign(sx) * 0.05, ttop + 0.4, tz - 0.12);
+        g.add(leaf);
+      }
+      const plateMat = (plateMatS ??= new THREE.MeshStandardMaterial({ color: '#e9e2d0', roughness: 0.4 }));
+      const fruit = ['#e08a2a', '#c43f2b', '#e2b23f'].map((c) => (fruitMats[c] ??= new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 })));
+      for (const [sx, kind] of [[-0.62, 0], [0.62, 1]] as [number, number][]) {
+        const plate = mesh(lathe([[0, 0], [0.05, 0], [0.045, 0.04], [0.14, 0.08], [0.15, 0.09], [0, 0.08]], 18), plateMat);
+        plate.position.set(sx, ttop, tz + 0.15);
+        g.add(plate);
+        for (let k = 0; k < 4; k++) {
+          const a = (k / 4) * Math.PI * 2;
+          const f = mesh(new THREE.SphereGeometry(0.05, 10, 8), fruit[(k + kind) % 3], false);
+          f.position.set(sx + (k < 3 ? Math.cos(a) * 0.06 : 0), ttop + 0.12 + (k < 3 ? 0 : 0.08), tz + 0.15 + (k < 3 ? Math.sin(a) * 0.06 : 0));
+          g.add(f);
+        }
+      }
     }
     // 三个蒲团
     for (const sx of [-1.1, 0, 1.1]) {
@@ -306,6 +433,25 @@ function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, de
     g.add(hit);
     deskHits.push(hit);
   });
+}
+
+// 去掉最长边超过 limit（模型原始坐标）的三角形：雕像本身的三角形都很小，特别大的是扫描时带进来的底板、背板。
+// 模型下半部（y < lowY）那张底板的三角形没那么大，用更小的门槛 lowLimit
+function dropHugeTriangles(geo: THREE.BufferGeometry, limit: number, lowY = -Infinity, lowLimit = limit) {
+  const idx = geo.index;
+  if (!idx) return;
+  const p = geo.attributes.position as THREE.BufferAttribute;
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const keep: number[] = [];
+  for (let t = 0; t < idx.count; t += 3) {
+    a.fromBufferAttribute(p, idx.getX(t));
+    b.fromBufferAttribute(p, idx.getX(t + 1));
+    c.fromBufferAttribute(p, idx.getX(t + 2));
+    const e = Math.max(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a));
+    if (e > limit || ((a.y + b.y + c.y) / 3 < lowY && e > lowLimit)) continue;
+    keep.push(idx.getX(t), idx.getX(t + 1), idx.getX(t + 2));
+  }
+  geo.setIndex(keep);
 }
 
 // 模型朝向：按截图校正后的绕 y 旋转（让菩萨面朝殿门，也就是本地 +z）

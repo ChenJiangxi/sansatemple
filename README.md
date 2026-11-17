@@ -167,7 +167,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 |---|---|---|---|
 | `public/models/buddha-ming.glb` | [Chinese Amoghasiddhi Buddha, 1403–1424 CE](https://sketchfab.com/3d-models/chinese-amoghasiddhi-buddha-1403-1424-ce-33699be99fd64375bf0371c0e0c12f70)，Minneapolis Institute of Art（明永乐鎏金铜佛） | CC0 | 经 Objaverse 镜像下载；去贴图、改为金身、meshopt 压缩，作大殿主尊 |
 | `public/models/guanyin.glb` | [12th C CE Water-Moon Guanyin](https://sketchfab.com/3d-models/12th-c-ce-water-moon-guanyin-f3316610c8b740c595c22ca1d7df54ca)，Minneapolis Institute of Art（宋代水月观音） | CC0 | 同上，减面到 7 万三角形，供观音殿 |
-| `public/models/dizang.glb` | [diZangPuSa_v2022](https://sketchfab.com/3d-models/dizangpusa-v2022-c1f3cdbd3fb84170b4ee92e780dcdfb9) by tian0000hai | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 同上，从 54 万减到 8 万三角形，供地藏殿 |
+| `public/models/dizang.glb` | [diZangPuSa_v2022](https://sketchfab.com/3d-models/dizangpusa-v2022-c1f3cdbd3fb84170b4ee92e780dcdfb9) by tian0000hai | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 同上，从 54 万减到 8 万三角形，供地藏殿；加载时剔掉扫描带进来的一张底板（`sidehall.ts` 的 `dropHugeTriangles`） |
 | `public/models/disciple.glb` | [1997.11 Standing Bodhisattva](https://sketchfab.com/3d-models/199711-standing-bodhisattva-1a57a0d6609145b486ed5b1d3e9ec7fb)，Cleveland Museum of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上；作迦叶、阿难二尊者用，右侧一尊镜像 |
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/fonts/title.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | [SIL OFL](https://openfontlicense.org/) | 只取「山寺」两字 |
