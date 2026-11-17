@@ -102,7 +102,7 @@ async function start() {
     };
   }
   renderer.domElement.className = 'main';
-  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 1.75));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, isTouch ? 1.5 : 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.toneMapping = THREE.NeutralToneMapping;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -126,7 +126,7 @@ async function start() {
   const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 900);
 
   const post = new PostFX(renderer, scene, camera, isTouch);
-  const PR = Math.min(devicePixelRatio, isTouch ? 1.5 : 1.75);
+  const PR = Math.min(devicePixelRatio, isTouch ? 1.5 : 2);
   post.setSize(innerWidth, innerHeight, PR);
   const env = new Environment(scene, renderer);
   // 金身、铜器的环境反射：夜里跟着天色变暗，不然佛像会在黑夜里白得刺眼
@@ -1332,7 +1332,7 @@ async function start() {
       d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:99;background:#000a;color:#fff;font:12px monospace;padding:4px 8px';
       d.textContent = `trees ${(((window as unknown as { __treeTris: number }).__treeTris ?? 0) / 1000).toFixed(0)}k tris · calls ${renderer.info.render.calls} · scene ${(renderer.info.render.triangles / 1000).toFixed(0)}k`;
       document.body.appendChild(d);
-      setInterval(() => (d.textContent = `trees ${(((window as unknown as { __treeTris: number }).__treeTris ?? 0) / 1000).toFixed(0)}k tris · calls ${renderer.info.render.calls} · frame ${(renderer.info.render.triangles / 1000).toFixed(0)}k`), 1000);
+      setInterval(() => (d.textContent = `trees ${(((window as unknown as { __treeTris: number }).__treeTris ?? 0) / 1000).toFixed(0)}k tris · ${post.info()}`), 1000);
     }
     // 调试：?hideme 截图时把自己藏起来
     if (sp.has('hideme')) me.root.scale.setScalar(0.001);

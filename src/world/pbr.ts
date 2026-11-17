@@ -10,7 +10,7 @@ const cache = new Map<string, THREE.Texture>();
 let maxAniso = 8;
 
 export function setMaxAnisotropy(n: number) {
-  maxAniso = Math.min(8, n);
+  maxAniso = Math.min(16, n);
 }
 
 function tex(file: string, srgb: boolean) {

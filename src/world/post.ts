@@ -61,6 +61,7 @@ const GradeShader = {
     uLift: { value: 0 },
     uVignette: { value: 0.3 },
     uGrain: { value: 0.0 },
+    uSharp: { value: 0.3 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -70,10 +71,15 @@ const GradeShader = {
     uniform sampler2D tPaper;
     uniform vec2 uRes;
     uniform vec3 uTint;
-    uniform float uSat, uContrast, uLift, uVignette, uGrain;
+    uniform float uSat, uContrast, uLift, uVignette, uGrain, uSharp;
     varying vec2 vUv;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // 轻微锐化：减去四邻的平均，抵消泛光、缩放带来的发虚
+      vec2 px = 1.0 / uRes;
+      vec3 nb = texture2D(tDiffuse, vUv + vec2(px.x, 0.0)).rgb + texture2D(tDiffuse, vUv - vec2(px.x, 0.0)).rgb
+              + texture2D(tDiffuse, vUv + vec2(0.0, px.y)).rgb + texture2D(tDiffuse, vUv - vec2(0.0, px.y)).rgb;
+      c = max(c + (c - nb * 0.25) * uSharp, 0.0);
       float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
       c = mix(vec3(l), c, uSat);
       c = (c - 0.5) * uContrast + 0.5;
@@ -100,10 +106,13 @@ export class PostFX {
   private basePR = 1;
   private scale = 1;
   private minScale: number;
+  private stage = 0; // 降档的档位：0 全开 → 1 遮蔽半分辨率 → 2 关遮蔽 → 3 关泛光 → 4 起降分辨率
+  private maxStage: number;
+  private isTouch: boolean;
+  private plain: RenderPass;
   private frames: number[] = [];
   private acc = 0;
   private lastAdjust = 0;
-  private downs = 0;
   private w = 1;
   private h = 1;
 
@@ -111,7 +120,10 @@ export class PostFX {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
-    this.minScale = isTouch ? 0.55 : 0.6;
+    this.isTouch = isTouch;
+    // 分辨率最后才降，而且桌面最多降到八成（再低就糊了）
+    this.minScale = isTouch ? 0.65 : 0.8;
+    this.maxStage = 3 + Math.ceil(Math.log(this.minScale) / Math.log(0.85));
     const saved = localStorage.getItem('sansa.quality');
     this.quality = saved === 'low' ? 'low' : 'high';
     this.composer = new EffectComposer(renderer);
@@ -124,8 +136,11 @@ export class PostFX {
     ao.configuration.halfRes = isTouch;
     ao.setQualityMode(isTouch ? 'Performance' : 'Medium');
     this.ao = ao;
+    // 关掉遮蔽时改用普通的场景渲染
+    this.plain = new RenderPass(scene, camera);
+    this.plain.enabled = false;
+    this.composer.addPass(this.plain);
     this.composer.addPass(ao);
-    void RenderPass;
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.5, 1.2);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -153,9 +168,24 @@ export class PostFX {
   setQuality(q: Quality) {
     this.quality = q;
     localStorage.setItem('sansa.quality', q);
-    this.scale = 1;
-    this.downs = 0;
+    this.setStage(0);
+  }
+
+  private setStage(n: number) {
+    this.stage = Math.max(0, Math.min(this.maxStage, n));
+    this.ao.configuration.halfRes = this.isTouch || this.stage >= 1;
+    const aoOn = this.stage < 2;
+    this.ao.enabled = aoOn;
+    this.plain.enabled = !aoOn;
+    this.bloom.enabled = this.stage < 3;
+    this.scale = this.stage >= 4 ? Math.max(this.minScale, Math.pow(0.85, this.stage - 3)) : 1;
     this.apply();
+  }
+
+  // 调试用：当前帧时、档位、分辨率
+  info() {
+    const avg = this.frames.length ? this.frames.reduce((a, b) => a + b, 0) / this.frames.length : 0;
+    return `${(avg * 1000).toFixed(1)} ms · 档 ${this.stage} · ×${(this.basePR * this.scale).toFixed(2)}`;
   }
 
   setLook(L: Look) {
@@ -169,8 +199,8 @@ export class PostFX {
     u.uVignette.value = L.vignette;
   }
 
-  // 按帧耗时调分辨率：连续 2 秒平均超过 26 ms 就降一档（×0.85，最多降到 minScale），
-  // 降到底还慢就关掉泛光；之后 8 秒都很轻松（< 13 ms）再升回一档
+  // 按帧耗时调档：连续 2 秒平均超过 26 ms 就降一档（先省环境光遮蔽、再关泛光、最后才降分辨率）；
+  // 之后 6 秒都很轻松（< 14 ms）再升回一档
   private govern(dt: number) {
     this.frames.push(dt);
     if (this.frames.length > 120) this.frames.shift();
@@ -179,21 +209,14 @@ export class PostFX {
     this.acc = 0;
     const avg = this.frames.reduce((s, x) => s + x, 0) / this.frames.length;
     const now = performance.now();
-    if (avg > 0.026 && this.scale > this.minScale + 0.01) {
-      this.scale = Math.max(this.minScale, this.scale * 0.85);
-      this.downs++;
+    if (avg > 0.026 && this.stage < this.maxStage) {
+      this.setStage(this.stage + 1);
       this.lastAdjust = now;
       this.frames.length = 0;
-      this.apply();
-    } else if (avg > 0.026 && this.bloom.enabled && this.downs >= 3) {
-      this.bloom.enabled = false;
+    } else if (avg < 0.014 && this.stage > 0 && now - this.lastAdjust > 6000) {
+      this.setStage(this.stage - 1);
       this.lastAdjust = now;
       this.frames.length = 0;
-    } else if (avg < 0.013 && this.scale < 1 && now - this.lastAdjust > 8000 && this.downs < 6) {
-      this.scale = Math.min(1, this.scale / 0.85);
-      this.lastAdjust = now;
-      this.frames.length = 0;
-      this.apply();
     }
   }
 
