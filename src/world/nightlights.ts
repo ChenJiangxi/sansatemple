@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SIDE_HALLS, SIDE_LAMPS, BELL, DRUM } from '../layout';
-import { chineseMats } from './hall';
+import { chineseMats, aged } from './hall';
 import { pbr } from './pbr';
 
 function radialTexture(stops: [number, string][]) {
@@ -113,7 +113,8 @@ export function buildNightLights(scene: THREE.Scene) {
 
   // —— 配殿前、通往钟鼓楼的一排石灯 ——
   // 六角石灯：土衬、须弥座、灯柱、中台、六根小柱围着灯室、六角攒尖顶加宝珠
-  const stone = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(4.3, 4.1, 3.8) });
+  const stone = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(2.3, 2.22, 2.08) });
+  aged(stone, 0.12, 0.3);
   const parts: THREE.BufferGeometry[] = [];
   const lights: THREE.BufferGeometry[] = [];
   for (const [x, z] of SIDE_LAMPS) {

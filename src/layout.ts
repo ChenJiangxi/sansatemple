@@ -183,6 +183,14 @@ for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });
 boxes.push({ x0: FORTUNE.x - 0.38, x1: FORTUNE.x + 0.38, z0: FORTUNE.z - 0.38, z1: FORTUNE.z + 0.38 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
+// 石拱桥两头的抱鼓石
+for (const x of [BRIDGE.x0 + 0.1, BRIDGE.x1 - 0.1]) for (const z of [BRIDGE.z0 - 0.42, BRIDGE.z1 + 0.42]) circles.push({ x, z, r: 0.38 });
+// 山门两扇大门往院里开着（门扇近似成一个窄长方形）
+for (const s of [-1, 1]) {
+  const hx = s * (COURT.gateX - 0.12);
+  const tipX = hx - s * Math.cos(1.25) * (COURT.gateX - 0.2), tipZ = COURT.z1 - 0.12 - Math.sin(1.25) * (COURT.gateX - 0.2);
+  boxes.push({ x0: Math.min(hx, tipX) - 0.1, x1: Math.max(hx, tipX) + 0.1, z0: tipZ, z1: COURT.z1 });
+}
 for (const p of PAGODAS) {
   circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
   // 塔门前的三级石阶（朝中轴线），两个碰撞圆盖住台阶宽度

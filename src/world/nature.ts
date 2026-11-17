@@ -140,7 +140,7 @@ export function buildNature(scene: THREE.Scene, o: { renderer: THREE.WebGLRender
   const q = new THREE.Quaternion();
 
   // 石头：每处一块大石，旁边散两三块小石
-  const rockMat = rockMaterial('#ffffff', 1.8, 0.3);
+  const rockMat = rockMaterial('#cfc8bd', 1.8, 0.32);
   const pebbleGeos = [0, 1, 2].map((k) => rockGeometry(500 + k, 3, 4));
   ROCKS.forEach(([x, z, s], i) => {
     const rk = mesh(rockGeometry(i + 7), rockMat);
@@ -168,7 +168,7 @@ export function buildNature(scene: THREE.Scene, o: { renderer: THREE.WebGLRender
   group.add(basin);
   // 水面在 pond.ts（会倒映的镜面水）
   // 岸石：六种形状轮流用，每种一个实例化网格
-  const edgeMat = rockMaterial('#d8d4cc', 1.1, 0.45);
+  const edgeMat = rockMaterial('#aaa498', 1.1, 0.5);
   const edgeN = 46;
   const edgeGeos = [0, 1, 2, 3, 4, 5].map((k) => rockGeometry(100 + k, 3, 4));
   const edgeMeshes = edgeGeos.map((g) => {

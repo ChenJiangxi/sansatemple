@@ -149,7 +149,7 @@ function reliefTexture() {
 
 // 做旧着色：参数走 uniform（同一份着色器代码可以被多个材质共用，不会串）
 const AGED_VS_HEAD = 'varying vec3 vAgedP;';
-function aged(mat: THREE.MeshStandardMaterial, desat: number, grime: number) {
+export function aged(mat: THREE.MeshStandardMaterial, desat: number, grime: number) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     prev?.call(mat, sh, r);
@@ -737,13 +737,49 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   base.name = 'walkable';
   group.add(base);
   walkables.push(base);
+  // 须弥座：束腰四面每隔一段一根短柱（蜀柱），柱间嵌一块浮雕石板；束腰上下各一道圆凸的线脚（上枭、下枭）。
+  // 正面台阶挡住的那一段不做
   const posts: THREE.BufferGeometry[] = [];
-  for (let x = H.baseX0 + 0.4; x < H.baseX1; x += 1.6) {
-    const g = worldBox(0.16, H.baseH - 0.6, 0.06, 1);
-    g.translate(x, 0.32 + (H.baseH - 0.6) / 2, H.baseZ1 - 0.12);
-    posts.push(g);
+  const reliefs: THREE.BufferGeometry[] = [];
+  const wy0 = 0.32, wy1 = H.baseH - 0.28, wh = wy1 - wy0;
+  const wx = (bw - 0.3) / 2, wz = (bd - 0.3) / 2;
+  const face = (len: number, place: (g: THREE.BufferGeometry, u: number, panel: boolean) => void, skip?: (u: number) => boolean) => {
+    const n = Math.max(1, Math.round(len / 1.6)), step = len / n;
+    for (let k = 0; k <= n; k++) {
+      const u = -len / 2 + k * step;
+      if (!skip?.(u)) place(worldBox(0.16, wh, 0.06, 1), u, false);
+      if (k === n) continue;
+      const mu = u + step / 2;
+      if (skip?.(mu)) continue;
+      place(new THREE.BoxGeometry(step - 0.26, wh * 0.66, 0.03), mu, true);
+    }
+  };
+  const put = (list: THREE.BufferGeometry[], g: THREE.BufferGeometry, x: number, z: number, rotY: number) => {
+    g.rotateY(rotY);
+    g.translate(x, wy0 + wh / 2, z);
+    list.push(g);
+  };
+  const pick = (panel: boolean) => (panel ? reliefs : posts);
+  face(bw - 0.3, (g, u, pn) => put(pick(pn), g, bx + u, bz + wz + 0.02, 0), (u) => Math.abs(bx + u) < H.stepX1 + 0.7);
+  face(bw - 0.3, (g, u, pn) => put(pick(pn), g, bx - u, bz - wz - 0.02, Math.PI));
+  face(bd - 0.3, (g, u, pn) => put(pick(pn), g, bx + wx + 0.02, bz - u, Math.PI / 2));
+  face(bd - 0.3, (g, u, pn) => put(pick(pn), g, bx - wx - 0.02, bz + u, -Math.PI / 2));
+  // 上枭、下枭：沿束腰四边一圈半埋的圆条
+  for (const y of [wy0 + 0.05, wy1 - 0.05]) {
+    for (const [len, x, z, rot] of [[bw - 0.1, bx, bz + wz + 0.02, 0], [bw - 0.1, bx, bz - wz - 0.02, 0], [bd - 0.1, bx + wx + 0.02, bz, Math.PI / 2], [bd - 0.1, bx - wx - 0.02, bz, Math.PI / 2]] as [number, number, number, number][]) {
+      const bead = new THREE.CylinderGeometry(0.085, 0.085, len, 10).rotateZ(Math.PI / 2).rotateY(rot);
+      bead.translate(x, y, z);
+      posts.push(bead);
+    }
   }
-  group.add(mesh(mergeGeometries(posts), M.marble));
+  const stripAttrs = (gs: THREE.BufferGeometry[]) =>
+    gs.map((g) => {
+      const x = g.index ? g.toNonIndexed() : g;
+      for (const k of Object.keys(x.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') x.deleteAttribute(k);
+      return x;
+    });
+  group.add(mesh(mergeGeometries(stripAttrs(posts))!, M.marble));
+  group.add(mesh(mergeGeometries(stripAttrs(reliefs))!, M.relief));
 
   // 台阶：两侧踏步，正中一块御路石
   const steps = 5;
