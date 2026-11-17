@@ -142,6 +142,14 @@ export class PostFX {
     this.composer.addPass(this.plain);
     this.composer.addPass(ao);
     this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.5, 1.2);
+    // 泛光的输入亮度封顶：天空里太阳附近那一小块极亮，不封顶会晕开成半个屏幕的光雾（在塔顶朝太阳看时最明显）；
+    // 灯笼、烛火这类正常的发光远低于这个上限，不受影响
+    const hp = this.bloom.materialHighPassFilter;
+    hp.fragmentShader = hp.fragmentShader.replace(
+      'vec4 texel = texture2D( tDiffuse, vUv );',
+      'vec4 texel = texture2D( tDiffuse, vUv );\n\t\t\ttexel.rgb *= min( 1.0, 5.0 / max( luminance( texel.rgb ), 1e-4 ) );'
+    );
+    hp.needsUpdate = true;
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.grade = new ShaderPass(GradeShader);

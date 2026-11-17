@@ -927,6 +927,10 @@ async function start() {
         // 先朝山门和前山看（略偏向塔外侧），微微低头，看得到脚下的云
         cam.yaw = PAGODAS[i].x < 0 ? 2.84 : -2.84;
         cam.pitch = 0.5;
+        // 调试：&tyaw=朝向&tpitch=俯仰 指定塔顶的视线
+        const dsp = new URL(location.href).searchParams;
+        if (dsp.has('debugview') && dsp.has('tyaw')) cam.yaw = Number(dsp.get('tyaw'));
+        if (dsp.has('debugview') && dsp.has('tpitch')) cam.pitch = Number(dsp.get('tpitch'));
         refreshStatus();
         fadeEl.classList.remove('on');
         audio.templeBell(0.25);

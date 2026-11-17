@@ -278,6 +278,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   winTex.repeat.set(1, 0.62);
   winTex.offset.set(0, 0.36);
   const winMat = new THREE.MeshStandardMaterial({ map: winTex, roughness: 0.75 });
+  const chainMat = new THREE.MeshStandardMaterial({ color: '#2e2a26', metalness: 0.6, roughness: 0.55 });
   // 塔檐下的彩画额枋：大殿彩画贴图绕一圈，横向重复几次
   const bandTex = (M.caihua as THREE.MeshStandardMaterial).map!.clone();
   bandTex.wrapS = THREE.RepeatWrapping;
@@ -341,22 +342,43 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     }
     g.add(mesh(mergeGeometries(bands.map((b) => b.toNonIndexed()))!, bandMat, false));
     g.add(mesh(mergeGeometries(units.map((b) => b.toNonIndexed()))!, M.green, false));
+    // 塔刹：刹座 → 覆钵 → 九重相轮（往上渐小）→ 宝盖（下挂八个小铃）→ 仰月、宝珠；宝盖向顶层八个檐角各垂一条铁链
     const spire = new THREE.Group();
-    spire.add(mesh(lathe([[0, 0], [0.45, 0], [0.42, 0.25], [0, 0.32]], 12), M.gold));
-    for (let k = 0; k < 7; k++) {
-      const ring = mesh(new THREE.TorusGeometry(0.2 - k * 0.012, 0.04, 6, 16), M.gold);
-      ring.rotation.x = Math.PI / 2;
-      ring.position.y = 0.45 + k * 0.16;
-      spire.add(ring);
+    const sp: THREE.BufferGeometry[] = [];
+    sp.push(lathe([[0, 0], [0.44, 0], [0.44, 0.07], [0.35, 0.11], [0.35, 0.19], [0.41, 0.23], [0.41, 0.28], [0, 0.28]], 16));
+    sp.push(lathe([[0, 0.28], [0.37, 0.28], [0.39, 0.36], [0.35, 0.48], [0.25, 0.58], [0.1, 0.63], [0, 0.64]], 16));
+    sp.push(new THREE.CylinderGeometry(0.045, 0.05, 1.8, 8).translate(0, 1.5, 0));
+    for (let k = 0; k < 9; k++) {
+      const r = 0.27 - k * 0.016;
+      sp.push(new THREE.CylinderGeometry(r, r, 0.05, 18).translate(0, 0.74 + k * 0.12, 0));
     }
-    const pole = mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.6, 6), M.gold);
-    pole.position.y = 1.0;
-    spire.add(pole);
-    const pearl = mesh(new THREE.SphereGeometry(0.14, 12, 10), M.gold);
-    pearl.position.y = 1.85;
-    spire.add(pearl);
+    const capY = 1.9;
+    sp.push(new THREE.ConeGeometry(0.34, 0.13, 16, 1, true).translate(0, capY + 0.065, 0));
+    sp.push(new THREE.CylinderGeometry(0.34, 0.34, 0.03, 16).translate(0, capY, 0));
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      sp.push(new THREE.ConeGeometry(0.03, 0.07, 8).translate(Math.sin(a) * 0.32, capY - 0.06, Math.cos(a) * 0.32));
+    }
+    sp.push(new THREE.TorusGeometry(0.11, 0.022, 6, 16, Math.PI).rotateZ(Math.PI).translate(0, capY + 0.32, 0));
+    sp.push(lathe([[0, 0], [0.06, 0], [0.1, 0.06], [0.08, 0.13], [0.04, 0.16], [0.08, 0.21], [0.09, 0.27], [0.05, 0.33], [0, 0.35]], 14).translate(0, capY + 0.38, 0));
+    spire.add(mesh(mergeGeometries(sp.map((x) => (x.index ? x.toNonIndexed() : x)))!, M.gold));
     spire.position.y = y;
     g.add(spire);
+    {
+      // 铁链：从宝盖边沿垂到顶层屋檐的八个角，中间略往下坠
+      const rrTop = 1.3 * (1 - 6 * 0.075);
+      const eaveY = y - 0.26 + 0.1 - 0.16 + 0.12;
+      const chains: THREE.BufferGeometry[] = [];
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2;
+        const A = new THREE.Vector3(Math.sin(a) * 0.32, y + capY, Math.cos(a) * 0.32);
+        const B = new THREE.Vector3(Math.sin(a) * rrTop * 1.5, eaveY, Math.cos(a) * rrTop * 1.5);
+        const C = A.clone().lerp(B, 0.5);
+        C.y -= 0.35;
+        chains.push(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(A, C, B), 14, 0.012, 4, false));
+      }
+      g.add(mesh(mergeGeometries(chains)!, chainMat, false));
+    }
     {
       const lamps = new THREE.InstancedMesh(pagodaLampGeo, pagodaLampMat, lampAt.length);
       const m4 = new THREE.Matrix4();

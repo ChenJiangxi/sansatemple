@@ -1,7 +1,7 @@
 // 云海：登上塔顶（和开场标题画面）才浮现，其余时候完全透明、也不画。
 // 近处三层低云铺满院子和墙外的山谷，高到院墙上沿：殿顶、塔、钟鼓楼和树冠从云里露出来，寺院像浮在云上；
-// 远处再一层贴着山腰的云带。大殿、配殿里面不铺，免得从门里看到殿内有云。
-// 用标准材质接收场景的日光、天光和雾，所以清晨偏粉金、白天雪白、傍晚橘红、夜里是暗蓝的。
+// 大殿、配殿里面不铺，免得从门里看到殿内有云。
+// 接收场景的日光、天光和雾，所以清晨偏粉金、白天雪白、傍晚橘红、夜里是暗蓝的。
 import * as THREE from 'three';
 import { COURT, HALL, HALLS } from '../layout';
 
@@ -10,7 +10,7 @@ const LAYERS = [
   { y: 2.8, a: 0.86, off: [0, 0], far: 0, scale: 0.035 },
   { y: 3.5, a: 0.66, off: [37.1, 11.3], far: 0, scale: 0.03 },
   { y: 4.3, a: 0.5, off: [-21.7, 53.9], far: 0, scale: 0.026 },
-  { y: 42, a: 0.75, off: [11.9, -7.4], far: 1, scale: 0.006 },
+  // 原先还有一层 42 米高的山腰云带：比塔顶还高，塔上平视时从底下看过去是一整片亮雾，去掉了
 ];
 
 export function buildCloudSea(scene: THREE.Scene) {
@@ -18,7 +18,8 @@ export function buildCloudSea(scene: THREE.Scene) {
   const group = new THREE.Group();
   const meshes: THREE.Mesh[] = [];
   for (const L of LAYERS) {
-    const mat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1, transparent: true, depthWrite: false, emissive: '#ffffff', emissiveIntensity: 0.06 });
+    // 只有漫反射、没有高光：贴地的云层斜着看过去，逆光时高光会把阳光整片反进镜头，泛光一放大就成了一片白雾
+    const mat = new THREE.MeshLambertMaterial({ color: '#ffffff', transparent: true, depthWrite: false, emissive: '#ffffff', emissiveIntensity: 0.06 });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uTime = uniforms.uTime;
       sh.uniforms.uOpacity = uniforms.uOpacity;
