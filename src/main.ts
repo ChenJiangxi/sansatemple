@@ -364,9 +364,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -700,6 +700,8 @@ async function start() {
       const was = sideHallOpen[i];
       setSideHallOpen(i, o);
       sideHalls.setOpen(i, o, animate);
+      // 藏经阁没开放时，知藏师也不露面（头顶的名牌不会被墙挡住）
+      if (i === 2) residents.list[residents.ids.librarian].monk.root.visible = o;
       const hit = sideHalls.doorHits[i];
       const k = interactives.indexOf(hit);
       if (o && k >= 0) interactives.splice(k, 1);
@@ -963,6 +965,7 @@ async function start() {
       if (me.action === 'sit' && !player.seat) me.setAction('idle');
       refreshStatus();
     },
+    getName: () => name,
   });
   function requestSutra(k: number) {
     if (!sideHallOpen[2]) {
@@ -1615,7 +1618,11 @@ async function start() {
       const iv = setInterval(() => {
         if (!sutra.open) return;
         sutra.autoTrace();
-        if (--left <= 0) clearInterval(iv);
+        if (--left <= 0) {
+          clearInterval(iv);
+          // 再加 &sutrascroll：描完后打开横幅
+          if (sp.has('sutrascroll')) setTimeout(() => sutra.showScroll(), 1500);
+        }
       }, 1100);
     }
     // 调试：&seat=座位编号 直接坐上去（看人和蒲团、长椅贴不贴合）

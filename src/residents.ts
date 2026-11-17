@@ -8,11 +8,11 @@
 //   钟头、鼓头扫楼、擦鼓；两位僧人拨着念珠绕塔。
 import * as THREE from 'three';
 import { Monk, GAITS, type Action, BOW_DURATION } from './monk';
-import { planRoute, heightAt, SIDE_HALLS, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat } from './layout';
+import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat } from './layout';
 import type { StrikeBuild } from './world/buildings';
 import { REAL } from './body-real';
 
-export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly';
+export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
 export type Activity =
   | 'sweep' | 'rest' | 'read' | 'water' | 'fill' | 'bring' | 'serve' | 'tea' | 'teach' | 'listen' | 'incense'
@@ -364,6 +364,35 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     r.offset = i * 23;
   }
 
+  // —— 知藏：藏经阁里管经的僧人。坐在门边的垫子上读经，起来擦一擦、理一理经橱，再回来坐下。
+  // 殿里的路都是直线（藏经阁没开放时整座不可走，寻路走不进去），绕开三张经案 ——
+  const lib = (lx: number, lz: number) => ({ x: LIBRARY.x + lx, z: LIBRARY.z + lz });
+  const libSeat = lib(7.0, 2.2);
+  const librarian = add('librarian', 'resident', { ...libSeat, yaw: -Math.PI / 2, action: 'read' });
+  librarian.monk.seatKind = 'floor';
+  librarian.lift = 0.03; // 坐垫很薄
+  {
+    const mat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.5), new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.95 }));
+    mat.rotation.y = Math.PI / 2;
+    // 殿内地面高 0.6（台基）+ 方砖 0.02；建场景时藏经阁可能还没开放，不能用 heightAt
+    mat.position.set(libSeat.x + 0.1, 0.62 + 0.02, libSeat.z);
+    mat.receiveShadow = true;
+    scene.add(mat);
+  }
+  const shelfA = lib(7.4, -1.2), shelfB = lib(3.0, -2.7), shelfC = lib(-6.0, -2.7), back = lib(6.6, -2.2);
+  librarian.prog = program(at(librarian), [
+    { stay: 70, act: 'read', yaw: -Math.PI / 2, label: 'read' },
+    { to: shelfA, v: 0.55, direct: true, label: 'tidy' },
+    { stay: 12, act: 'wipe', yaw: Math.PI / 2, label: 'tidy' },
+    { to: shelfB, v: 0.55, direct: true, label: 'tidy' },
+    { stay: 14, act: 'wipe', yaw: Math.PI, label: 'tidy', say: 'sayLibrary' },
+    { to: shelfC, v: 0.55, direct: true, label: 'tidy' },
+    { stay: 12, act: 'wipe', yaw: Math.PI, label: 'tidy' },
+    { to: shelfB, v: 0.55, direct: true },
+    { to: back, v: 0.55, direct: true },
+    { to: libSeat, v: 0.45, direct: true },
+  ]);
+
   // —— 大众：四位，两位从观音殿、两位从地藏殿走来，在供桌两侧跪拜 ——
   const spots: P[] = [{ x: -6.3, z: -16.9 }, { x: -5.0, z: -16.9 }, { x: 5.0, z: -16.9 }, { x: 6.3, z: -16.9 }];
   const assembly: Resident[] = spots.map((spot, i) => {
@@ -412,7 +441,7 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     interactives: list.filter((r) => r.role !== 'assembly').map((r) => r.monk.root),
     list,
     // 会请玩家帮忙的几位
-    ids: { sweeper: sweeper.id, waterNovice: noviceA.id },
+    ids: { sweeper: sweeper.id, waterNovice: noviceA.id, librarian: librarian.id },
     // 当前处在时刻表的哪一段（给界面用）
     phase(s: number): { kind: 'idle' | 'soon' | 'bell' | 'gather' | 'chant' | 'disperse'; toStart: number } {
       if (s < SVC.gather) return { kind: 'bell', toStart: SVC.chant - s };

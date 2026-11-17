@@ -2,6 +2,7 @@
 // 描得越贴合字形、越少出格越好；描够了自动换下一字。每抄完一句、抄完全经另有功德。进度存在本地。
 // 字形用霞鹜文楷 TC（SIL OFL），只截了经文用到的字（public/fonts/sutra.woff2）。
 import { t } from './i18n';
+import { sealImage } from './ui-extra';
 
 export const HEART_SUTRA =
   '觀自在菩薩，行深般若波羅蜜多時，照見五蘊皆空，度一切苦厄。舍利子，色不異空，空不異色，色即是空，空即是色，受想行識，亦復如是。' +
@@ -45,6 +46,30 @@ function store(s: SutraSave) {
   }
 }
 
+// 自己写的每个字：缩成小图存在本地，攒成一部就能拼成一张横幅。上一部抄完后，开始抄下一部时才清掉
+const INK_KEY = 'sansa.sutra.ink';
+const INK = 72;
+interface InkSave {
+  inks: (string | null)[];
+  complete: boolean;
+}
+function loadInk(): InkSave {
+  try {
+    const v = JSON.parse(localStorage.getItem(INK_KEY) || 'null');
+    if (v && Array.isArray(v.inks)) return { inks: v.inks.slice(0, SUTRA_LEN), complete: !!v.complete };
+  } catch {
+    /* 没有就从空白开始 */
+  }
+  return { inks: [], complete: false };
+}
+function storeInk(s: InkSave) {
+  try {
+    localStorage.setItem(INK_KEY, JSON.stringify(s));
+  } catch {
+    /* 存不下就只是拼不出这几个字，不影响抄 */
+  }
+}
+
 let fontReady: Promise<void> | null = null;
 function loadFont() {
   fontReady ??= new FontFace('SansaSutra', `url(${new URL('fonts/sutra.woff2', document.baseURI).toString()})`)
@@ -62,6 +87,7 @@ export interface SutraHooks {
   onLine(): void; // 抄完一句
   onRound(): void; // 抄完全经
   onClose(): void;
+  getName(): string; // 落款用
 }
 
 const M = 96; // 判定用的小画布边长（像素）
@@ -81,13 +107,18 @@ export class SutraCopy {
   private save = load();
   private drawing: { id: number; x: number; y: number; t: number; w: number } | null = null;
   private busy = false;
+  private inkSave = loadInk();
+  private sheet!: HTMLElement;
+  private scroll!: HTMLElement;
+  private scrollImg!: HTMLImageElement;
+  private saveLink!: HTMLAnchorElement;
   open = false;
 
   constructor(parent: HTMLElement, private hooks: SutraHooks) {
     this.layer = document.createElement('div');
     this.layer.className = 'sutra';
     this.layer.hidden = true;
-    const sheet = document.createElement('div');
+    const sheet = (this.sheet = document.createElement('div'));
     sheet.className = 'sutra-sheet';
     const head = document.createElement('header');
     const title = document.createElement('h2');
@@ -98,7 +129,11 @@ export class SutraCopy {
     close.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
     close.onclick = () => this.close();
     close.setAttribute('aria-label', t('close'));
-    head.append(title, this.countEl, close);
+    const scrollBtn = document.createElement('button');
+    scrollBtn.className = 'icon-btn small';
+    scrollBtn.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4.5h12v15H6z"/><path d="M4 4.5h4M16 19.5h4M9.5 8v8M12.5 8v8M15.5 8v5"/></svg>';
+    scrollBtn.onclick = () => this.showScroll();
+    head.append(title, this.countEl, scrollBtn, close);
     this.lineEl = document.createElement('div');
     this.lineEl.className = 'sutra-line';
     const cell = document.createElement('div');
@@ -119,9 +154,27 @@ export class SutraCopy {
     const hint = document.createElement('small');
     foot.append(hint, redo, this.nextBtn);
     sheet.append(head, this.lineEl, cell, foot);
-    this.layer.appendChild(sheet);
+    // 横幅：自己抄的经拼成一张图，可以存下来
+    this.scroll = document.createElement('div');
+    this.scroll.className = 'sutra-scroll';
+    this.scroll.hidden = true;
+    this.scrollImg = document.createElement('img');
+    this.scrollImg.alt = '';
+    const sf = document.createElement('footer');
+    const back = document.createElement('button');
+    back.className = 'pill-btn';
+    back.onclick = () => this.hideScroll();
+    this.saveLink = document.createElement('a');
+    this.saveLink.className = 'pill-btn primary';
+    sf.append(back, this.saveLink);
+    this.scroll.append(this.scrollImg, sf);
+    this.layer.append(sheet, this.scroll);
     parent.appendChild(this.layer);
     this.texts = () => {
+      scrollBtn.title = t('sutraScroll');
+      scrollBtn.setAttribute('aria-label', t('sutraScroll'));
+      back.textContent = t('sutraBack');
+      this.saveLink.textContent = t('sutraSave');
       redo.textContent = t('sutraRedo');
       this.nextBtn.textContent = t('sutraNext');
       hint.textContent = t('sutraHint');
@@ -155,6 +208,7 @@ export class SutraCopy {
     if (!this.open) return;
     this.open = false;
     this.layer.hidden = true;
+    this.hideScroll();
     this.hooks.onClose();
   }
 
@@ -299,6 +353,114 @@ export class SutraCopy {
     m.stroke();
   }
 
+  // 把这一字的墨迹缩成小图存起来
+  private keepInk() {
+    if (this.inkSave.complete && this.save.i === 0) this.inkSave = { inks: [], complete: false };
+    const c = document.createElement('canvas');
+    c.width = c.height = INK;
+    c.getContext('2d')!.drawImage(this.ink, 0, 0, INK, INK);
+    this.inkSave.inks[this.save.i] = c.toDataURL('image/png');
+    storeInk(this.inkSave);
+  }
+
+  private hideScroll() {
+    this.scroll.hidden = true;
+    this.sheet.hidden = false;
+  }
+
+  // 拼横幅：从右往左竖排，右起一列经题，正文二十列每列十三字，左边落款和一方「心經」朱印；还没抄的字是淡灰的范字
+  async showScroll() {
+    await loadFont();
+    const cell = 64, colW = 74, rowH = 68, rows = 13, cols = 20, mx = 70, my = 64;
+    const W = mx * 2 + (cols + 3) * colW, H = my * 2 + rows * rowH;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#f2e8d0';
+    g.fillRect(0, 0, W, H);
+    // 纸纹
+    for (let k = 0; k < 9000; k++) {
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(120,96,60,0.06)';
+      g.fillRect(Math.random() * W, Math.random() * H, 1 + Math.random() * 6, 1);
+    }
+    // 外框两道朱线，栏内每列一道细朱线
+    g.strokeStyle = 'rgba(176,58,40,0.75)';
+    g.lineWidth = 3;
+    g.strokeRect(28, 28, W - 56, H - 56);
+    g.lineWidth = 1.2;
+    g.strokeRect(38, 38, W - 76, H - 76);
+    g.strokeStyle = 'rgba(176,58,40,0.4)';
+    for (let k = 1; k < cols + 3; k++) {
+      const x = W - mx - k * colW;
+      g.beginPath();
+      g.moveTo(x, 38);
+      g.lineTo(x, H - 38);
+      g.stroke();
+    }
+    const colX = (k: number) => W - mx - (k + 0.5) * colW; // 第 k 列（从右数）的中线
+    const font = (px: number) => `${px}px SansaSutra, "Kaiti TC", "Kaiti SC", STKaiti, KaiTi, serif`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    // 经题
+    g.fillStyle = '#1d1612';
+    g.font = font(46);
+    [...'般若波羅蜜多心經'].forEach((ch, r) => g.fillText(ch, colX(0), my + rowH * (r + 0.5) + 6));
+    // 正文
+    const imgs = await Promise.all(
+      Array.from({ length: SUTRA_LEN }, (_, i) => {
+        const src = this.inkSave.inks[i];
+        if (!src) return Promise.resolve(null);
+        return new Promise<HTMLImageElement | null>((res) => {
+          const im = new Image();
+          im.onload = () => res(im);
+          im.onerror = () => res(null);
+          im.src = src;
+        });
+      })
+    );
+    const text = LINES.map((l) => l.text).join('');
+    g.font = font(cell * 0.8);
+    for (let i = 0; i < SUTRA_LEN; i++) {
+      const k = 1 + Math.floor(i / rows), r = i % rows;
+      const cx = colX(k), cy = my + rowH * (r + 0.5);
+      const im = imgs[i];
+      if (im) g.drawImage(im, cx - cell / 2, cy - cell / 2, cell, cell);
+      else {
+        g.fillStyle = 'rgba(120,104,86,0.22)';
+        g.fillText(text[i], cx, cy + 2);
+      }
+    }
+    // 落款：名字、敬書、日期，下面盖印
+    const d = new Date();
+    const sign = `${this.hooks.getName()} 敬書`;
+    const date = `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+    g.fillStyle = '#2a201a';
+    g.font = font(30);
+    const sk = cols + 1;
+    [...sign].forEach((ch, r) => g.fillText(ch, colX(sk), my + 40 + r * 36));
+    g.font = '22px "Songti SC", serif';
+    g.save();
+    g.translate(colX(sk + 1), my + 30);
+    g.rotate(Math.PI / 2);
+    g.textAlign = 'left';
+    g.fillStyle = '#6a5340';
+    g.fillText(date, 0, 0);
+    g.restore();
+    const seal = await new Promise<HTMLImageElement>((res) => {
+      const im = new Image();
+      im.onload = () => res(im);
+      im.src = sealImage('心經', 160, false, 'SansaSutra');
+    });
+    g.drawImage(seal, colX(sk) - 34, my + 52 + [...sign].length * 36, 68, 68);
+    const url = c.toDataURL('image/jpeg', 0.9);
+    this.scrollImg.src = url;
+    this.saveLink.href = url;
+    this.saveLink.download = `heart-sutra-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.jpg`;
+    this.sheet.hidden = true;
+    this.scroll.hidden = false;
+  }
+
   // 调试：用范字本身当墨迹描一遍（看判定和换字是否正常）
   autoTrace() {
     if (!this.open || this.busy) return;
@@ -346,6 +508,7 @@ export class SutraCopy {
     const q = cover - spill * 0.7;
     const grade: SutraGrade = q >= 0.7 ? 'perfect' : q >= 0.5 ? 'good' : 'ok';
     this.busy = true;
+    this.keepInk();
     this.gradeEl.textContent = t(grade === 'ok' ? 'sutraOk' : grade);
     this.gradeEl.className = `sutra-grade show ${grade}`;
     const r = this.ink.getBoundingClientRect();
@@ -363,7 +526,12 @@ export class SutraCopy {
       }
       store(this.save);
       if (lineDone) this.hooks.onLine();
-      if (round) this.hooks.onRound();
+      if (round) {
+        this.inkSave.complete = true;
+        storeInk(this.inkSave);
+        this.hooks.onRound();
+        setTimeout(() => this.open && this.showScroll(), 1600);
+      }
       this.busy = false;
       if (this.open) {
         this.drawGuide();

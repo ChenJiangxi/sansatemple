@@ -40,8 +40,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
 
 // —— 印章：朱红方印，白文，边缘略有残破 ——
 const sealCache = new Map<string, string>();
-export function sealImage(text: string, size = 128, gold = false): string {
-  const key = `${text}|${size}|${gold}`;
+export function sealImage(text: string, size = 128, gold = false, font = 'SansaSeal'): string {
+  const key = `${text}|${size}|${gold}|${font}`;
   const hit = sealCache.get(key);
   if (hit) return hit;
   const c = document.createElement('canvas');
@@ -70,11 +70,11 @@ export function sealImage(text: string, size = 128, gold = false): string {
   g.textBaseline = 'middle';
   const chars = [...text];
   if (chars.length === 1) {
-    g.font = `${size * 0.52}px SansaSeal, serif`;
+    g.font = `${size * 0.52}px ${font}, serif`;
     g.fillText(chars[0], size / 2, size / 2 + size * 0.02);
   } else {
     // 两字竖排，每字压扁一点，填满印面
-    g.font = `${size * 0.31}px SansaSeal, serif`;
+    g.font = `${size * 0.31}px ${font}, serif`;
     chars.slice(0, 2).forEach((ch, i) => {
       g.save();
       g.translate(size / 2, size * (0.355 + i * 0.29));

@@ -370,3 +370,10 @@ canvas.main.point { cursor: pointer; }
 .pill-btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(120, 60, 30, 0.3); background: transparent; color: #5a3a24; font: inherit; font-size: 13.5px; letter-spacing: 1px; cursor: pointer; }
 .pill-btn.primary { background: #b3261e; border-color: #b3261e; color: #fff3e0; }
 .pill-btn:disabled { opacity: 0.4; cursor: default; }
+/* 抄经横幅：拼好的整张图，可以存下来 */
+.sutra-scroll { width: min(96vw, 980px); max-height: 94vh; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.sutra-scroll[hidden], .sutra-sheet[hidden] { display: none; }
+.sutra-scroll img { max-width: 100%; max-height: calc(94vh - 60px); border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); background: #f2e8d0; }
+.sutra-scroll footer { display: flex; gap: 10px; }
+.sutra-scroll .pill-btn { display: inline-flex; align-items: center; text-decoration: none; background: rgba(244, 236, 218, 0.92); }
+.sutra-scroll .pill-btn.primary { background: #b3261e; }
