@@ -25,7 +25,7 @@ import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, type Seat, heightAt, canStep, planRoute } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, SIDE_HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -1342,6 +1342,25 @@ async function start() {
     if (sayRole) setTimeout(() => say(sayRole as Role), 1500);
   }
   const camRay = new THREE.Raycaster();
+  // 挡镜头的建筑：用简单的长方体代替真实模型（算起来很省）。镜头和人之间被挡住，就把镜头拉到挡板前面；
+  // 钟鼓楼、山门只挡屋顶那一截，镜头可以从柱子之间、门洞里看过去；人本身在哪个长方体里，就不算它
+  const camBoxes: THREE.Box3[] = [];
+  {
+    const B = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => camBoxes.push(new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)));
+    const { x0, x1, z0, z1, gateX } = COURT;
+    const t = 0.4, wh = 2.8;
+    B(x0, 0, z0 - t, x1, wh, z0 + t);
+    B(x0 - t, 0, z0, x0 + t, wh, z1);
+    B(x1 - t, 0, z0, x1 + t, wh, z1);
+    B(x0, 0, z1 - t, -gateX - 2.3, wh, z1 + t);
+    B(gateX + 2.3, 0, z1 - t, x1, wh, z1 + t);
+    B(-gateX - 2.6, 4.4, z1 - 1.6, gateX + 2.6, 8.6, z1 + 1.6);
+    for (const h of SIDE_HALLS) B(h.x - 6.3, 0, h.z - 10.3, h.x + 6.3, 9.5, h.z + 10.3);
+    for (const T of [BELL, DRUM]) B(T.x - 4.7, 5.0, T.z - 4.7, T.x + 4.7, 9.2, T.z + 4.7);
+    for (const p of PAGODAS) B(p.x - 2.6, 0, p.z - 2.6, p.x + 2.6, 22, p.z + 2.6);
+  }
+  const camHit = new THREE.Vector3();
+  let camD = isTouch ? 6.4 : 5.6;
   const tmpV = new THREE.Vector3();
   const tmpT = new THREE.Vector3();
   function updateCamera(dt: number) {
@@ -1360,7 +1379,16 @@ async function start() {
     camRay.far = d + 0.3;
     const hit = camRay.intersectObjects(hall.blockers, true)[0];
     if (hit) d = Math.max(0.8, hit.distance - 0.3);
-    const pos = tmpT.clone().addScaledVector(dir, d);
+    for (const b of camBoxes) {
+      if (b.containsPoint(tmpT)) continue;
+      if (camRay.ray.intersectBox(b, camHit)) {
+        const hd = camHit.distanceTo(tmpT);
+        if (hd < d + 0.3) d = Math.max(0.8, Math.min(d, hd - 0.35));
+      }
+    }
+    // 被挡住时立刻拉近；挡板过去了再慢慢退回原来的距离，免得镜头一跳一跳
+    camD = d < camD ? d : camD + (d - camD) * (1 - Math.exp(-dt * 2.5));
+    const pos = tmpT.clone().addScaledVector(dir, camD);
     // 在殿内时镜头不要穿过天花板
     const inside = pos.x > -HALL.wallX && pos.x < HALL.wallX && pos.z > HALL.backZ && pos.z < HALL.colZFront;
     if (inside) pos.y = Math.min(pos.y, HALL.baseH + HALL.colH + 0.6);
