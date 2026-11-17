@@ -81,8 +81,8 @@ export function mandorla(w: number, h: number) {
 }
 
 export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Texture) {
-  const goldA = new THREE.MeshStandardMaterial({ color: '#d6a24a', metalness: 1, roughness: 0.3, envMap: env, envMapIntensity: 1.6 });
-  const goldB = new THREE.MeshStandardMaterial({ color: '#cf9c4c', metalness: 1, roughness: 0.34, envMap: env, envMapIntensity: 1.5 });
+  const goldA = new THREE.MeshStandardMaterial({ color: '#cda45c', metalness: 1, roughness: 0.34, envMap: env, envMapIntensity: 1.35 });
+  const goldB = new THREE.MeshStandardMaterial({ color: '#c69f5e', metalness: 1, roughness: 0.38, envMap: env, envMapIntensity: 1.25 });
   const pedestalMat = new THREE.MeshStandardMaterial({ color: '#c99642', metalness: 0.9, roughness: 0.38, envMap: env, envMapIntensity: 1.2 });
 
   const spec = {

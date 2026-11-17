@@ -62,7 +62,8 @@ function loadBows() {
   return 0;
 }
 
-const CUSHION_TOP = HALL.baseH + 0.12;
+// 殿内地砖顶面 baseH + 0.06，蒲团高 0.184；身子坐在蒲团顶上、略压下去一点
+const CUSHION_TOP = HALL.baseH + 0.18;
 const seatY = (s: Seat) => (s.kind === 'cushion' ? CUSHION_TOP : 0);
 const seatPos = (s: Seat) => (s.kind === 'cushion' ? { x: s.x, z: s.z + 0.32 } : { x: s.x, z: s.z });
 
@@ -1433,6 +1434,9 @@ async function start() {
     if (sp.has('hideme')) me.root.scale.setScalar(0.001);
     const rt = Number(sp.get('routine'));
     if (sp.has('routine') && Number.isFinite(rt)) residents.setDebugTime(rt);
+    // 调试：&seat=座位编号 直接坐上去（看人和蒲团、长椅贴不贴合）
+    const dbgSeat = SEAT_BY_ID.get(sp.get('seat') ?? '');
+    if (dbgSeat) setTimeout(() => sitAt(dbgSeat, dbgSeat.kind === 'bench' ? 'bench' : 'sit'), 1200);
     const sayRole = sp.get('say');
     if (sayRole) setTimeout(() => say(sayRole as Role), 1500);
   }

@@ -183,10 +183,13 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   const elderPos = { x: -7.6, z: 29.6 };
   const elder = add('elder', 'elder', { ...elderPos, yaw: Math.PI * 0.75, action: 'sit' });
   elder.monk.seatKind = 'floor';
-  elder.lift = 0.12;
+  elder.lift = 0.13; // 蒲团高 0.14
   {
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.14, 24), new THREE.MeshStandardMaterial({ color: '#c8952f', roughness: 0.9 }));
-    pad.position.set(elderPos.x, heightAt(elderPos.x, elderPos.z) + 0.07, elderPos.z + 0.3);
+    // 蒲团垫在臀下：盘腿时两腿往前伸，所以蒲团中心比身体中心略往后（沿老和尚朝向的反方向）
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 0.14, 24), new THREE.MeshStandardMaterial({ color: '#9c7a46', roughness: 0.95 }));
+    const ey0 = Math.PI * 0.75;
+    pad.position.set(elderPos.x - Math.sin(ey0) * 0.12, heightAt(elderPos.x, elderPos.z) + 0.07, elderPos.z - Math.cos(ey0) * 0.12);
+    pad.castShadow = true;
     pad.receiveShadow = true;
     scene.add(pad);
   }

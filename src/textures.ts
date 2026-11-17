@@ -560,9 +560,22 @@ export function thousandBuddhaTexture() {
 // 黄色桌围：正中一朵莲花，四周回纹
 export function altarClothTexture() {
   const { c, g } = canvas(512, 256);
-  g.fillStyle = '#d9a52e';
+  // 旧缎子的土黄：比明黄暗、灰一些；底上织一层细细的回纹暗花
+  g.fillStyle = '#b48834';
   g.fillRect(0, 0, 512, 256);
-  g.fillStyle = '#a3241a';
+  g.strokeStyle = 'rgba(120,80,20,0.18)';
+  g.lineWidth = 2;
+  for (let y = 36; y < 222; y += 22)
+    for (let x = (y / 22) % 2 ? 11 : 0; x < 512; x += 22) {
+      g.beginPath();
+      g.moveTo(x, y + 6);
+      g.lineTo(x, y);
+      g.lineTo(x + 8, y);
+      g.lineTo(x + 8, y + 6);
+      g.lineTo(x + 4, y + 6);
+      g.stroke();
+    }
+  g.fillStyle = '#86281c';
   g.fillRect(0, 0, 512, 28);
   g.fillRect(0, 228, 512, 28);
   g.strokeStyle = '#f2d48a';
@@ -575,12 +588,12 @@ export function altarClothTexture() {
   const cx = 256, cy = 132;
   for (let k = 0; k < 9; k++) {
     const a = Math.PI + (k / 8) * Math.PI;
-    g.fillStyle = k % 2 ? '#c8423a' : '#e46a5a';
+    g.fillStyle = k % 2 ? '#a8382f' : '#c45a4c';
     g.beginPath();
     g.ellipse(cx + Math.cos(a) * 34, cy + Math.sin(a) * 30 + 10, 30, 13, a, 0, Math.PI * 2);
     g.fill();
   }
-  g.fillStyle = '#f3d27a';
+  g.fillStyle = '#d8b462';
   g.beginPath();
   g.ellipse(cx, cy + 14, 26, 12, 0, 0, Math.PI * 2);
   g.fill();
@@ -596,6 +609,21 @@ export function altarClothTexture() {
     g.ellipse(cx + s * 150, cy + 6, 26, 12, s * 0.4, 0, Math.PI * 2);
     g.fill();
   }
+  // 垂下来的布有竖向的褶：一明一暗的竖条，越往下越明显；底边有点旧
+  for (let x = 0; x < 512; x += 64) {
+    const gr = g.createLinearGradient(x, 0, x + 64, 0);
+    gr.addColorStop(0, 'rgba(0,0,0,0.16)');
+    gr.addColorStop(0.45, 'rgba(255,240,200,0.08)');
+    gr.addColorStop(1, 'rgba(0,0,0,0.16)');
+    g.fillStyle = gr;
+    g.fillRect(x, 0, 64, 256);
+  }
+  const fade = g.createLinearGradient(0, 0, 0, 256);
+  fade.addColorStop(0, 'rgba(40,25,10,0.18)');
+  fade.addColorStop(0.3, 'rgba(40,25,10,0)');
+  fade.addColorStop(1, 'rgba(60,40,20,0.12)');
+  g.fillStyle = fade;
+  g.fillRect(0, 0, 512, 256);
   const tex = finish(c, 1);
   tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
   return tex;

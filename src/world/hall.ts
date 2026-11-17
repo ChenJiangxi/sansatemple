@@ -27,6 +27,126 @@ export function meterUV(geo: THREE.BufferGeometry, su: number, sv: number) {
   return geo;
 }
 
+// —— 汉白玉石纹：浅暖灰底、低频斑驳、细麻点和几道淡淡的石脉；四边绕回，可无缝平铺 ——
+function marbleTexture(seams = false) {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#e6e1d7';
+  g.fillRect(0, 0, S, S);
+  let seed = seams ? 7 : 3;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const dot = (x: number, y: number, rad: number, col: string) => {
+    g.fillStyle = col;
+    for (const ox of [-S, 0, S])
+      for (const oy of [-S, 0, S]) {
+        g.beginPath();
+        g.arc(x + ox, y + oy, rad, 0, Math.PI * 2);
+        g.fill();
+      }
+  };
+  for (let i = 0; i < 70; i++) dot(r() * S, r() * S, 30 + r() * 70, r() < 0.5 ? 'rgba(120,110,95,0.035)' : 'rgba(255,255,250,0.05)');
+  for (let i = 0; i < 2600; i++) dot(r() * S, r() * S, 0.6 + r() * 1.4, r() < 0.6 ? 'rgba(90,85,75,0.12)' : 'rgba(255,255,255,0.15)');
+  // 石脉
+  g.lineCap = 'round';
+  for (let k = 0; k < 5; k++) {
+    let x = r() * S, y = r() * S;
+    g.strokeStyle = `rgba(140,130,115,${0.08 + r() * 0.08})`;
+    g.lineWidth = 0.8 + r() * 1.4;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let j = 0; j < 14; j++) {
+      x += (r() - 0.3) * 40;
+      y += (r() - 0.5) * 30;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // 台面、台阶用的石板：错缝的拼缝，缝里略暗、缝边略亮
+  if (seams) {
+    const rowH = S / 4;
+    for (let row = 0; row < 4; row++) {
+      const y = row * rowH;
+      g.fillStyle = 'rgba(70,64,56,0.35)';
+      g.fillRect(0, y, S, 2);
+      g.fillStyle = 'rgba(255,255,255,0.25)';
+      g.fillRect(0, y + 2, S, 1);
+      const off = row % 2 ? S / 4 : 0;
+      for (let k = 0; k < 2; k++) {
+        const x = (off + k * (S / 2)) % S;
+        g.fillStyle = 'rgba(70,64,56,0.35)';
+        g.fillRect(x, y, 2, rowH);
+        g.fillStyle = 'rgba(255,255,255,0.25)';
+        g.fillRect(x + 2, y, 1, rowH);
+      }
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 栏板浮雕：一圈凹进去的边框，正中一朵卷云如意，用明暗笔触画出起伏
+function reliefTexture() {
+  const W = 512, Hh = 160;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = Hh;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#e4dfd4';
+  g.fillRect(0, 0, W, Hh);
+  const bevel = (x: number, y: number, w: number, h: number, inset: boolean) => {
+    g.lineWidth = 5;
+    g.strokeStyle = inset ? 'rgba(80,72,60,0.35)' : 'rgba(255,255,255,0.7)';
+    g.beginPath();
+    g.moveTo(x, y + h);
+    g.lineTo(x, y);
+    g.lineTo(x + w, y);
+    g.stroke();
+    g.strokeStyle = inset ? 'rgba(255,255,255,0.7)' : 'rgba(80,72,60,0.35)';
+    g.beginPath();
+    g.moveTo(x + w, y);
+    g.lineTo(x + w, y + h);
+    g.lineTo(x, y + h);
+    g.stroke();
+  };
+  bevel(14, 14, W - 28, Hh - 28, true);
+  bevel(26, 26, W - 52, Hh - 52, false);
+  // 卷云：几道向内卷的弧，亮边在上、暗边在下
+  const cloud = (cx: number, cy: number, s: number, flip: number) => {
+    for (const [col, dy] of [['rgba(255,255,255,0.75)', -2], ['rgba(85,76,64,0.35)', 2]] as const) {
+      g.strokeStyle = col;
+      g.lineWidth = 4;
+      g.beginPath();
+      for (let i = 0; i <= 40; i++) {
+        const t = i / 40;
+        const a = t * Math.PI * 2.4;
+        const rr = s * (1 - t * 0.75);
+        const x = cx + Math.cos(a) * rr * flip, y = cy + Math.sin(a) * rr * 0.6 + dy;
+        if (i) g.lineTo(x, y);
+        else g.moveTo(x, y);
+      }
+      g.stroke();
+    }
+  };
+  cloud(W / 2 - 60, Hh / 2, 34, 1);
+  cloud(W / 2 + 60, Hh / 2, 34, -1);
+  cloud(W / 2, Hh / 2 - 8, 22, 1);
+  g.strokeStyle = 'rgba(255,255,255,0.6)';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.moveTo(W / 2 - 150, Hh / 2 + 24);
+  g.quadraticCurveTo(W / 2, Hh / 2 + 44, W / 2 + 150, Hh / 2 + 24);
+  g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
 // 做旧着色：参数走 uniform（同一份着色器代码可以被多个材质共用，不会串）
 const AGED_VS_HEAD = 'varying vec3 vAgedP;';
 function aged(mat: THREE.MeshStandardMaterial, desat: number, grime: number) {
@@ -85,6 +205,10 @@ export function chineseMats() {
   const plasterN = loadTexture('plaster_normal.jpg', false).clone();
   plasterN.repeat.set(0.5, 0.5);
   plasterN.needsUpdate = true;
+  const mTex = marbleTexture();
+  mTex.repeat.set(0.45, 0.45);
+  const sTex = marbleTexture(true);
+  sTex.repeat.set(0.42, 0.42);
   const ch = caihuaTexture();
   ch.repeat.set(1 / 4, 1);
   shared = {
@@ -96,8 +220,10 @@ export function chineseMats() {
     green: new THREE.MeshStandardMaterial({ color: '#3d6256', roughness: 0.7 }),
     gold: new THREE.MeshStandardMaterial({ color: '#c99a42', metalness: 0.85, roughness: 0.35 }),
     // 汉白玉：风吹日晒后偏暖的灰白，只借一点灰泥的法线做表面起伏
-    marble: new THREE.MeshStandardMaterial({ color: '#d4cec2', roughness: 0.78, normalMap: plasterN, normalScale: new THREE.Vector2(0.5, 0.5) }),
-    marbleSide: new THREE.MeshStandardMaterial({ color: '#c7c0b3', roughness: 0.82, normalMap: plasterN, normalScale: new THREE.Vector2(0.6, 0.6) }),
+    marble: new THREE.MeshStandardMaterial({ map: mTex, color: '#d3cdc1', roughness: 0.74, normalMap: plasterN, normalScale: new THREE.Vector2(0.45, 0.45) }),
+    marbleSide: new THREE.MeshStandardMaterial({ map: mTex, color: '#c4bdb0', roughness: 0.8, normalMap: plasterN, normalScale: new THREE.Vector2(0.55, 0.55) }),
+    slab: new THREE.MeshStandardMaterial({ map: sTex, color: '#cdc7bb', roughness: 0.78, normalMap: plasterN, normalScale: new THREE.Vector2(0.45, 0.45) }),
+    relief: new THREE.MeshStandardMaterial({ map: reliefTexture(), color: '#d6d0c4', roughness: 0.76 }),
     redWall: pbr('plaster', { metersPerTile: 2.5, color: '#8a3a2a' }),
     geshan: new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.65, emissive: '#f4e6c8', emissiveIntensity: 0.05 }),
     bronze: new THREE.MeshStandardMaterial({ color: '#5b4a33', metalness: 0.85, roughness: 0.42 }),
@@ -110,6 +236,8 @@ export function chineseMats() {
   aged(shared.green as THREE.MeshStandardMaterial, 0.2, 0.2);
   aged(shared.marble as THREE.MeshStandardMaterial, 0.0, 0.16);
   aged(shared.marbleSide as THREE.MeshStandardMaterial, 0.0, 0.2);
+  aged(shared.slab as THREE.MeshStandardMaterial, 0.0, 0.18);
+  aged(shared.relief as THREE.MeshStandardMaterial, 0.0, 0.14);
   aged(shared.redWall as THREE.MeshStandardMaterial, 0.1, 0.18);
   aged(shared.geshan as THREE.MeshStandardMaterial, 0.18, 0.16);
   return shared;
@@ -492,34 +620,72 @@ function dragonSlabTexture() {
   return t;
 }
 
-// 蒲团的缝线：竖线是顶上的放射缝线，横线是绗线和滚边（车削的 v 方向从底到顶）
+// 蒲团：香蒲草一圈圈盘起来缝成的。车削的 v 方向从底到顶，所以横向的条纹在侧面是一道道草绳、在顶面是一圈圈同心圆；
+// 每道草绳上有斜向的编纹，草绳之间是暗缝
 function cushionTexture() {
   const c = document.createElement('canvas');
   c.width = 512;
-  c.height = 128;
+  c.height = 256;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#f2f2f2';
-  g.fillRect(0, 0, 512, 128);
-  // 织物纹理
-  for (let i = 0; i < 3000; i++) {
-    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.35)' : 'rgba(150,150,150,0.18)';
-    g.fillRect(Math.random() * 512, Math.random() * 128, 2, 1);
+  g.fillStyle = '#e9e3d6';
+  g.fillRect(0, 0, 512, 256);
+  const coil = 256 / 22;
+  for (let k = 0; k < 22; k++) {
+    const y = k * coil;
+    // 草绳的圆鼓：中间亮、上下边暗
+    const gr = g.createLinearGradient(0, y, 0, y + coil);
+    gr.addColorStop(0, 'rgba(70,55,35,0.45)');
+    gr.addColorStop(0.35, 'rgba(255,250,235,0.12)');
+    gr.addColorStop(0.7, 'rgba(0,0,0,0)');
+    gr.addColorStop(1, 'rgba(70,55,35,0.45)');
+    g.fillStyle = gr;
+    g.fillRect(0, y, 512, coil);
+    // 斜编纹
+    g.strokeStyle = 'rgba(90,70,40,0.28)';
+    g.lineWidth = 1.2;
+    const dir = k % 2 ? 1 : -1;
+    for (let x = -10; x < 522; x += 5) {
+      g.beginPath();
+      g.moveTo(x, y + 1);
+      g.lineTo(x + dir * 4, y + coil - 1);
+      g.stroke();
+    }
   }
-  g.strokeStyle = 'rgba(90,70,40,0.55)';
+  // 草色深浅不一
+  for (let i = 0; i < 1800; i++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,245,215,0.18)' : 'rgba(80,60,30,0.14)';
+    g.fillRect(Math.random() * 512, Math.random() * 256, 3 + Math.random() * 5, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 木鱼的漆面：深枣红底，描金的鱼鳞纹，用旧了的地方漆色发暗
+function muyuTexture() {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#6a1c10';
+  g.fillRect(0, 0, 512, 256);
+  g.strokeStyle = 'rgba(214,170,90,0.55)';
   g.lineWidth = 2;
-  for (let k = 0; k < 8; k++) {
-    const x = (k / 8) * 512 + 32;
-    g.beginPath();
-    g.moveTo(x, 0);
-    g.lineTo(x, 48);
-    g.stroke();
+  for (let row = 0; row < 7; row++) {
+    const y = 40 + row * 26;
+    for (let x = (row % 2) * 16; x < 528; x += 32) {
+      g.beginPath();
+      g.arc(x, y, 15, 0.15 * Math.PI, 0.85 * Math.PI);
+      g.stroke();
+    }
   }
-  g.setLineDash([6, 5]);
-  for (const y of [30, 50]) {
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = Math.random() < 0.5 ? 'rgba(20,5,0,0.12)' : 'rgba(255,200,170,0.05)';
     g.beginPath();
-    g.moveTo(0, y);
-    g.lineTo(512, y);
-    g.stroke();
+    g.arc(Math.random() * 512, Math.random() * 256, 2 + Math.random() * 8, 0, Math.PI * 2);
+    g.fill();
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
@@ -552,7 +718,7 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const waist = mesh(worldBox(bw - 0.3, H.baseH - 0.6, bd - 0.3, 1), M.marbleSide);
   waist.position.set(bx, 0.32 + (H.baseH - 0.6) / 2, bz);
   group.add(waist);
-  const base = mesh(worldBox(bw, 0.28, bd, 1), [M.marbleSide, M.marbleSide, M.marble, M.marble, M.marbleSide, M.marbleSide]);
+  const base = mesh(worldBox(bw, 0.28, bd, 1), [M.marbleSide, M.marbleSide, M.slab, M.slab, M.marbleSide, M.marbleSide]);
   base.position.set(bx, H.baseH - 0.14, bz);
   base.name = 'walkable';
   group.add(base);
@@ -571,8 +737,13 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   for (let k = 0; k < steps; k++) {
     const top = ((k + 1) / steps) * H.baseH;
     const z1 = H.stepZ1 - k * stepDepth;
-    const s = mesh(worldBox(H.stepX1 - H.stepX0, top, z1 - H.stepZ0, 1), M.marble);
+    const s = mesh(worldBox(H.stepX1 - H.stepX0, top, z1 - H.stepZ0, 1), [M.marbleSide, M.marbleSide, M.slab, M.slab, M.marble, M.marble]);
     s.position.set(0, top / 2, (H.stepZ0 + z1) / 2);
+    // 踏步前沿一道浅浅的圆棱
+    const nose = mesh(new THREE.CylinderGeometry(0.035, 0.035, H.stepX1 - H.stepX0, 10), M.marble, false);
+    nose.rotation.z = Math.PI / 2;
+    nose.position.set(0, top - 0.03, z1 - 0.01);
+    group.add(nose);
     s.name = 'walkable';
     group.add(s);
     walkables.push(s);
@@ -584,27 +755,60 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     slab.rotation.x = Math.atan2(H.baseH, H.stepZ1 - H.stepZ0);
     group.add(slab);
   }
-  // 白石栏杆：望柱 + 寻杖 + 栏板，正面台阶处断开
+  // 白石栏杆（清式）：望柱（莲花柱头）+ 地栿 + 浮雕华板 + 宝瓶 + 圆寻杖，正面台阶处断开
   const rail: THREE.BufferGeometry[] = [];
+  const panels: THREE.BufferGeometry[] = [];
   const railY = H.baseH;
+  const lotusHead = lathe([[0, 0], [0.125, 0], [0.13, 0.03], [0.1, 0.06], [0.135, 0.1], [0.14, 0.13], [0.11, 0.17], [0.13, 0.2], [0.09, 0.26], [0.05, 0.3], [0, 0.32]], 12);
+  const vase = lathe([[0, 0], [0.05, 0], [0.04, 0.03], [0.065, 0.1], [0.07, 0.15], [0.045, 0.22], [0.03, 0.26], [0.05, 0.29], [0.055, 0.32], [0, 0.32]], 10);
   const addRail = (x0: number, z0: number, x1: number, z1: number) => {
     const len = Math.hypot(x1 - x0, z1 - z0);
     const n = Math.max(1, Math.round(len / 1.8));
     const ang = Math.atan2(z1 - z0, x1 - x0);
+    const along = (t: number) => [x0 + (x1 - x0) * t, z0 + (z1 - z0) * t] as const;
     for (let i = 0; i <= n; i++) {
-      const x = x0 + ((x1 - x0) * i) / n, z = z0 + ((z1 - z0) * i) / n;
-      const p = worldBox(0.2, 1.05, 0.2, 1);
-      p.translate(x, railY + 0.52, z);
+      const [x, z] = along(i / n);
+      const p = worldBox(0.2, 0.95, 0.2, 1);
+      p.translate(x, railY + 0.475, z);
       rail.push(p);
-      const head = new THREE.SphereGeometry(0.13, 8, 6);
-      head.translate(x, railY + 1.12, z);
+      const collar = worldBox(0.24, 0.05, 0.24, 1);
+      collar.translate(x, railY + 0.97, z);
+      rail.push(collar);
+      const head = lotusHead.clone();
+      head.translate(x, railY + 0.99, z);
       rail.push(head);
     }
-    for (const [hh, t, yy] of [[0.1, 0.12, 0.86], [0.5, 0.08, 0.36]] as [number, number, number][]) {
-      const g = worldBox(len, hh, t, 1);
-      g.rotateY(-ang);
-      g.translate((x0 + x1) / 2, railY + yy, (z0 + z1) / 2);
-      rail.push(g);
+    for (let i = 0; i < n; i++) {
+      const seg = len / n;
+      const [cx, cz] = along((i + 0.5) / n);
+      // 地栿
+      const curb = worldBox(seg - 0.2, 0.1, 0.26, 1);
+      curb.rotateY(-ang);
+      curb.translate(cx, railY + 0.05, cz);
+      rail.push(curb);
+      // 华板：浮雕（每块一整幅）
+      const pan = new THREE.BoxGeometry(seg - 0.22, 0.42, 0.1);
+      pan.rotateY(-ang);
+      pan.translate(cx, railY + 0.31, cz);
+      panels.push(pan);
+      // 华板上沿的一道压条
+      const cap = worldBox(seg - 0.2, 0.05, 0.14, 1);
+      cap.rotateY(-ang);
+      cap.translate(cx, railY + 0.545, cz);
+      rail.push(cap);
+      // 宝瓶：每段三只
+      for (const f of [0.22, 0.5, 0.78]) {
+        const [vx, vz] = along((i + f) / n);
+        const v = vase.clone();
+        v.translate(vx, railY + 0.57, vz);
+        rail.push(v);
+      }
+      // 寻杖：圆扶手
+      const bar = new THREE.CylinderGeometry(0.05, 0.05, seg - 0.2, 10);
+      bar.rotateZ(Math.PI / 2);
+      bar.rotateY(-ang);
+      bar.translate(cx, railY + 0.91, cz);
+      rail.push(bar);
     }
   };
   const e = 0.18;
@@ -613,14 +817,28 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   addRail(H.baseX0 + e, H.baseZ0 + e, H.baseX0 + e, H.baseZ1 - e);
   addRail(H.baseX1 - e, H.baseZ0 + e, H.baseX1 - e, H.baseZ1 - e);
   addRail(H.baseX0 + e, H.baseZ0 + e, H.baseX1 - e, H.baseZ0 + e);
+  // 台阶两侧：下面一块三角形的象眼石把空当封住，上面压一条斜的垂带石
+  const tri = new THREE.Shape([new THREE.Vector2(H.stepZ1, 0), new THREE.Vector2(H.stepZ0, 0), new THREE.Vector2(H.stepZ0, H.baseH)]);
   for (const sx of [H.stepX0 - 0.25, H.stepX1 + 0.25]) {
+    const side = new THREE.ExtrudeGeometry(tri, { depth: 0.46, bevelEnabled: false });
+    side.rotateY(-Math.PI / 2);
+    side.translate(sx + 0.23, 0, 0);
+    rail.push(side);
     const g = worldBox(0.5, 0.3, Math.hypot(H.stepZ1 - H.stepZ0, H.baseH), 1);
     g.rotateX(Math.atan2(H.baseH, H.stepZ1 - H.stepZ0));
     g.translate(sx, H.baseH / 2 + 0.15, (H.stepZ0 + H.stepZ1) / 2);
     rail.push(g);
   }
-  // 几何体属性要一致才能合并：球体没有和盒子不同的属性，这里统一去掉索引外的差异
-  group.add(mesh(mergeGeometries(rail.map((g) => (g.index ? g.toNonIndexed() : g))), M.marble));
+  const strip = (gs: THREE.BufferGeometry[]) =>
+    mergeGeometries(
+      gs.map((g) => {
+        const x = g.index ? g.toNonIndexed() : g;
+        for (const k of Object.keys(x.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') x.deleteAttribute(k);
+        return x;
+      })
+    );
+  group.add(mesh(strip(rail), M.marble));
+  group.add(mesh(strip(panels), M.relief));
 
   // —— 殿内方砖地（金砖）——
   const floorMat = pbr('granite', { metersPerTile: 1.3, color: '#78695b', roughness: 0.72 });
@@ -847,8 +1065,19 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   const tableBody = mesh(worldBox(tw, H.tableH - 0.1, td, 1), M.redDark);
   tableBody.position.set(0, H.baseH + (H.tableH - 0.1) / 2, tz);
   group.add(tableBody);
-  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(tw + 0.1, H.tableH - 0.12), new THREE.MeshStandardMaterial({ map: altarClothTexture(), roughness: 0.75, side: THREE.DoubleSide }));
-  cloth.position.set(0, H.baseH + (H.tableH - 0.12) / 2 + 0.01, H.tableZ1 + 0.02);
+  // 桌围垂下来有褶：平面沿宽度起伏，越往下褶越深
+  const clothGeo = new THREE.PlaneGeometry(tw + 0.1, H.tableH - 0.12, 64, 4);
+  {
+    const p = clothGeo.attributes.position as THREE.BufferAttribute;
+    const hh = (H.tableH - 0.12) / 2;
+    for (let i = 0; i < p.count; i++) {
+      const k = (hh - p.getY(i)) / (2 * hh);
+      p.setZ(i, Math.sin((p.getX(i) / (tw + 0.1)) * Math.PI * 16) * 0.018 * (0.3 + 0.7 * k));
+    }
+    clothGeo.computeVertexNormals();
+  }
+  const cloth = new THREE.Mesh(clothGeo, new THREE.MeshStandardMaterial({ map: altarClothTexture(), roughness: 0.85, side: THREE.DoubleSide }));
+  cloth.position.set(0, H.baseH + (H.tableH - 0.12) / 2 + 0.01, H.tableZ1 + 0.035);
   group.add(cloth);
   const ttop = H.baseH + H.tableH;
 
@@ -929,10 +1158,11 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     const stand = mesh(worldBox(0.8, 0.45, 0.6, 1), M.red);
     stand.position.set(-3.1, H.baseH + 0.225, H.tableZ1 + 0.1);
     group.add(stand);
-    const mkPad = mesh(new THREE.CylinderGeometry(0.36, 0.38, 0.07, 24), new THREE.MeshStandardMaterial({ color: '#c8952f', roughness: 0.85 }));
-    mkPad.position.set(-3.1, H.baseH + 0.485, H.tableZ1 + 0.1);
+    // 木鱼垫：一个鼓鼓的小绣垫，旧绛红布面、四角缝金线
+    const mkPad = mesh(lathe([[0, 0], [0.36, 0], [0.4, 0.025], [0.405, 0.05], [0.38, 0.075], [0.2, 0.088], [0, 0.085]], 28), new THREE.MeshStandardMaterial({ color: '#7a2a1a', roughness: 0.9 }));
+    mkPad.position.set(-3.1, H.baseH + 0.45, H.tableZ1 + 0.1);
     group.add(mkPad);
-    const mk = mesh(new THREE.SphereGeometry(0.32, 32, 20), new THREE.MeshPhysicalMaterial({ color: '#8c2616', roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.2 }));
+    const mk = mesh(new THREE.SphereGeometry(0.32, 40, 24), new THREE.MeshPhysicalMaterial({ map: muyuTexture(), roughness: 0.5, clearcoat: 0.35, clearcoatRoughness: 0.45 }));
     mk.scale.set(1.12, 0.86, 1.02);
     mk.position.set(-3.1, H.baseH + 0.52 + 0.25, H.tableZ1 + 0.1);
     group.add(mk);
@@ -948,11 +1178,27 @@ export function buildHall(scene: THREE.Scene): HallBuild {
       lip.position.set(-3.1, H.baseH + 0.52 + 0.2 + dy, H.tableZ1 + 0.1);
       group.add(lip);
     }
+    // 背后的把手：两个鱼头相对，衔着一颗珠子（这里简化成一道弯梁和一颗珠）
+    const knob = mesh(new THREE.TorusGeometry(0.09, 0.035, 10, 20, Math.PI), new THREE.MeshPhysicalMaterial({ map: muyuTexture(), roughness: 0.5, clearcoat: 0.35 }));
+    knob.position.set(-3.1, H.baseH + 0.52 + 0.47, H.tableZ1 + 0.1 - 0.12);
+    group.add(knob);
+    const pearl = mesh(new THREE.SphereGeometry(0.04, 14, 10), M.gold, false);
+    pearl.position.set(-3.1, H.baseH + 0.52 + 0.53, H.tableZ1 + 0.1 - 0.12);
+    group.add(pearl);
+    // 木鱼槌
+    const mallet = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.42, 8), new THREE.MeshStandardMaterial({ color: '#5a3a22', roughness: 0.6 }), false);
+    // 槌横放在垫子前沿
+    mallet.rotation.set(0, 0.25, Math.PI / 2);
+    mallet.position.set(-3.1, H.baseH + 0.55, H.tableZ1 + 0.1 + 0.45);
+    group.add(mallet);
+    const malletHead = mesh(new THREE.SphereGeometry(0.045, 12, 8), new THREE.MeshStandardMaterial({ color: '#8a6a48', roughness: 0.8 }), false);
+    malletHead.position.set(-3.1 - 0.2, H.baseH + 0.56, H.tableZ1 + 0.1 + 0.5);
+    group.add(malletHead);
     const stand2 = mesh(lathe([[0, 0], [0.3, 0], [0.3, 0.4], [0.26, 0.45], [0, 0.45]], 20), M.red);
     stand2.position.set(3.1, H.baseH, H.tableZ1 + 0.1);
     group.add(stand2);
-    const pad = mesh(new THREE.CylinderGeometry(0.28, 0.3, 0.1, 20), new THREE.MeshStandardMaterial({ color: '#c8952f', roughness: 0.9 }));
-    pad.position.set(3.1, H.baseH + 0.5, H.tableZ1 + 0.1);
+    const pad = mesh(lathe([[0, 0], [0.27, 0], [0.31, 0.03], [0.315, 0.06], [0.29, 0.09], [0.15, 0.1], [0, 0.098]], 24), new THREE.MeshStandardMaterial({ color: '#7a2a1a', roughness: 0.9 }));
+    pad.position.set(3.1, H.baseH + 0.45, H.tableZ1 + 0.1);
     group.add(pad);
     const qing = mesh(lathe([[0, 0], [0.12, 0], [0.24, 0.08], [0.32, 0.22], [0.34, 0.32], [0.31, 0.32], [0.29, 0.24], [0.2, 0.12], [0, 0.06]], 32), new THREE.MeshStandardMaterial({ color: '#7a5a2e', metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide }));
     qing.position.set(3.1, H.baseH + 0.55, H.tableZ1 + 0.1);
@@ -962,15 +1208,13 @@ export function buildHall(scene: THREE.Scene): HallBuild {
   // —— 圆蒲团：一个实例化网格，点中时用 instanceId 找回座位 ——
   // 蒲团：顶面中间略凹、四周鼓起，侧边一道滚边，顶上八道放射缝线和一圈绗线
   const cushionGeo = mergeGeometries([
-    lathe([[0, 0], [0.3, 0], [0.335, 0.025], [0.345, 0.075], [0.34, 0.125], [0.31, 0.158], [0.22, 0.172], [0.08, 0.162], [0, 0.155]], 40),
-    new THREE.TorusGeometry(0.343, 0.012, 6, 48).rotateX(Math.PI / 2).translate(0, 0.075, 0),
-    new THREE.SphereGeometry(0.03, 10, 6).scale(1, 0.4, 1).translate(0, 0.156, 0),
+    lathe([[0, 0], [0.3, 0], [0.33, 0.015], [0.348, 0.045], [0.355, 0.085], [0.348, 0.125], [0.325, 0.158], [0.28, 0.176], [0.2, 0.184], [0.1, 0.182], [0, 0.178]], 48),
   ].map((g) => g.toNonIndexed()))!;
   const cushionMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.92, map: cushionTexture() });
   const cushions = new THREE.InstancedMesh(cushionGeo, cushionMat, CUSHIONS.length);
   // 蒲团：香蒲草编的土黄，隔排是旧了的绛红布面
-  const cA = new THREE.Color('#9c7a46');
-  const cB = new THREE.Color('#7e4630');
+  const cA = new THREE.Color('#a8844c');
+  const cB = new THREE.Color('#8e6a3c');
   const m4 = new THREE.Matrix4();
   CUSHIONS.forEach((c, i) => {
     m4.makeTranslation(c.x, H.baseH + 0.06, c.z + 0.18);

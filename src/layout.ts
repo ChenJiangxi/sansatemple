@@ -76,7 +76,7 @@ export const CUSHIONS: Seat[] = (() => {
   let i = 0;
   for (const z of CUSHION_ROWS) {
     for (const x of CUSHION_COLS) {
-      list.push({ id: `c${i++}`, kind: 'cushion', x, z, y: HALL.baseH + 0.07, yaw: Math.PI, approachX: x, approachZ: z + 0.85 });
+      list.push({ id: `c${i++}`, kind: 'cushion', x, z, y: HALL.baseH + 0.18, yaw: Math.PI, approachX: x, approachZ: z + 0.85 });
     }
   }
   return list;
