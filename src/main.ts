@@ -2180,7 +2180,7 @@ async function start() {
     updateRemotes(dt);
     separatePlayer();
     updateCamera(dt);
-    clouds.update(dt, elapsed, camera.position.y);
+    clouds.update(dt, elapsed, !!tower || intro, camera.position.y);
     nature.update(dt, elapsed);
     life.update(dt, elapsed, env.lanternLevel, camera.position);
     sunDir.copy(env.sun.position).sub(env.sun.target.position).normalize();

@@ -273,6 +273,11 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const pagodaLampMat = new THREE.MeshStandardMaterial({ color: '#d63a22', roughness: 0.6, emissive: '#ff6a2a', emissiveIntensity: 0.1 });
   const pagodaLampGeo = new THREE.SphereGeometry(0.075, 10, 8).scale(1, 1.3, 1);
   const doorMat = new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.7 });
+  // 塔身的窗：只取格扇门上半截的菱花格心
+  const winTex = geshanTexture();
+  winTex.repeat.set(1, 0.62);
+  winTex.offset.set(0, 0.36);
+  const winMat = new THREE.MeshStandardMaterial({ map: winTex, roughness: 0.75 });
   for (const [pi, P] of PAGODAS.entries()) {
     const g = new THREE.Group();
     const lampAt: THREE.Vector3[] = [];
@@ -292,7 +297,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       for (let d = 0; d < 4; d++) {
         if (k === 0 && d === doorSide) continue;
         const a = (d / 4) * Math.PI * 2 + Math.PI / 8;
-        const win = mesh(new THREE.PlaneGeometry(rr * 0.45, hh * 0.55), M.redDark, false);
+        const win = mesh(new THREE.PlaneGeometry(rr * 0.45, hh * 0.55), winMat, false);
         win.position.set(Math.cos(a) * (rr * 0.93), y + hh * 0.48, Math.sin(a) * (rr * 0.93));
         win.lookAt(win.position.x * 2, win.position.y, win.position.z * 2);
         g.add(win);

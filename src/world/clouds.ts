@@ -1,4 +1,4 @@
-// 云海：登上塔顶才浮现（镜头低于 6 米时完全透明、也不画）。
+// 云海：登上塔顶（和开场标题画面）才浮现，其余时候完全透明、也不画。
 // 近处三层低云铺满院子和墙外的山谷，高到院墙上沿：殿顶、塔、钟鼓楼和树冠从云里露出来，寺院像浮在云上；
 // 远处再一层贴着山腰的云带。大殿、配殿里面不铺，免得从门里看到殿内有云。
 // 用标准材质接收场景的日光、天光和雾，所以清晨偏粉金、白天雪白、傍晚橘红、夜里是暗蓝的。
@@ -86,9 +86,9 @@ export function buildCloudSea(scene: THREE.Scene) {
   scene.add(group);
   let k = 0;
   return {
-    // 镜头越高越显：6 米以下看不见，9 米以上全显；变化放缓，登上塔顶时云是慢慢浮出来的
-    update(dt: number, time: number, camY: number) {
-      const want = THREE.MathUtils.smoothstep(camY, 6, 9);
+    // show：登塔或开场时为真。浮出来慢、散去快；只在镜头够高时显示，免得从塔上下来的那一下还在雾里
+    update(dt: number, time: number, show: boolean, camY: number) {
+      const want = show ? THREE.MathUtils.smoothstep(camY, 6, 9) : 0;
       k += (want - k) * Math.min(1, dt * (want > k ? 0.6 : 3));
       uniforms.uOpacity.value = k;
       uniforms.uTime.value = time;
