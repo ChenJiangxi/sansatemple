@@ -6,6 +6,7 @@ import { t, randomName, onLangChange, type Key } from './i18n';
 import { Environment, buildTerrain, type TimeMode } from './world/environment';
 import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
+import { furnishSideHalls, LAMPS } from './world/sidehall';
 import { floatText, Rhythm, Charge, leafPile, waterRing, type QuestDef } from './play';
 import { LEVELS, levelOf } from './progress';
 import { preloadTreeTextures } from './world/ez-textures';
@@ -25,7 +26,7 @@ import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, SIDE_HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, SIDE_HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -180,6 +181,21 @@ async function start() {
     if (o.name === 'walkable') walkables.push(o);
   });
   const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, pond.water];
+  // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
+  const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
+  interactives.push(...sideHalls.interactives, ...sideHalls.doorHits);
+  const HALL_LEVEL = [1, 2];
+  const HALL_NAME = ['hallGuanyin', 'hallDizang'] as const;
+  const lampKey = 'sansa.lamps';
+  const lampsToday = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(lampKey) || 'null');
+      return v && v.day === today() ? (v.n as number) : 0;
+    } catch {
+      return 0;
+    }
+  };
+  sideHalls.setLamps(lampsToday());
 
   // —— 叠加层与界面 ——
   const stage = new OverlayStage(app);
@@ -387,6 +403,56 @@ async function start() {
     n.bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
     n.until = now + 4200;
   }
+  // —— 配殿：没开时提示还差多少功德；开了以后礼拜菩萨、点长明灯 ——
+  const lastBless = [-1e9, -1e9];
+  function hallClick(kind: string, i: number) {
+    if (!sideHallOpen[i] || kind === 'hallDoor') {
+      const need = HALL_LEVEL[i];
+      const left = Math.max(1, LEVELS[need].at - progress.points());
+      ui.toast(t('hallLocked', { h: t(HALL_NAME[i]), t: t(LEVELS[need].key as Key), n: left }), 4800);
+      return;
+    }
+    if (player.seat) standUp();
+    cancelIntent();
+    if (kind === 'hallStatue') {
+      const st = sideHalls.statueStand(i);
+      walkTo(st.x, st.z, () => {
+        player.yaw = st.yaw;
+        me.setAction('hapjang');
+        setTimeout(() => {
+          const lines = t(i === 0 ? 'blessGuanyin' : 'blessDizang').split('|');
+          const line = lines[Math.floor(Math.random() * lines.length)];
+          floatText(ui.root, innerWidth / 2, innerHeight * 0.36, line, 'levelup');
+          audio.bell(0.35);
+          if (performance.now() - lastBless[i] > 30000) {
+            lastBless[i] = performance.now();
+            gain(4);
+          }
+          if (me.action === 'hapjang') me.setAction(baseAction());
+        }, HAPJANG_DURATION * 1000);
+      });
+    } else {
+      const st = sideHalls.lampStand();
+      walkTo(st.x, st.z, () => {
+        player.yaw = st.yaw;
+        const n0 = lampsToday();
+        if (n0 >= LAMPS) {
+          ui.toast(t('lampFull'), 4000);
+          return;
+        }
+        me.setAction('incense');
+        setTimeout(() => {
+          const n = Math.min(LAMPS, lampsToday() + 1);
+          localStorage.setItem(lampKey, JSON.stringify({ day: today(), n }));
+          sideHalls.setLamps(n);
+          audio.bell(0.3);
+          gain(5);
+          ui.toast(t('lampLit', { n, m: LAMPS }), 3600);
+        }, 2750);
+      });
+    }
+  }
+
   // —— 寺务：扫地僧请你扫落叶，小沙弥请你浇树；头上有「！」就是有事找你 ——
   const QUESTS: QuestDef[] = [
     {
@@ -456,6 +522,7 @@ async function start() {
   }
   qRun.forEach(questShow);
   questPill();
+  refreshHalls(false);
   // 点到交付寺务的僧人：接活、提醒、或者回禀
   function questNpc(id: number) {
     const o = qRun.find((x) => x.q.giver === id);
@@ -590,7 +657,26 @@ async function start() {
       const title = t(LEVELS[r.after].key as Key);
       floatText(ui.root, innerWidth / 2, innerHeight * 0.4, t('levelUp', { t: title }), 'levelup');
       ui.toast(t('levelUp', { t: title }), 5000);
+      setTimeout(() => refreshHalls(true), 2500);
     }
+  }
+
+  function refreshHalls(animate: boolean) {
+    const lv = levelOf(progress.points());
+    HALL_LEVEL.forEach((need, i) => {
+      const o = lv >= need;
+      const was = sideHallOpen[i];
+      setSideHallOpen(i, o);
+      sideHalls.setOpen(i, o, animate);
+      const hit = sideHalls.doorHits[i];
+      const k = interactives.indexOf(hit);
+      if (o && k >= 0) interactives.splice(k, 1);
+      if (!o && k < 0) interactives.push(hit);
+      if (o && !was && animate) {
+        ui.toast(t('hallOpened', { h: t(HALL_NAME[i]) }), 5600);
+        setTimeout(() => audio.templeBell(0.45), 600);
+      }
+    });
   }
 
   function award(id: SealId) {
@@ -1311,6 +1397,15 @@ async function start() {
         };
         setTimeout(tick, rhythm.untilBeat() + 5);
       }, 1200);
+    // 调试：&points=N 直接加功德点（看解锁），&lamps=N 直接点亮长明灯
+    const dbgPts = Number(sp.get('points'));
+    if (dbgPts > 0) {
+      progress.addPoints(dbgPts);
+      renderMyTag();
+      refreshHalls(false);
+    }
+    const dbgLamps = Number(sp.get('lamps'));
+    if (dbgLamps > 0) sideHalls.setLamps(Math.min(LAMPS, dbgLamps));
     // 调试：?debugview&quest=sweep|water 直接接下寺务
     const qp = sp.get('quest');
     const qd = QUESTS.find((q) => q.id === qp);
@@ -1360,6 +1455,7 @@ async function start() {
     for (const p of PAGODAS) B(p.x - 2.6, 0, p.z - 2.6, p.x + 2.6, 22, p.z + 2.6);
   }
   const camHit = new THREE.Vector3();
+  const camBlockers = [...hall.blockers, ...sideHalls.walls];
   let camD = isTouch ? 6.4 : 5.6;
   const tmpV = new THREE.Vector3();
   const tmpT = new THREE.Vector3();
@@ -1377,7 +1473,7 @@ async function start() {
     let d = cam.dist;
     camRay.set(tmpT, dir);
     camRay.far = d + 0.3;
-    const hit = camRay.intersectObjects(hall.blockers, true)[0];
+    const hit = camRay.intersectObjects(camBlockers, true)[0];
     if (hit) d = Math.max(0.8, hit.distance - 0.3);
     for (const b of camBoxes) {
       if (b.containsPoint(tmpT)) continue;
@@ -1482,6 +1578,10 @@ async function start() {
       questGo(p.interact.q, p.interact.i);
       return;
     }
+    if (p.interact?.type === 'hallDoor' || p.interact?.type === 'hallStatue' || p.interact?.type === 'hallLamp') {
+      hallClick(p.interact.type, p.interact.hall as number);
+      return;
+    }
     if (p.interact?.type === 'fortune') {
       requestFortune();
       return;
@@ -1554,6 +1654,8 @@ async function start() {
     else if (it?.type === 'fortune') label = t('tipFortune');
     else if (it?.type === 'pond') label = t('tipPond');
     else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
+    else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
+    else if (it?.type === 'hallLamp') label = t('lampLabel');
     canvas.classList.toggle('point', !!label);
     ui.showTooltip(label, e.clientX, e.clientY);
   });
@@ -1849,6 +1951,7 @@ async function start() {
     trackSeals(dt);
     for (const e of residents.update(dt, svcNow(), camera.position, player)) murmur(e.id, e.key);
     questUpdate(dt);
+    sideHalls.update(dt, elapsed);
     rhythm.update();
     charge.update(dt);
     if (charge.active) buildings.bell.aim?.(Math.max(0.02, charge.power));

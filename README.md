@@ -53,6 +53,15 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 调试（与 `?debugview` 一起用）：`&moktak=9` 打开木鱼按拍敲 9 下，`&do=bell` 直接去撞钟，`&quest=sweep|water` 直接接寺务，再加 `&qauto` 自动做完并回禀。
 
+## 配殿：随修行解锁的新地方
+
+院子两侧的观音殿、地藏殿起初关着门，点殿门会提示还差多少功德。修行到「行者」开观音殿，到「沙弥」开地藏殿，殿门会转开，殿里点起暖灯：
+
+- **观音殿**：供宋代水月观音。点佛坛去「礼观音」，合十后得一句祝福（30 秒内重复礼拜不再给功德）。
+- **地藏殿**：供地藏菩萨，佛坛旁一架三层三十六盏的长明灯。点灯架去点灯，一次一盏，当天累计，夜里一片暖光。
+
+调试：`?debugview&points=300` 直接加功德点看解锁，`&lamps=24` 直接点亮长明灯。
+
 ## 寺里的人与时刻表
 
 寺里常住十一位僧人，穿灰褐海青（老和尚穿黄袍、搭袈裟，小沙弥穿浅灰、个子小一圈）。
@@ -133,7 +142,9 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 
 | 文件 | 来源 | 许可 | 处理 |
 |---|---|---|---|
-| `public/models/buddha.glb` | [Korean Buddha Iron Statue](https://sketchfab.com/3d-models/korean-buddha-iron-statue-872b44150e12431a898d0b8057705770) by artfletch（高丽铁佛扫描） | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) | 去掉贴图、改为金身、减面到 9 万三角形、meshopt 压缩 |
+| `public/models/buddha-ming.glb` | [Chinese Amoghasiddhi Buddha, 1403–1424 CE](https://sketchfab.com/3d-models/chinese-amoghasiddhi-buddha-1403-1424-ce-33699be99fd64375bf0371c0e0c12f70)，Minneapolis Institute of Art（明永乐鎏金铜佛） | CC0 | 经 Objaverse 镜像下载；去贴图、改为金身、meshopt 压缩，作大殿主尊 |
+| `public/models/guanyin.glb` | [12th C CE Water-Moon Guanyin](https://sketchfab.com/3d-models/12th-c-ce-water-moon-guanyin-f3316610c8b740c595c22ca1d7df54ca)，Minneapolis Institute of Art（宋代水月观音） | CC0 | 同上，减面到 7 万三角形，供观音殿 |
+| `public/models/dizang.glb` | [diZangPuSa_v2022](https://sketchfab.com/3d-models/dizangpusa-v2022-c1f3cdbd3fb84170b4ee92e780dcdfb9) by tian0000hai | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 同上，从 54 万减到 8 万三角形，供地藏殿 |
 | `public/models/disciple.glb` | [1997.11 Standing Bodhisattva](https://sketchfab.com/3d-models/199711-standing-bodhisattva-1a57a0d6609145b486ed5b1d3e9ec7fb)，Cleveland Museum of Art | [CC0](http://creativecommons.org/publicdomain/zero/1.0/) | 同上；作迦叶、阿难二尊者用，右侧一尊镜像 |
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/fonts/title.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | [SIL OFL](https://openfontlicense.org/) | 只取「山寺」两字 |

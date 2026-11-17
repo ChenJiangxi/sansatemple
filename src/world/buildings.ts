@@ -42,30 +42,58 @@ function sideHall(def: (typeof SIDE_HALLS)[number], idx: number) {
       c.position.set(x, base + colH / 2, z);
       g.add(c);
     }
-  // 正面四间格扇门
+  // 正面四间格扇门；正中两间的门扇做成能转开的（两扇一组，绕外侧的门轴往殿里开）
   const bay = hx / 2;
   const leaves: THREE.BufferGeometry[] = [];
+  const doors: THREE.Group[] = [];
   for (let i = 0; i < 4; i++) {
     const cx = -hx + bay / 2 + i * bay;
-    for (let k = 0; k < 4; k++) {
-      const w = (bay - 0.4) / 4;
-      const leaf = new THREE.BoxGeometry(w - 0.03, colH - 1.0, 0.1);
-      leaf.translate(cx - (bay - 0.4) / 2 + w * (k + 0.5), base + (colH - 1.0) / 2, hz);
-      leaves.push(leaf);
-    }
+    const w = (bay - 0.4) / 4;
+    const x0 = cx - (bay - 0.4) / 2;
+    if (i === 1 || i === 2) {
+      for (const side of [0, 1]) {
+        const pivot = new THREE.Group();
+        const hingeX = side === 0 ? x0 : x0 + 4 * w;
+        pivot.position.set(hingeX, 0, hz);
+        const pair: THREE.BufferGeometry[] = [];
+        for (let k = 0; k < 2; k++) {
+          const leaf = new THREE.BoxGeometry(w - 0.03, colH - 1.0, 0.1);
+          const lx = side === 0 ? w * (k + 0.5) : -w * (k + 0.5);
+          leaf.translate(lx, base + (colH - 1.0) / 2, 0);
+          pair.push(leaf);
+        }
+        pivot.add(mesh(mergeGeometries(pair), M.geshan));
+        pivot.userData.openSign = side === 0 ? 1 : -1;
+        doors.push(pivot);
+        g.add(pivot);
+      }
+    } else
+      for (let k = 0; k < 4; k++) {
+        const leaf = new THREE.BoxGeometry(w - 0.03, colH - 1.0, 0.1);
+        leaf.translate(x0 + w * (k + 0.5), base + (colH - 1.0) / 2, hz);
+        leaves.push(leaf);
+      }
     const tw = new THREE.BoxGeometry(bay - 0.4, 0.6, 0.1);
     tw.translate(cx, colTop - 0.65, hz);
     leaves.push(tw);
   }
-  g.add(mesh(mergeGeometries(leaves), M.geshan));
+  const front = mesh(mergeGeometries(leaves), M.geshan);
+  g.add(front);
   const back = mesh(worldBox(hx * 2, colH, 0.3, 1), M.redWall);
   back.position.set(0, base + colH / 2, -hz);
   g.add(back);
+  const walls: THREE.Object3D[] = [back, front];
   for (const sx of [-1, 1]) {
     const w = mesh(worldBox(0.3, colH, hz * 2, 1), M.redWall);
     w.position.set(sx * hx, base + colH / 2, 0);
     g.add(w);
+    walls.push(w);
   }
+  // 殿内的天花：挡住从屋檐缝里漏进来的光，也让殿里暗下来
+  const inCeil = mesh(worldBox(hx * 2, 0.06, hz * 2, 1), M.redDark);
+  inCeil.position.set(0, colTop + 0.15, 0);
+  g.add(inCeil);
+  walls.push(inCeil);
   const fill = mesh(new THREE.BoxGeometry(hx * 2 + 0.2, 0.9, hz * 2 + 0.2), M.green);
   fill.position.y = colTop + 0.6;
   g.add(fill);
@@ -77,7 +105,7 @@ function sideHall(def: (typeof SIDE_HALLS)[number], idx: number) {
   g.add(plaque);
   g.position.set(def.x, 0, def.z);
   g.rotation.y = def.yaw;
-  return g;
+  return { g, doors, walls };
 }
 
 export interface StrikeBuild {
@@ -376,9 +404,13 @@ function drumTower(group: THREE.Group): StrikeBuild {
 
 export function buildBuildings(scene: THREE.Scene) {
   const group = new THREE.Group();
-  SIDE_HALLS.forEach((d, i) => group.add(sideHall(d, i)));
+  const halls = SIDE_HALLS.map((d, i) => {
+    const h = sideHall(d, i);
+    group.add(h.g);
+    return h;
+  });
   const bell = bellTower(group);
   const drum = drumTower(group);
   scene.add(group);
-  return { group, bell, drum };
+  return { group, bell, drum, halls };
 }

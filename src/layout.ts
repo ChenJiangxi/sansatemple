@@ -191,11 +191,59 @@ boxes.push({ x0: HALL.wallX - 0.2, x1: HALL.wallX + 0.25, z0: HALL.backZ - 0.2, 
 boxes.push({ x0: -HALL.wallX, x1: HALL.wallX, z0: HALL.backZ - 0.3, z1: HALL.backZ + 0.25 });
 boxes.push({ x0: HALL.altarX0 - 0.15, x1: HALL.altarX1 + 0.15, z0: HALL.altarZ0, z1: HALL.altarZ1 + 0.2 });
 boxes.push({ x0: HALL.tableX0, x1: HALL.tableX1, z0: HALL.tableZ0, z1: HALL.tableZ1 });
-// 配殿整体不可进入
-for (const s of SIDE_HALLS) {
-  const hw = (Math.abs(Math.sin(s.yaw)) > 0.5 ? s.d : s.w) / 2 + 0.6;
-  const hd = (Math.abs(Math.sin(s.yaw)) > 0.5 ? s.w : s.d) / 2 + 0.6;
-  boxes.push({ x0: s.x - hd, x1: s.x + hd, z0: s.z - hw, z1: s.z + hw });
+// 配殿：没解锁时整座不可进入；解锁后只挡墙、柱子、佛坛和灯架，台阶和殿内可以走
+export const sideHallOpen = [false, false];
+// 配殿的本地坐标：x 沿面阔，z 朝殿门为正；尺寸和 buildings.ts 的 sideHall 一致
+export function hallLocal(i: number, x: number, z: number) {
+  const s = SIDE_HALLS[i];
+  const dx = x - s.x, dz = z - s.z, c = Math.cos(s.yaw), n = Math.sin(s.yaw);
+  return { lx: dx * c - dz * n, lz: dx * n + dz * c };
+}
+export function hallWorld(i: number, lx: number, lz: number) {
+  const s = SIDE_HALLS[i];
+  const c = Math.cos(s.yaw), n = Math.sin(s.yaw);
+  return { x: s.x + lx * c + lz * n, z: s.z - lx * n + lz * c };
+}
+export const SH = (i: number) => {
+  const s = SIDE_HALLS[i];
+  const L = s.d, D = s.w;
+  return { L, D, base: 0.6, hx: L / 2 - 0.4, hz: D / 2 - 0.4, px: L / 2 + 0.8, pz: D / 2 + 0.8 };
+};
+export function setSideHallOpen(i: number, open: boolean) {
+  if (sideHallOpen[i] === open) return;
+  sideHallOpen[i] = open;
+  walk = null; // 寻路网格重算
+}
+function sideHallBlocked(i: number, x: number, z: number) {
+  const { lx, lz } = hallLocal(i, x, z);
+  const d = SH(i);
+  if (Math.abs(lx) > d.px + 0.6 + R || Math.abs(lz) > d.pz + 0.6 + R) return false;
+  if (!sideHallOpen[i]) return Math.abs(lx) < d.px + R && Math.abs(lz) < d.pz + R;
+  const t = 0.15 + R;
+  if (Math.abs(lz + d.hz) < t && Math.abs(lx) < d.hx + t) return true; // 后墙
+  if (Math.abs(Math.abs(lx) - d.hx) < t && Math.abs(lz) < d.hz + t) return true; // 两侧墙
+  if (Math.abs(lz - d.hz) < 0.08 + R && Math.abs(lx) < d.hx + t) {
+    // 正面格扇门：只有正中两间开着
+    const bay = d.hx / 2;
+    const gap = Math.abs(lx) > 0.3 + R && Math.abs(lx) < bay - 0.3 - R;
+    if (!gap) return true;
+  }
+  for (const cx of [-d.hx, -d.hx / 2, 0, d.hx / 2, d.hx])
+    for (const cz of [-d.hz, d.hz]) if ((lx - cx) ** 2 + (lz - cz) ** 2 < (0.27 + R) ** 2) return true;
+  if (Math.abs(lx) < 2.4 + R && lz < -d.hz + 2.55 + R) return true; // 佛坛与供桌
+  if (i === 1 && lx > -6.7 - R && lx < -3.5 + R && lz < -d.hz + 1.7 + R) return true; // 长明灯架
+  return false;
+}
+// 配殿台基与台阶的高度（只在开放时可走上去）
+function sideHallHeight(x: number, z: number) {
+  for (let i = 0; i < SIDE_HALLS.length; i++) {
+    if (!sideHallOpen[i]) continue;
+    const { lx, lz } = hallLocal(i, x, z);
+    const d = SH(i);
+    if (Math.abs(lx) <= d.px && Math.abs(lz) <= d.pz) return d.base;
+    if (Math.abs(lx) < 1.6 && lz > d.pz && lz < d.pz + 1.2) return d.base * (1 - (lz - d.pz) / 1.2);
+  }
+  return -1;
 }
 // 长椅（每个座位一个碰撞圆，坐下时直接吸附过去）
 for (const s of BENCH_SEATS) circles.push({ x: s.x - Math.sin(s.yaw) * 0.1, z: s.z - Math.cos(s.yaw) * 0.1, r: 0.36 });
@@ -213,6 +261,8 @@ export function heightAt(x: number, z: number): number {
   }
   // 石拱桥
   if (x > BRIDGE.x0 && x < BRIDGE.x1 && z > BRIDGE.z0 && z < BRIDGE.z1) return BRIDGE.h * Math.sin(((z - BRIDGE.z0) / (BRIDGE.z1 - BRIDGE.z0)) * Math.PI);
+  const sh = sideHallHeight(x, z);
+  if (sh >= 0) return sh;
   return 0;
 }
 
@@ -239,6 +289,7 @@ export function blocked(x: number, z: number): boolean {
   for (const b of boxes) {
     if (x > b.x0 - R && x < b.x1 + R && z > b.z0 - R && z < b.z1 + R) return true;
   }
+  for (let i = 0; i < SIDE_HALLS.length; i++) if (sideHallBlocked(i, x, z)) return true;
   return false;
 }
 

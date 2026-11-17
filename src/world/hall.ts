@@ -810,14 +810,15 @@ export function buildHall(scene: THREE.Scene): HallBuild {
     const tasselMat = new THREE.MeshStandardMaterial({ color: '#c9302a', roughness: 0.8 });
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2 + Math.PI / 8;
-      const tas = mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.9, 6), tasselMat, false);
-      tas.position.set(Math.cos(a) * 1.62, -0.9, Math.sin(a) * 1.62);
+      const tas = mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.55, 6), tasselMat, false);
+      tas.position.set(Math.cos(a) * 1.62, -0.75, Math.sin(a) * 1.62);
       hg.add(tas);
     }
     const rod = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8), M.gold, false);
     rod.position.y = 0.8;
     hg.add(rod);
-    hg.position.set(0, ceilY - 1.0, az + 0.4);
+    // 挂高一些，流苏不挡佛脸
+    hg.position.set(0, ceilY - 0.45, az + 0.4);
     group.add(hg);
   }
   // 经幡：佛坛前左右各三条

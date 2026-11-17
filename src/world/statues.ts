@@ -86,7 +86,7 @@ export function placeStatues(group: THREE.Group, slots: Slot[], env: THREE.Textu
   const pedestalMat = new THREE.MeshStandardMaterial({ color: '#c99642', metalness: 0.9, roughness: 0.38, envMap: env, envMapIntensity: 1.2 });
 
   const spec = {
-    main: { h: 3.2, pr: 1.25, ph: 0.75, mw: 4.0, mh: 5.4, file: 'buddha.glb', mat: goldA },
+    main: { h: 3.5, pr: 1.25, ph: 0.62, mw: 4.0, mh: 5.4, file: 'buddha-ming.glb', mat: goldA },
     left: { h: 2.55, pr: 0.62, ph: 0.4, mw: 0, mh: 0, file: 'disciple.glb', mat: goldB },
     right: { h: 2.55, pr: 0.62, ph: 0.4, mw: 0, mh: 0, file: 'disciple.glb', mat: goldB },
   } as const;
