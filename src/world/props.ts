@@ -278,9 +278,17 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   winTex.repeat.set(1, 0.62);
   winTex.offset.set(0, 0.36);
   const winMat = new THREE.MeshStandardMaterial({ map: winTex, roughness: 0.75 });
+  // 塔檐下的彩画额枋：大殿彩画贴图绕一圈，横向重复几次
+  const bandTex = (M.caihua as THREE.MeshStandardMaterial).map!.clone();
+  bandTex.wrapS = THREE.RepeatWrapping;
+  bandTex.repeat.set(4, 1);
+  bandTex.needsUpdate = true;
+  const bandMat = new THREE.MeshStandardMaterial({ map: bandTex, roughness: 0.75 });
   for (const [pi, P] of PAGODAS.entries()) {
     const g = new THREE.Group();
     const lampAt: THREE.Vector3[] = [];
+    const bands: THREE.BufferGeometry[] = [];
+    const units: THREE.BufferGeometry[] = [];
     // 塔整体转 22.5°，让八角塔的一面正对中轴线；塔门开在这一面，门前三级石阶
     const doorSide = P.x < 0 ? 0 : 2; // 下面开窗的四个方向里，朝中轴线的那一个
     const doorTh = (P.x < 0 ? Math.PI / 2 : -Math.PI / 2) - Math.PI / 8; // 塔的本地朝向（sin, cos）
@@ -320,11 +328,19 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       const em = mesh(eave, towerRoof);
       em.position.y = y + 0.1;
       g.add(em);
-      const bracket = mesh(new THREE.CylinderGeometry(rr * 1.05, rr, 0.16, 8), M.red);
-      bracket.position.y = y - 0.06;
-      g.add(bracket);
+      // 檐下：一圈彩画额枋，上面每面两朵斗拱（坐斗 + 横拱），托着屋檐
+      bands.push(new THREE.CylinderGeometry(rr * 1.04, rr * 1.02, 0.16, 8).translate(0, y - 0.12, 0));
+      for (let c = 0; c < 16; c++) {
+        const th = Math.PI / 16 + (c * Math.PI) / 8;
+        const sx = Math.sin(th), sz = Math.cos(th);
+        units.push(new THREE.BoxGeometry(0.08, 0.12, 0.2).rotateY(th).translate(sx * rr * 1.13, y - 0.12, sz * rr * 1.13));
+        units.push(new THREE.BoxGeometry(0.26, 0.045, 0.06).rotateY(th).translate(sx * rr * 1.2, y - 0.085, sz * rr * 1.2));
+        for (const e of [-1, 1]) units.push(new THREE.BoxGeometry(0.055, 0.05, 0.07).rotateY(th).translate(sx * rr * 1.2 + Math.cos(th) * e * 0.11, y - 0.045, sz * rr * 1.2 - Math.sin(th) * e * 0.11));
+      }
       y += 0.26;
     }
+    g.add(mesh(mergeGeometries(bands.map((b) => b.toNonIndexed()))!, bandMat, false));
+    g.add(mesh(mergeGeometries(units.map((b) => b.toNonIndexed()))!, M.green, false));
     const spire = new THREE.Group();
     spire.add(mesh(lathe([[0, 0], [0.45, 0], [0.42, 0.25], [0, 0.32]], 12), M.gold));
     for (let k = 0; k < 7; k++) {

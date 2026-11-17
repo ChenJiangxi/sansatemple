@@ -24,13 +24,55 @@ function sideHall(def: (typeof HALLS)[number], idx: number) {
   const D = def.w; // 进深（本地 z）
   const base = 0.6;
   const colH = 4.2;
-  const plat = mesh(worldBox(L + 1.6, base, D + 1.6, 1), [M.marbleSide, M.marbleSide, M.marble, M.marble, M.marbleSide, M.marbleSide]);
-  plat.position.y = base / 2;
-  g.add(plat);
+  // 台基（小须弥座）：底下一道宽的土衬，束腰嵌浮雕板、上下一道圆线脚，台面铺石板
+  const PW = L + 1.6, PD = D + 1.6;
+  const low = mesh(worldBox(PW + 0.3, 0.14, PD + 0.3, 1), M.marbleSide);
+  low.position.y = 0.07;
+  g.add(low);
+  const waist = mesh(worldBox(PW - 0.2, base - 0.3, PD - 0.2, 1), M.marbleSide);
+  waist.position.y = 0.14 + (base - 0.3) / 2;
+  g.add(waist);
+  const top = mesh(worldBox(PW, 0.16, PD, 1), [M.marbleSide, M.marbleSide, M.slab, M.slab, M.marbleSide, M.marbleSide]);
+  top.position.y = base - 0.08;
+  g.add(top);
+  const trim: THREE.BufferGeometry[] = [];
+  const panels: THREE.BufferGeometry[] = [];
+  const wy = 0.14 + (base - 0.3) / 2, wh = base - 0.3;
+  for (const [len, rot, off] of [[PW - 0.2, 0, (PD - 0.2) / 2], [PW - 0.2, Math.PI, (PD - 0.2) / 2], [PD - 0.2, Math.PI / 2, (PW - 0.2) / 2], [PD - 0.2, -Math.PI / 2, (PW - 0.2) / 2]] as [number, number, number][]) {
+    // 一面：圆线脚两道，蜀柱和浮雕板交替；正面中间的台阶处不放
+    for (const y of [0.17, base - 0.18]) trim.push(new THREE.CylinderGeometry(0.05, 0.05, len + 0.1, 8).rotateZ(Math.PI / 2).translate(0, y, off + 0.02).rotateY(rot));
+    const n = Math.max(1, Math.round(len / 1.5)), step = len / n;
+    for (let k = 0; k <= n; k++) {
+      const u = -len / 2 + k * step;
+      const front = rot === 0;
+      if (!(front && Math.abs(u) < 2.0)) trim.push(new THREE.BoxGeometry(0.12, wh, 0.05).translate(u, wy, off + 0.02).rotateY(rot));
+      const mu = u + step / 2;
+      if (k < n && !(front && Math.abs(mu) < 2.2)) panels.push(new THREE.BoxGeometry(step - 0.2, wh * 0.6, 0.025).translate(mu, wy, off + 0.015).rotateY(rot));
+    }
+  }
+  g.add(mesh(mergeGeometries(trim.map((t) => t.toNonIndexed()))!, M.marble, false));
+  g.add(mesh(mergeGeometries(panels.map((t) => t.toNonIndexed()))!, M.relief, false));
+  // 正面台阶：两级踏步，踏步前沿一道圆棱；两侧三角形的象眼石上压斜的垂带石
   for (let k = 0; k < 2; k++) {
-    const s = mesh(worldBox(3.2, (base * (k + 1)) / 2, 0.6 * (2 - k), 1), M.marble);
-    s.position.set(0, (base * (k + 1)) / 4, D / 2 + 0.8 + 0.3 * (2 - k));
-    g.add(s);
+    const h = (base * (k + 1)) / 2, dz = 0.6 * (2 - k);
+    const st = mesh(worldBox(3.2, h, dz, 1), [M.marbleSide, M.marbleSide, M.slab, M.slab, M.marble, M.marble]);
+    st.position.set(0, h / 2, PD / 2 + dz / 2);
+    g.add(st);
+    const nose = mesh(new THREE.CylinderGeometry(0.03, 0.03, 3.2, 8).rotateZ(Math.PI / 2), M.marble, false);
+    nose.position.set(0, h - 0.03, PD / 2 + dz - 0.01);
+    g.add(nose);
+  }
+  {
+    const run = 1.2;
+    const tri = new THREE.Shape([new THREE.Vector2(PD / 2 + run, 0), new THREE.Vector2(PD / 2, 0), new THREE.Vector2(PD / 2, base)]);
+    for (const sx of [-1.82, 1.82]) {
+      const side = new THREE.ExtrudeGeometry(tri, { depth: 0.44, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(sx + 0.22, 0, 0);
+      g.add(mesh(side, M.marbleSide));
+      const cap = mesh(worldBox(0.46, 0.18, Math.hypot(run, base), 1), M.marble);
+      cap.rotation.x = Math.atan2(base, run);
+      cap.position.set(sx, base / 2 + 0.09, PD / 2 + run / 2);
+      g.add(cap);
+    }
   }
   const hx = L / 2 - 0.4;
   const hz = D / 2 - 0.4;
