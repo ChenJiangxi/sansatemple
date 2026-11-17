@@ -34,10 +34,10 @@ export const BRIDGE = { x0: -1.8, x1: 1.8, z0: 52 - 5.2 - 1.4, z1: 52 + 5.2 + 1.
 // 院中的大香炉
 export const INCENSE = { x: 0, z: 7, r: 1.2 };
 
-// 双塔
+// 双塔：七层，约 18 米高，塔顶高过大殿屋脊（能登上去看云海）
 export const PAGODAS: { x: number; z: number; s: number }[] = [
-  { x: -10, z: 15, s: 1.45 },
-  { x: 10, z: 15, s: 1.45 },
+  { x: -10, z: 15, s: 2.1 },
+  { x: 10, z: 15, s: 2.1 },
 ];
 
 // 两侧的配殿（不可进入）

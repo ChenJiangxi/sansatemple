@@ -18,6 +18,7 @@ import { IncenseSpot } from './world/incense';
 import { placeStatues } from './world/statues';
 import { PostFX } from './world/post';
 import { buildPond } from './world/pond';
+import { buildCloudSea } from './world/clouds';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
 import { buildResidents, type Role } from './residents';
@@ -154,6 +155,7 @@ async function start() {
   const nature = buildNature(scene, { renderer, heightAt: terrain.heightAt, size: terrain.size, lite: isTouch });
   const props = buildProps(scene);
   const buildings = buildBuildings(scene);
+  const clouds = buildCloudSea(scene);
   const pond = buildPond(scene, { isTouch, lanternFrom: { x: LANTERN_STAND.standX, z: LANTERN_STAND.standZ + 0.9 } });
   const life = buildLife(scene);
   const shrines = buildShrines(scene);
@@ -292,7 +294,8 @@ async function start() {
     setQuality: (q) => post.setQuality(q),
     getQuality: () => post.quality,
     statusAction: () => {
-      if (player.seat || claimed) standUp();
+      if (tower) descendPagoda();
+      else if (player.seat || claimed) standUp();
     },
     moktakStrike: () => strikeMoktak(),
     moktakAuto: () => toggleMoktakAuto(),
@@ -335,7 +338,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -729,6 +732,8 @@ async function start() {
     else if (intent === 'lantern') ui.setStatus('statusLantern');
     else if (intent === 'feed') ui.setStatus('statusFeed');
     else if (intent === 'fortune') ui.setStatus('statusFortune');
+    else if (tower) ui.setStatus('towerTop', 'towerDown');
+    else if (intent === 'climb') ui.setStatus('statusClimb');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -876,8 +881,75 @@ async function start() {
 
   // 上香时的特写镜头：在香炉斜前方，略高于小和尚，看向双手与香炉之间
   const cine = { on: false, blend: 0, pos: new THREE.Vector3(), look: new THREE.Vector3() };
-  let cineMode: null | 'incense' | 'lantern' | 'intro' = null;
-  const cineValid = () => (cineMode === 'intro' ? intro : cineMode !== null && me.action === cineMode);
+  let cineMode: null | 'incense' | 'lantern' | 'intro' | 'tower' = null;
+  const cineValid = () => (cineMode === 'intro' ? intro : cineMode === 'tower' ? !!tower : cineMode !== null && me.action === cineMode);
+
+  // —— 登塔：走到塔门前，黑一下，人就在塔顶檐下了；拖动环顾，云海在脚下。点「下塔」回到塔门前 ——
+  let tower: null | { i: number } = null;
+  const fadeEl = document.createElement('div');
+  fadeEl.className = 'fade-black';
+  ui.root.appendChild(fadeEl);
+  const pagodaDoor = (i: number) => {
+    const P = PAGODAS[i];
+    const dir = P.x < 0 ? 1 : -1;
+    // 塔门前三级石阶外沿在本地半径 2.62 处，再往外站一点
+    return { x: P.x + dir * (2.62 * 0.75 * P.s + 0.45), z: P.z, yaw: dir > 0 ? -Math.PI / 2 : Math.PI / 2 };
+  };
+  function requestClimb(i: number) {
+    if (tower) return;
+    const lv = levelOf(progress.points());
+    if (lv < PLACE_LEVEL.pagoda) {
+      const need = LEVELS[PLACE_LEVEL.pagoda];
+      ui.toast(t('placeLocked', { t: t(need.key as Key), h: t('placePagoda'), n: Math.max(1, need.at - progress.points()) }), 4800);
+      return;
+    }
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    intent = 'climb';
+    refreshStatus();
+    const d = pagodaDoor(i);
+    walkTo(d.x, d.z, () => {
+      intent = null;
+      player.x = d.x;
+      player.z = d.z;
+      player.yaw = d.yaw;
+      fadeEl.classList.add('on');
+      setTimeout(() => {
+        tower = { i };
+        me.root.visible = false;
+        cineMode = 'tower';
+        cine.on = true;
+        cine.blend = 1;
+        // 先朝山门和前山看（略偏向塔外侧），微微低头，看得到脚下的云
+        cam.yaw = PAGODAS[i].x < 0 ? 2.84 : -2.84;
+        cam.pitch = 0.5;
+        refreshStatus();
+        fadeEl.classList.remove('on');
+        audio.templeBell(0.25);
+        if (localStorage.getItem('sansa.climb') !== localToday()) {
+          localStorage.setItem('sansa.climb', localToday());
+          setTimeout(() => {
+            ui.toast(t('towerFirst'), 5200);
+            gain(15, { x: innerWidth / 2, y: innerHeight * 0.45 });
+          }, 2600);
+        }
+      }, 650);
+    });
+  }
+  function descendPagoda() {
+    if (!tower) return;
+    fadeEl.classList.add('on');
+    setTimeout(() => {
+      tower = null;
+      me.root.visible = true;
+      cine.on = false;
+      cine.blend = 0;
+      cineMode = null;
+      cam.pitch = 0.3;
+      refreshStatus();
+      fadeEl.classList.remove('on');
+    }, 650);
+  }
   function endIncenseScene() {
     cine.on = false;
     cineMode = null;
@@ -1476,6 +1548,9 @@ async function start() {
       applyLook(me, myLook);
     }
     if (sp.get('panel') === 'practice') setTimeout(() => ui.togglePanel('practice'), 1500);
+    // 调试：&climb=0|1 直接登上左（右）塔
+    const dbgClimb = Number(sp.get('climb'));
+    if (sp.has('climb') && PAGODAS[dbgClimb]) setTimeout(() => requestClimb(dbgClimb), 1200);
     // 调试：&seat=座位编号 直接坐上去（看人和蒲团、长椅贴不贴合）
     const dbgSeat = SEAT_BY_ID.get(sp.get('seat') ?? '');
     if (dbgSeat) setTimeout(() => sitAt(dbgSeat, dbgSeat.kind === 'bench' ? 'bench' : 'sit'), 1200);
@@ -1498,7 +1573,7 @@ async function start() {
     B(-gateX - 2.6, 4.4, z1 - 1.6, gateX + 2.6, 8.6, z1 + 1.6);
     for (const h of SIDE_HALLS) B(h.x - 6.3, 0, h.z - 10.3, h.x + 6.3, 9.5, h.z + 10.3);
     for (const T of [BELL, DRUM]) B(T.x - 4.7, 5.0, T.z - 4.7, T.x + 4.7, 9.2, T.z + 4.7);
-    for (const p of PAGODAS) B(p.x - 2.6, 0, p.z - 2.6, p.x + 2.6, 22, p.z + 2.6);
+    for (const p of PAGODAS) B(p.x - 1.7 * p.s, 0, p.z - 1.7 * p.s, p.x + 1.7 * p.s, 22, p.z + 1.7 * p.s);
   }
   const camHit = new THREE.Vector3();
   const camBlockers = [...hall.blockers, ...sideHalls.walls];
@@ -1541,6 +1616,16 @@ async function start() {
       const a = 0.42 * Math.sin(elapsed * 0.045) - 0.12;
       cine.pos.set(Math.sin(a) * 34, 10.5, 24 + Math.cos(a) * 34);
       cine.look.set(0, 4.2, 0);
+    }
+    if (cineMode === 'tower' && tower) {
+      // 塔顶：站在顶层檐下的外廊上，朝拖动的方向往外看；上下拖动是抬头、低头
+      const P = PAGODAS[tower.i];
+      const s = P.s * 0.75;
+      const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+      const eyeY = 9.0 * s;
+      cine.pos.set(P.x + fx * 1.15 * s, eyeY, P.z + fz * 1.15 * s);
+      const down = (cam.pitch - 0.12) * 0.75;
+      cine.look.set(cine.pos.x + fx * Math.cos(down) * 10, eyeY - Math.sin(down) * 10, cine.pos.z + fz * Math.cos(down) * 10);
     }
     cine.blend = Math.max(0, Math.min(1, cine.blend + (cine.on ? dt / 1.1 : -dt / 0.9)));
     if (cine.blend > 0) {
@@ -1595,9 +1680,13 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay || fortuneOpen || intro) return;
+    if (overlay || fortuneOpen || intro || tower) return;
     const p = pick(cx, cy);
     if (!p) return;
+    if (p.interact?.type === 'pagoda') {
+      requestClimb(p.interact.i as number);
+      return;
+    }
     if (p.interact?.type === 'seat') {
       const seat = SEAT_BY_ID.get(p.interact.id);
       if (seat) goToSeat(seat, 'sit');
@@ -1698,6 +1787,7 @@ async function start() {
     else if (it?.type === 'drum') label = t('beatDrum');
     else if (it?.type === 'lantern') label = t('tipLantern');
     else if (it?.type === 'fortune') label = t('tipFortune');
+    else if (it?.type === 'pagoda') label = t('placePagoda');
     else if (it?.type === 'pond') label = t('tipPond');
     else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
     else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
@@ -1798,7 +1888,7 @@ async function start() {
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
-    if (keys.size && !overlay) {
+    if (keys.size && !overlay && !tower) {
       const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       if (f || s) {
@@ -1958,7 +2048,7 @@ async function start() {
     }
     const lift = me.action === 'bow' || me.action === 'sit' ? (REAL ? 1.25 : 1.15) : REAL ? 1.95 : 1.5;
     placeTag(myTag, player.x, player.y + lift, player.z, 60);
-    myTag.style.visibility = overlay ? 'hidden' : 'visible';
+    myTag.style.visibility = overlay || tower ? 'hidden' : 'visible';
     for (const r of remotes.values()) {
       const y = r.monk.root.position.y + (r.a === 'bow' || r.a === 'sit' ? (REAL ? 1.25 : 1.15) : REAL ? 1.95 : 1.5);
       placeTag(r.tag, r.x, y, r.z, 24);
@@ -2006,6 +2096,7 @@ async function start() {
     updateRemotes(dt);
     separatePlayer();
     updateCamera(dt);
+    clouds.update(dt, elapsed, camera.position.y);
     nature.update(dt, elapsed);
     life.update(dt, elapsed, env.lanternLevel, camera.position);
     sunDir.copy(env.sun.position).sub(env.sun.target.position).normalize();

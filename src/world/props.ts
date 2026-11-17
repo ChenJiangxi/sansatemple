@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
-import { plaqueTexture, rng } from '../textures';
+import { plaqueTexture, rng, geshanTexture } from '../textures';
 import { mesh, worldBox, lathe } from './util';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
@@ -173,9 +173,13 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   const towerRoof = pbr('roof', { metersPerTile: 1.2, color: '#6e7270' });
   const pagodaLampMat = new THREE.MeshStandardMaterial({ color: '#d63a22', roughness: 0.6, emissive: '#ff6a2a', emissiveIntensity: 0.1 });
   const pagodaLampGeo = new THREE.SphereGeometry(0.075, 10, 8).scale(1, 1.3, 1);
-  for (const P of PAGODAS) {
+  const doorMat = new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.7 });
+  for (const [pi, P] of PAGODAS.entries()) {
     const g = new THREE.Group();
     const lampAt: THREE.Vector3[] = [];
+    // 塔整体转 22.5°，让八角塔的一面正对中轴线；塔门开在这一面，门前三级石阶
+    const doorSide = P.x < 0 ? 0 : 2; // 下面开窗的四个方向里，朝中轴线的那一个
+    const doorTh = (P.x < 0 ? Math.PI / 2 : -Math.PI / 2) - Math.PI / 8; // 塔的本地朝向（sin, cos）
     const baseG = mesh(new THREE.CylinderGeometry(2.0, 2.2, 0.7, 8), stoneMat);
     baseG.position.y = 0.35;
     g.add(baseG);
@@ -187,6 +191,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       body.position.y = y + hh / 2;
       g.add(body);
       for (let d = 0; d < 4; d++) {
+        if (k === 0 && d === doorSide) continue;
         const a = (d / 4) * Math.PI * 2 + Math.PI / 8;
         const win = mesh(new THREE.PlaneGeometry(rr * 0.45, hh * 0.55), M.redDark, false);
         win.position.set(Math.cos(a) * (rr * 0.93), y + hh * 0.48, Math.sin(a) * (rr * 0.93));
@@ -238,8 +243,41 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       lampAt.forEach((p, i) => lamps.setMatrixAt(i, m4.makeTranslation(p.x, p.y, p.z)));
       g.add(lamps);
     }
+    // 塔门：两扇格扇门，外面一圈朱红门框
+    {
+      const ap = 1.3 * Math.cos(Math.PI / 8) + 0.01;
+      const ox = Math.sin(doorTh), oz = Math.cos(doorTh);
+      const tx = Math.cos(doorTh), tz = -Math.sin(doorTh);
+      for (const side of [-1, 1]) {
+        const leaf = mesh(new THREE.PlaneGeometry(0.4, 1.25), doorMat, false);
+        leaf.position.set(ox * ap + tx * side * 0.205, 0.7 + 0.625, oz * ap + tz * side * 0.205);
+        leaf.rotation.y = doorTh;
+        g.add(leaf);
+      }
+      const frame = new THREE.Group();
+      for (const [w, h, x, y] of [[0.08, 1.38, -0.45, 0.69], [0.08, 1.38, 0.45, 0.69], [0.98, 0.1, 0, 1.33]] as [number, number, number, number][]) {
+        const b = mesh(worldBox(w, h, 0.06, 1), M.red, false);
+        b.position.set(x, 0.7 + y, 0);
+        frame.add(b);
+      }
+      frame.position.set(ox * ap, 0, oz * ap);
+      frame.rotation.y = doorTh;
+      g.add(frame);
+      // 门前石阶：从塔基外沿往外三级
+      for (let st = 0; st < 3; st++) {
+        const h = 0.7 * (3 - st) / 3;
+        const step = mesh(worldBox(1.3, h, 0.2, 1), stoneMat);
+        const r = 2.12 + st * 0.2;
+        step.position.set(ox * r, h / 2, oz * r);
+        step.rotation.y = doorTh;
+        g.add(step);
+      }
+    }
+    g.rotation.y = Math.PI / 8;
     g.scale.setScalar(P.s * 0.75);
     g.position.set(P.x, 0, P.z);
+    g.traverse((o) => (o.userData.interact = { type: 'pagoda', i: pi }));
+    interactives.push(g);
     group.add(g);
   }
 

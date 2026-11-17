@@ -352,7 +352,7 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
 
   // —— 绕塔：两位僧人拨着念珠各绕一座塔，塔始终在右手边，每绕一圈在塔前合十 ——
   for (const [i, pg] of PAGODAS.entries()) {
-    const R = 3.3;
+    const R = 1.65 * pg.s + 1.0;
     const pts: P[] = [];
     for (let k = 1; k <= 16; k++) {
       const a = Math.PI / 2 + (k / 16) * Math.PI * 2;

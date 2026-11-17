@@ -339,3 +339,7 @@ canvas.main.point { cursor: pointer; }
 .quest-pill b { color: #b3261e; font-weight: 600; margin-right: 6px; }
 .tag .title { margin: 0 5px 0 2px; color: #8a5a1c; font-weight: 600; }
 @media (max-width: 560px) { .quest-pill { top: calc(104px + var(--safe-t)); left: 12px; font-size: 12px; } }
+
+/* 登塔、下塔时黑一下 */
+.fade-black { position: absolute; inset: 0; z-index: 7; background: #0d0b09; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
+.fade-black.on { opacity: 1; pointer-events: auto; }
