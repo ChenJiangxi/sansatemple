@@ -25,7 +25,28 @@ interface Save {
   lastVisit?: string;
   points?: number; // 累计功德点
   quests?: { day: string; state: Record<string, QuestSave> };
+  daily?: { day: string; c: Record<string, number>; got: string[] }; // 今天各种功课的次数、已领的功课奖励
+  reading?: Record<string, ReadSave>; // 经藏：每部经读到哪一页、读完几遍
 }
+export interface ReadSave {
+  last: number; // 上次读到第几页（下次从这里接着读）
+  seen: number[]; // 这一遍已经读过的页
+  times: number; // 读完几遍
+  total?: number; // 一共几页（第一次打开时记下，经藏列表画进度条用）
+  day?: string; // 今天读过、给过功德的页
+  paid?: number[];
+}
+
+// 今日功课：每天本地零点重置。做到 need 次自动给 reward 功德；全部做完再加 DAILY_BONUS
+export const DAILY: { id: string; need: number; reward: number; lv?: number }[] = [
+  { id: 'bow', need: 10, reward: 8 },
+  { id: 'incense', need: 1, reward: 5 },
+  { id: 'moktak', need: 30, reward: 6 },
+  { id: 'beads', need: 108, reward: 8 },
+  { id: 'read', need: 3, reward: 6 },
+  { id: 'sutra', need: 5, reward: 6, lv: 3 }, // 藏经阁开放（比丘）以后才有
+];
+export const DAILY_BONUS = 20;
 export interface QuestSave {
   phase: 'active' | 'ready' | 'done'; // 接了、做完待回禀、已回禀
   got: number[]; // 已完成的目标编号
@@ -49,7 +70,7 @@ const KEY = 'sansa.progress';
 let data: Save = { seals: {}, merit: {} };
 try {
   const raw = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (raw && typeof raw === 'object') data = { seals: raw.seals || {}, merit: raw.merit || {}, fortune: raw.fortune, lastVisit: raw.lastVisit, points: raw.points || 0, quests: raw.quests };
+  if (raw && typeof raw === 'object') data = { seals: raw.seals || {}, merit: raw.merit || {}, fortune: raw.fortune, lastVisit: raw.lastVisit, points: raw.points || 0, quests: raw.quests, daily: raw.daily, reading: raw.reading || {} };
 } catch {
   /* 存档坏了就从头开始 */
 }
@@ -86,6 +107,43 @@ export const progress = {
   },
   add(k: MeritKey, n = 1) {
     data.merit[k] = (data.merit[k] || 0) + n;
+    tickDaily(k, n);
+    save();
+  },
+  // 今天做了几次（功课进度）
+  today(k: string) {
+    return data.daily && data.daily.day === today() ? data.daily.c[k] || 0 : 0;
+  },
+  tick(k: string, n = 1) {
+    tickDaily(k, n);
+    save();
+  },
+  // 功课做满了、还没领的：返回这些功课（调用方给功德、放提示），并记为已领
+  claimDaily(lv: number): { id: string; reward: number }[] {
+    const d = dailyState();
+    const out: { id: string; reward: number }[] = [];
+    for (const q of DAILY) {
+      if ((q.lv ?? 0) > lv || d.got.includes(q.id) || (d.c[q.id] || 0) < q.need) continue;
+      d.got.push(q.id);
+      out.push({ id: q.id, reward: q.reward });
+    }
+    const all = DAILY.filter((q) => (q.lv ?? 0) <= lv);
+    if (out.length && !d.got.includes('all') && all.every((q) => d.got.includes(q.id))) {
+      d.got.push('all');
+      out.push({ id: 'all', reward: DAILY_BONUS });
+    }
+    if (out.length) save();
+    return out;
+  },
+  dailyGot(id: string) {
+    return data.daily && data.daily.day === today() ? data.daily.got.includes(id) : false;
+  },
+  // 经藏：每部经的阅读进度
+  reading(id: string): ReadSave {
+    data.reading ??= {};
+    return (data.reading[id] ??= { last: 0, seen: [], times: 0 });
+  },
+  saveReading() {
     save();
   },
   merit(k: MeritKey) {
@@ -127,6 +185,15 @@ export const progress = {
     save();
   },
 };
+
+function dailyState() {
+  if (!data.daily || data.daily.day !== today()) data.daily = { day: today(), c: {}, got: [] };
+  return data.daily;
+}
+function tickDaily(k: string, n: number) {
+  const d = dailyState();
+  d.c[k] = (d.c[k] || 0) + n;
+}
 
 export function levelOf(points: number) {
   let i = 0;

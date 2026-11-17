@@ -334,11 +334,11 @@ canvas.main.point { cursor: pointer; }
 .quest-mark.giver.ready { background: #fff1c8; }
 @keyframes questBob { 50% { margin-top: -5px; } }
 .quest-pill {
-  position: absolute; left: 16px; top: calc(64px + var(--safe-t)); z-index: 3; height: 34px; padding: 0 14px; gap: 8px; font-size: 12.5px; white-space: nowrap;
+  position: absolute; left: 16px; top: calc(106px + var(--safe-t)); z-index: 2; height: 34px; padding: 0 14px; gap: 8px; font-size: 12.5px; white-space: nowrap;
 }
 .quest-pill b { color: #b3261e; font-weight: 600; margin-right: 6px; }
 .tag .title { margin: 0 5px 0 2px; color: #8a5a1c; font-weight: 600; }
-@media (max-width: 560px) { .quest-pill { top: calc(104px + var(--safe-t)); left: 12px; font-size: 12px; } }
+@media (max-width: 560px) { .quest-pill { top: calc(146px + var(--safe-t)); left: 12px; font-size: 12px; } }
 
 /* 登塔、下塔时黑一下 */
 .fade-black { position: absolute; inset: 0; z-index: 7; background: #0d0b09; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
@@ -377,3 +377,60 @@ canvas.main.point { cursor: pointer; }
 .sutra-scroll footer { display: flex; gap: 10px; }
 .sutra-scroll .pill-btn { display: inline-flex; align-items: center; text-decoration: none; background: rgba(244, 236, 218, 0.92); }
 .sutra-scroll .pill-btn.primary { background: #b3261e; }
+
+/* —— 左上角常驻的修行进度：称号、到下一级的进度条、今日功课 —— */
+.practice-chip { position: absolute; left: 16px; top: calc(64px + var(--safe-t)); z-index: 2; height: 34px; padding: 0 12px; gap: 8px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.practice-chip b { font-weight: 600; letter-spacing: 1px; }
+.practice-chip .chip-bar { display: block; width: 64px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.22); overflow: hidden; }
+.practice-chip .chip-bar i { display: block; height: 100%; background: linear-gradient(90deg, #e2b45c, #f3d38a); }
+.practice-chip small { font-size: 11.5px; opacity: 0.85; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .practice-chip { top: calc(104px + var(--safe-t)); left: 12px; } }
+
+/* 修行面板的分页 */
+.practice-tabs { display: flex; gap: 4px; margin: 0 0 10px; padding: 3px; border-radius: 999px; background: rgba(0, 0, 0, 0.05); }
+.practice-tabs button { flex: 1; height: 30px; border-radius: 999px; font: inherit; font-size: 12.5px; color: var(--ink-muted); background: none; cursor: pointer; }
+.practice-tabs button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1); }
+.practice-note { margin: 6px 2px 4px; font-size: 12px; line-height: 1.6; color: var(--ink-muted); }
+.daily-list, .sutra-list, .rules-list { list-style: none; margin: 0; padding: 0 !important; display: flex; flex-direction: column; gap: 6px; }
+.daily-list li { display: grid; grid-template-columns: 1fr auto auto; grid-template-areas: 'name n go' 'bar r go'; align-items: center; gap: 3px 10px; padding: 6px 2px; border-bottom: 1px dashed rgba(0, 0, 0, 0.07); }
+.daily-list .daily-name { grid-area: name; font-size: 13px; }
+.daily-list small { grid-area: n; font-size: 11.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.daily-list .practice-bar { grid-area: bar; height: 4px; }
+.daily-list em { grid-area: r; font-style: normal; font-size: 11.5px; color: #a34a3a; }
+.daily-list button { grid-area: go; }
+.daily-list li.done .daily-name { color: var(--ink-muted); text-decoration: line-through; text-decoration-color: rgba(0, 0, 0, 0.25); }
+.pill-btn.small { height: 28px; padding: 0 12px; font-size: 12px; }
+.sutra-list button { width: 100%; display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.035); text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.sutra-list button:hover:not(:disabled) { background: rgba(0, 0, 0, 0.06); }
+.sutra-list b { font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 15px; font-weight: 600; letter-spacing: 1px; }
+.sutra-list small { font-size: 11.5px; color: var(--ink-muted); }
+.sutra-list .practice-bar { height: 4px; }
+.sutra-list button.locked { opacity: 0.5; cursor: default; }
+.rules-list li { font-size: 12.5px; line-height: 1.55; padding: 5px 2px; border-bottom: 1px dashed rgba(0, 0, 0, 0.07); }
+
+/* —— 经藏：读经的书页 —— */
+.reader { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 14px; background: rgba(12, 10, 8, 0.45); }
+.reader[hidden] { display: none; }
+.reader-sheet {
+  width: min(94vw, 560px); height: min(88vh, 760px); display: flex; flex-direction: column; border-radius: 6px; color: #2e2219;
+  background: #f4ecda linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(0, 0, 0, 0.035)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42), inset 0 0 0 6px #f4ecda, inset 0 0 0 7px rgba(176, 58, 40, 0.5);
+}
+.reader-sheet header { display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px 22px; }
+.reader-sheet header div { flex: 1; min-width: 0; }
+.reader-sheet h2 { margin: 0; font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 20px; font-weight: 600; letter-spacing: 2px; }
+.reader-sheet header small { display: block; margin-top: 2px; font-size: 12px; color: #8a6e58; }
+.reader-sheet header .icon-btn { color: #6a5340; }
+.reader-body { flex: 1; overflow-y: auto; padding: 8px 26px 12px; font-family: 'Songti SC', 'STSong', 'Noto Serif CJK SC', serif; font-size: 18px; line-height: 2; letter-spacing: 0.5px; touch-action: pan-y; }
+.reader-body h3 { margin: 4px 0 10px; font-size: 16px; color: #a34a3a; letter-spacing: 2px; }
+.reader-body p { margin: 0 0 12px; text-indent: 2em; }
+.reader-body p.verse { text-indent: 0; display: flex; flex-wrap: wrap; column-gap: 1.2em; padding-left: 1em; }
+.reader-body p.verse span { white-space: nowrap; }
+.reader-wait { color: #8a6e58; text-indent: 0 !important; }
+.reader-sheet footer { display: flex; align-items: center; gap: 10px; padding: 10px 16px 16px; }
+.reader-prog { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.reader-prog span { width: 100%; height: 4px; border-radius: 2px; background: rgba(120, 60, 30, 0.15); overflow: hidden; }
+.reader-prog i { display: block; height: 100%; background: #b3261e; }
+.reader-prog small { font-size: 11.5px; color: #8a6e58; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .reader-body { font-size: 17px; line-height: 1.9; padding: 6px 20px 10px; } }
+/* 面板要压在左上角的称号条、寺务条上面 */
+.panel { z-index: 5; }

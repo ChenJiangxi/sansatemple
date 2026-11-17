@@ -1,6 +1,7 @@
 // 新增的界面：开场标题、寺游印谱（印章画在 canvas 上）、得印的盖章动画、签文卡片
 import { t, type Key } from './i18n';
-import { SEALS, progress, LEVELS, levelOf, PLACE_LEVEL, type SealId, type MeritKey } from './progress';
+import { SEALS, progress, LEVELS, levelOf, PLACE_LEVEL, DAILY, DAILY_BONUS, type SealId, type MeritKey } from './progress';
+import { SUTRA_LIST } from './reader';
 import { ROBES, BEADS, type Look } from './looks';
 import { LOTS, NUMERALS } from './fortune';
 
@@ -281,89 +282,170 @@ export function serviceChip(parent: HTMLElement, onGo: () => void) {
   };
 }
 
-// —— 修行面板：称号与功德进度、每一级开放什么、衣钵（僧袍和念珠，没到等级的锁着） ——
-export function practicePanel(look: Look, onPick: (l: Look) => void): HTMLElement {
+// —— 修行面板：四页。进度（称号与功德、今日功课、修行之路）、经藏（六部经的阅读进度）、规则（怎样积功德）、衣钵 ——
+export type PracticeTab = 'progress' | 'sutras' | 'rules' | 'look';
+export interface PracticeCtx {
+  tab: PracticeTab;
+  onTab(t: PracticeTab): void;
+  look: Look;
+  onPick(l: Look): void;
+  onRead(id: string): void;
+  onGo(dailyId: string): void;
+  script: 't' | 's';
+}
+const RULES: Key[] = ['rule_bow', 'rule_incense', 'rule_bell', 'rule_moktak', 'rule_beads', 'rule_offer', 'rule_service', 'rule_quest', 'rule_halls', 'rule_climb', 'rule_copy', 'rule_read', 'rule_daily'];
+
+export function practicePanel(c: PracticeCtx): HTMLElement {
   const pts = progress.points();
   const lv = levelOf(pts);
   const wrap = document.createElement('div');
   wrap.className = 'practice';
-  const head = document.createElement('div');
-  head.className = 'practice-head';
-  const next = LEVELS[lv + 1];
-  const k = next ? (pts - LEVELS[lv].at) / (next.at - LEVELS[lv].at) : 1;
-  head.innerHTML = `<b>${t(LEVELS[lv].key as Key)}</b><span>${t('practicePoints', { n: pts })}</span>
-    <div class="practice-bar"><i style="width:${(k * 100).toFixed(1)}%"></i></div>
-    <small>${next ? t('practiceNext', { t: t(next.key as Key), n: next.at - pts }) : t('practiceMax')}</small>`;
-  wrap.appendChild(head);
+  const tabs = document.createElement('div');
+  tabs.className = 'practice-tabs';
+  tabs.setAttribute('role', 'tablist');
+  for (const [k, key] of [['progress', 'tabProgress'], ['sutras', 'tabSutras'], ['rules', 'tabRules'], ['look', 'practiceWardrobe']] as [PracticeTab, Key][]) {
+    const b = document.createElement('button');
+    b.textContent = t(key);
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(c.tab === k));
+    b.className = c.tab === k ? 'on' : '';
+    b.onclick = () => c.onTab(k);
+    tabs.appendChild(b);
+  }
+  wrap.appendChild(tabs);
+  const h3 = (key: Key, vars?: Record<string, string | number>) => {
+    const h = document.createElement('h3');
+    h.textContent = t(key, vars);
+    return h;
+  };
+  const bar = (k: number) => `<div class="practice-bar"><i style="width:${(Math.min(1, k) * 100).toFixed(1)}%"></i></div>`;
 
-  // 修行之路：每一级的称号、门槛，以及这一级开放的地方和衣钵
-  const path = document.createElement('ol');
-  path.className = 'practice-path';
-  const places: [number, Key][] = [
-    [PLACE_LEVEL.guanyin, 'hallGuanyin'],
-    [PLACE_LEVEL.dizang, 'hallDizang'],
-    [PLACE_LEVEL.library, 'placeLibrary'],
-    [PLACE_LEVEL.pagoda, 'placePagoda'],
-  ];
-  LEVELS.forEach((L, i) => {
-    if (i === 0) return;
-    const li = document.createElement('li');
-    li.className = i <= lv ? 'got' : '';
-    const gets = [
-      ...places.filter(([n]) => n === i).map(([, key]) => t(key)),
-      ...ROBES.filter((r) => r.lv === i).map((r) => t(`robe_${r.id}` as Key)),
-      ...BEADS.filter((b) => b.lv === i).map((b) => t(`bead_${b.id}` as Key)),
-    ];
-    li.innerHTML = `<b>${t(L.key as Key)}</b><small>${L.at}</small><span>${gets.join(' · ')}</span>`;
-    path.appendChild(li);
-  });
-  const h1 = document.createElement('h3');
-  h1.textContent = t('practicePath');
-  wrap.append(h1, path);
-
-  // 衣钵
-  const h2 = document.createElement('h3');
-  h2.textContent = t('practiceWardrobe');
-  wrap.appendChild(h2);
-  const row = (label: Key, items: { id: string; lv: number; sw: string; name: string }[], cur: string, pick: (id: string) => void) => {
-    const box = document.createElement('div');
-    box.className = 'look-row';
-    const lab = document.createElement('span');
-    lab.className = 'look-label';
-    lab.textContent = t(label);
+  if (c.tab === 'progress') {
+    const head = document.createElement('div');
+    head.className = 'practice-head';
+    const next = LEVELS[lv + 1];
+    const k = next ? (pts - LEVELS[lv].at) / (next.at - LEVELS[lv].at) : 1;
+    head.innerHTML = `<b>${t(LEVELS[lv].key as Key)}</b><span>${t('practicePoints', { n: pts })}</span>${bar(k)}
+      <small>${next ? t('practiceNext', { t: t(next.key as Key), n: next.at - pts }) : t('practiceMax')}</small>`;
+    wrap.appendChild(head);
+    // 今日功课
+    wrap.appendChild(h3('dailyTitle'));
     const ul = document.createElement('ul');
-    for (const it of items) {
-      const open = it.lv <= lv;
-      const b = document.createElement('button');
-      b.className = `look-sw${it.id === cur ? ' on' : ''}${open ? '' : ' locked'}`;
-      b.disabled = !open;
-      b.title = open ? it.name : `${it.name} · ${t('unlockAt', { t: t(LEVELS[it.lv].key as Key) })}`;
-      b.setAttribute('aria-label', b.title);
-      b.setAttribute('aria-pressed', String(it.id === cur));
-      b.innerHTML = `<i style="background:${it.sw}"></i><small>${open ? it.name : t(LEVELS[it.lv].key as Key)}</small>`;
-      b.onclick = () => pick(it.id);
+    ul.className = 'daily-list';
+    for (const q of DAILY) {
+      if ((q.lv ?? 0) > lv) continue;
+      const n = Math.min(q.need, progress.today(q.id));
+      const done = progress.dailyGot(q.id) || n >= q.need;
       const li = document.createElement('li');
+      li.className = done ? 'done' : '';
+      li.innerHTML = `<span class="daily-name">${t(`daily_${q.id}` as Key)}</span><small>${n}/${q.need}</small>${bar(n / q.need)}<em>+${q.reward}</em>`;
+      const go = document.createElement('button');
+      go.className = 'pill-btn small';
+      go.textContent = done ? '✓' : t('dailyGo');
+      go.disabled = done;
+      go.onclick = () => c.onGo(q.id);
+      li.appendChild(go);
+      ul.appendChild(li);
+    }
+    wrap.appendChild(ul);
+    const note = document.createElement('p');
+    note.className = 'practice-note';
+    note.textContent = t('dailyNote', { n: DAILY_BONUS });
+    wrap.appendChild(note);
+    // 修行之路：每一级的称号、门槛，以及这一级开放的地方、经书和衣钵
+    const path = document.createElement('ol');
+    path.className = 'practice-path';
+    const places: [number, Key][] = [
+      [PLACE_LEVEL.guanyin, 'hallGuanyin'],
+      [PLACE_LEVEL.dizang, 'hallDizang'],
+      [PLACE_LEVEL.library, 'placeLibrary'],
+      [PLACE_LEVEL.pagoda, 'placePagoda'],
+    ];
+    LEVELS.forEach((L, i) => {
+      if (i === 0) return;
+      const li = document.createElement('li');
+      li.className = i <= lv ? 'got' : '';
+      const gets = [
+        ...places.filter(([n]) => n === i).map(([, key]) => t(key)),
+        ...SUTRA_LIST.filter((x) => x.lv === i).map((x) => `《${x.title[c.script]}》`),
+        ...ROBES.filter((r) => r.lv === i).map((r) => t(`robe_${r.id}` as Key)),
+        ...BEADS.filter((b) => b.lv === i).map((b) => t(`bead_${b.id}` as Key)),
+      ];
+      li.innerHTML = `<b>${t(L.key as Key)}</b><small>${L.at}</small><span>${gets.join(' · ')}</span>`;
+      path.appendChild(li);
+    });
+    wrap.append(h3('practicePath'), path);
+  } else if (c.tab === 'sutras') {
+    const ul = document.createElement('ul');
+    ul.className = 'sutra-list';
+    for (const x of SUTRA_LIST) {
+      const open = x.lv <= lv;
+      const r = progress.reading(x.id);
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = open ? '' : 'locked';
+      b.disabled = !open;
+      const pct = r.total ? Math.round((r.seen.length / r.total) * 100) : 0;
+      const status = !open ? t('sutraOpenAt', { t: t(LEVELS[x.lv].key as Key) }) : r.times ? `${t('sutraTimes', { n: r.times })}${pct ? ' · ' + t('sutraPct', { p: pct }) : ''}` : pct ? t('sutraPct', { p: pct }) : t('sutraUnread');
+      b.innerHTML = `<b>《${x.title[c.script]}》</b><small>${status}</small>${open ? bar(pct / 100) : ''}`;
+      b.onclick = () => c.onRead(x.id);
       li.appendChild(b);
       ul.appendChild(li);
     }
-    box.append(lab, ul);
-    return box;
-  };
-  wrap.appendChild(
-    row(
-      'robeLabel',
-      ROBES.map((r) => ({ id: r.id, lv: r.lv, name: t(`robe_${r.id}` as Key), sw: `linear-gradient(135deg, ${r.robe} 0 48%, ${r.kasaya.border} 48% 56%, ${r.kasaya.base} 56%)` })),
-      look.robe,
-      (id) => onPick({ ...look, robe: id })
-    )
-  );
-  wrap.appendChild(
-    row(
-      'beadsLabel',
-      BEADS.map((b) => ({ id: b.id, lv: b.lv, name: t(`bead_${b.id}` as Key), sw: `radial-gradient(circle at 35% 30%, #fff8 0 12%, ${b.color} 40%)` })),
-      look.beads,
-      (id) => onPick({ ...look, beads: id })
-    )
-  );
+    wrap.appendChild(ul);
+  } else if (c.tab === 'rules') {
+    const p = document.createElement('p');
+    p.className = 'practice-note';
+    p.textContent = t('rulesIntro');
+    const ul = document.createElement('ul');
+    ul.className = 'rules-list';
+    for (const k of RULES) {
+      const li = document.createElement('li');
+      li.textContent = t(k);
+      ul.appendChild(li);
+    }
+    wrap.append(p, ul);
+  } else {
+    const row = (label: Key, items: { id: string; lv: number; sw: string; name: string }[], cur: string, pick: (id: string) => void) => {
+      const box = document.createElement('div');
+      box.className = 'look-row';
+      const lab = document.createElement('span');
+      lab.className = 'look-label';
+      lab.textContent = t(label);
+      const ul = document.createElement('ul');
+      for (const it of items) {
+        const open = it.lv <= lv;
+        const b = document.createElement('button');
+        b.className = `look-sw${it.id === cur ? ' on' : ''}${open ? '' : ' locked'}`;
+        b.disabled = !open;
+        b.title = open ? it.name : `${it.name} · ${t('unlockAt', { t: t(LEVELS[it.lv].key as Key) })}`;
+        b.setAttribute('aria-label', b.title);
+        b.setAttribute('aria-pressed', String(it.id === cur));
+        b.innerHTML = `<i style="background:${it.sw}"></i><small>${open ? it.name : t(LEVELS[it.lv].key as Key)}</small>`;
+        b.onclick = () => pick(it.id);
+        const li = document.createElement('li');
+        li.appendChild(b);
+        ul.appendChild(li);
+      }
+      box.append(lab, ul);
+      return box;
+    };
+    wrap.appendChild(
+      row(
+        'robeLabel',
+        ROBES.map((r) => ({ id: r.id, lv: r.lv, name: t(`robe_${r.id}` as Key), sw: `linear-gradient(135deg, ${r.robe} 0 48%, ${r.kasaya.border} 48% 56%, ${r.kasaya.base} 56%)` })),
+        c.look.robe,
+        (id) => c.onPick({ ...c.look, robe: id })
+      )
+    );
+    wrap.appendChild(
+      row(
+        'beadsLabel',
+        BEADS.map((b) => ({ id: b.id, lv: b.lv, name: t(`bead_${b.id}` as Key), sw: `radial-gradient(circle at 35% 30%, #fff8 0 12%, ${b.color} 40%)` })),
+        c.look.beads,
+        (id) => c.onPick({ ...c.look, beads: id })
+      )
+    );
+  }
   return wrap;
 }

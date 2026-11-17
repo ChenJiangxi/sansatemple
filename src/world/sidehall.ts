@@ -421,6 +421,14 @@ function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, de
     g.add(mesh(mergeGeometries(frame.map((x) => x.toNonIndexed()))!, M.red, false));
     g.add(mesh(mergeGeometries(shades)!, silk, false));
   }
+  // 点后墙的经橱：翻阅经藏
+  {
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(d.hx * 2 - 0.4, 2.7, 0.9), hitMat);
+    hit.position.set(0, fy + 1.35, -d.hz + 0.5);
+    hit.userData.interact = { type: 'sutraShelf' };
+    g.add(hit);
+    deskHits.push(hit);
+  }
   const paper = new THREE.MeshStandardMaterial({ color: '#f1e8d2', roughness: 0.95 });
   const ink = new THREE.MeshStandardMaterial({ color: '#1a1614', roughness: 0.35 });
   const mat = new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.95 });

@@ -8,7 +8,7 @@ import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
 import { furnishSideHalls, LAMPS } from './world/sidehall';
 import { floatText, Rhythm, Charge, leafPile, waterRing, type QuestDef } from './play';
-import { LEVELS, levelOf, PLACE_LEVEL } from './progress';
+import { LEVELS, levelOf, PLACE_LEVEL, DAILY } from './progress';
 import { ROBES, BEADS, savedLook, saveLook, lookCode, parseLook, type Look } from './looks';
 import { preloadTreeTextures } from './world/ez-textures';
 import { loadHead, REAL } from './body-real';
@@ -20,6 +20,7 @@ import { PostFX } from './world/post';
 import { buildPond } from './world/pond';
 import { buildCloudSea } from './world/clouds';
 import { SutraCopy } from './sutra';
+import { Reader } from './reader';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
 import { buildResidents, type Role } from './residents';
@@ -303,6 +304,20 @@ async function start() {
     moktakClose: () => closeMoktak(),
     rosaryClose: () => closeRosary(),
     getLook: () => myLook,
+    readSutra: (id) => {
+      ui.closePanel();
+      reader.show(id);
+    },
+    dailyGo: (id) => {
+      ui.closePanel();
+      if (id === 'bow') toggleBow();
+      else if (id === 'incense') requestIncense('yard');
+      else if (id === 'moktak') openMoktak();
+      else if (id === 'beads') openRosary();
+      else if (id === 'read') ui.openPractice('sutras');
+      else if (id === 'sutra') requestSutra(1);
+    },
+    getScript: () => (localStorage.getItem('sansa.script') as 't' | 's' | null) ?? (getLang() === 'zh' ? 's' : 't'),
     setLook: (l) => {
       myLook = savedLook(progress.points());
       const lv = levelOf(progress.points());
@@ -560,6 +575,7 @@ async function start() {
       sayText(id, t(tx.thanks));
       const m = residents.list[id].monk.root.position;
       gain(o.q.reward, screenOf(m.x, m.y + 1.6, m.z));
+      progress.tick('quest');
       audio.bell(0.4);
     } else sayText(id, t(tx.remind));
     questPill();
@@ -690,7 +706,7 @@ async function start() {
           setTimeout(() => ui.practiceBtn.classList.remove('ping'), 900);
         }, 8000);
     }
-    ui.refreshPractice();
+    refreshPracticeHud();
   }
 
   function refreshHalls(animate: boolean) {
@@ -971,6 +987,59 @@ async function start() {
     },
     getName: () => name,
   });
+  // —— 经藏：读经。一页读过今天第一次给 1 功德（每天前 40 页），读完一部 10，第一次读完 30 ——
+  const reader = new Reader(
+    ui.root,
+    {
+      onPage: (first) => {
+        progress.tick('read');
+        if (first && progress.today('read') <= 40) gain(1, { x: innerWidth / 2, y: innerHeight * 0.14 });
+      },
+      onFinish: (first, n, title) => {
+        audio.bell(0.35);
+        ui.toast(first ? t('readFinishFirst', { s: title }) : t('readFinish', { s: title, n }), 4600);
+        gain(first ? 30 : 10, { x: innerWidth / 2, y: innerHeight * 0.3 });
+      },
+      onClose: () => ui.refreshPractice(),
+    },
+    getLang() === 'zh'
+  );
+
+  // —— 今日功课：每秒看一次做满了没有；做满的给功德、放提示；左上角的进度条跟着刷新 ——
+  let dailySig = '';
+  function refreshPracticeHud() {
+    const pts = progress.points();
+    const lv = levelOf(pts);
+    const next = LEVELS[lv + 1];
+    const tasks = DAILY.filter((q) => (q.lv ?? 0) <= lv);
+    ui.setPractice({
+      title: t(LEVELS[lv].key as Key),
+      pts,
+      k: next ? (pts - LEVELS[lv].at) / (next.at - LEVELS[lv].at) : 1,
+      daily: tasks.filter((q) => progress.dailyGot(q.id) || progress.today(q.id) >= q.need).length,
+      dailyAll: tasks.length,
+    });
+  }
+  function checkDaily() {
+    const lv = levelOf(progress.points());
+    const got = progress.claimDaily(lv);
+    got.forEach((g, i) =>
+      setTimeout(() => {
+        audio.bell(0.25);
+        ui.toast(g.id === 'all' ? t('dailyAllDone', { n: g.reward }) : t('dailyGot', { x: t(`daily_${g.id}` as Key), n: g.reward }), 3800);
+        gain(g.reward, { x: 120, y: 90 });
+      }, i * 1600)
+    );
+    const sig = DAILY.map((q) => progress.today(q.id)).join(',') + '|' + progress.points();
+    if (sig !== dailySig) {
+      dailySig = sig;
+      refreshPracticeHud();
+      if (got.length || !reader.open) ui.refreshPractice();
+    }
+  }
+  setInterval(checkDaily, 1000);
+  refreshPracticeHud();
+
   function requestSutra(k: number) {
     if (!sideHallOpen[2]) {
       hallClick('hallDoor', 2);
@@ -1608,7 +1677,10 @@ async function start() {
       myLook = { robe: dbgLook[0], beads: dbgLook[1] };
       applyLook(me, myLook);
     }
-    if (sp.get('panel') === 'practice') setTimeout(() => ui.togglePanel('practice'), 1500);
+    if (sp.get('panel') === 'practice') setTimeout(() => ui.openPractice((sp.get('ptab') as 'progress' | 'sutras' | 'rules' | 'look' | null) ?? 'progress'), 1500);
+    // 调试：&read=经的编号 直接打开读经
+    const dbgRead = sp.get('read');
+    if (dbgRead) setTimeout(() => reader.show(dbgRead), 1500);
     // 调试：&climb=0|1 直接登上左（右）塔
     const dbgClimb = Number(sp.get('climb'));
     if (sp.has('climb') && PAGODAS[dbgClimb]) setTimeout(() => requestClimb(dbgClimb), 1200);
@@ -1763,7 +1835,7 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay || fortuneOpen || intro || tower || sutra.open) return;
+    if (overlay || fortuneOpen || intro || tower || sutra.open || reader.open) return;
     const p = pick(cx, cy);
     if (!p) return;
     if (p.interact?.type === 'pagoda') {
@@ -1772,6 +1844,10 @@ async function start() {
     }
     if (p.interact?.type === 'sutraDesk') {
       requestSutra(p.interact.desk as number);
+      return;
+    }
+    if (p.interact?.type === 'sutraShelf') {
+      ui.openPractice('sutras');
       return;
     }
     if (p.interact?.type === 'seat') {
@@ -1876,6 +1952,7 @@ async function start() {
     else if (it?.type === 'fortune') label = t('tipFortune');
     else if (it?.type === 'pagoda') label = t('placePagoda');
     else if (it?.type === 'sutraDesk') label = t('tipDesk');
+    else if (it?.type === 'sutraShelf') label = t('tipShelf');
     else if (it?.type === 'pond') label = t('tipPond');
     else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
     else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
@@ -1976,7 +2053,7 @@ async function start() {
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
-    if (keys.size && !overlay && !tower && !sutra.open) {
+    if (keys.size && !overlay && !tower && !sutra.open && !reader.open) {
       const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       if (f || s) {

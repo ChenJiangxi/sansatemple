@@ -1,6 +1,6 @@
 // 界面层：顶部两组胶囊按钮、底部动作栏、提示与面板。全部原生 DOM。
 import { t, getLang, setLang, onLangChange, LANG_LABELS, type Lang, type Key } from './i18n';
-import { sealBook, practicePanel } from './ui-extra';
+import { sealBook, practicePanel, type PracticeTab } from './ui-extra';
 import type { Look } from './looks';
 
 const svg = (body: string, size = 20) =>
@@ -56,6 +56,9 @@ export interface UIHandlers {
   langChanged(): void;
   getLook(): Look;
   setLook(l: Look): void;
+  readSutra(id: string): void;
+  dailyGo(id: string): void;
+  getScript(): 't' | 's';
 }
 
 export interface Visitor {
@@ -142,6 +145,9 @@ export class UI {
     this.countBtn = el('button', 'count-btn');
     this.countBtn.onclick = () => this.togglePanel('visitors', this.countBtn);
     left.append(this.exitBtn, el('span', 'sep'), this.roomBtn, this.countBtn);
+    // 左上角常驻：称号、到下一级的功德进度、今日功课几项完成；点开修行面板
+    this.practiceChip = el('button', 'pill practice-chip');
+    this.practiceChip.onclick = () => this.openPractice('progress');
     // 右上：声音 | 设置
     const right = el('div', 'pill top-right');
     this.soundBtn = el('button', 'icon-btn', ICON.soundOff);
@@ -151,7 +157,7 @@ export class UI {
     this.sealsBtn = el('button', 'icon-btn', ICON.seal);
     this.sealsBtn.onclick = () => this.togglePanel('seals', this.sealsBtn);
     this.practiceBtn = el('button', 'icon-btn', ICON.practice);
-    this.practiceBtn.onclick = () => this.togglePanel('practice', this.practiceBtn);
+    this.practiceBtn.onclick = () => (this.panelKind === 'practice' ? this.closePanel() : this.openPractice(this.practiceTab));
     right.append(this.practiceBtn, this.sealsBtn, this.soundBtn, this.settingsBtn);
     this.chantBtn = el('button', 'pill chant-btn');
     this.chantBtn.onclick = () => this.h.toggleChant();
@@ -226,7 +232,7 @@ export class UI {
     this.farewell.innerHTML = `<span class="mark">${ICON.temple}</span><h1></h1><p></p><button class="stay-btn"></button>`;
     (this.farewell.querySelector('.stay-btn') as HTMLButtonElement).onclick = () => this.h.stay();
 
-    r.append(left, right, this.chantBtn, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.caption, this.farewell);
+    r.append(left, this.practiceChip, right, this.chantBtn, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.caption, this.farewell);
 
     // 模糊层要在主场景之上、特写画布之下
     const parent = r.parentElement!;
@@ -235,7 +241,7 @@ export class UI {
     document.addEventListener('pointerdown', (e) => {
       if (!this.panelKind) return;
       const tgt = e.target as Node;
-      if (this.panel.contains(tgt) || this.roomBtn.contains(tgt) || this.countBtn.contains(tgt) || this.settingsBtn.contains(tgt) || this.sealsBtn.contains(tgt) || this.practiceBtn.contains(tgt)) return;
+      if (this.panel.contains(tgt) || this.roomBtn.contains(tgt) || this.countBtn.contains(tgt) || this.settingsBtn.contains(tgt) || this.sealsBtn.contains(tgt) || this.practiceBtn.contains(tgt) || this.practiceChip.contains(tgt)) return;
       this.closePanel();
     });
     // 提示几秒后淡出
@@ -386,6 +392,19 @@ export class UI {
     setTimeout(() => this.hint.classList.add('fade'), 9000);
   }
 
+  practiceTab: PracticeTab = 'progress';
+  practiceChip!: HTMLButtonElement;
+  openPractice(tab: PracticeTab) {
+    this.practiceTab = tab;
+    if (this.panelKind === 'practice') this.renderPanel();
+    else this.togglePanel('practice', this.practiceChip);
+  }
+  // 左上角的称号进度条
+  setPractice(o: { title: string; k: number; pts: number; daily: number; dailyAll: number }) {
+    this.practiceChip.innerHTML = `<b>${o.title}</b><i class="chip-bar"><i style="width:${(Math.min(1, o.k) * 100).toFixed(1)}%"></i></i><small>${t('hudDaily', { n: o.daily, m: o.dailyAll })}</small>`;
+    this.practiceChip.setAttribute('aria-label', `${t('practiceTitle')} · ${o.title} · ${t('practicePoints', { n: o.pts })}`);
+  }
+
   // 修行面板开着时，功德变了就刷新
   refreshPractice() {
     if (this.panelKind === 'practice') this.renderPanel();
@@ -469,9 +488,20 @@ export class UI {
       p.setAttribute('aria-label', t('practiceTitle'));
       p.appendChild(this.header(t('practiceTitle')));
       p.appendChild(
-        practicePanel(this.h.getLook(), (l) => {
-          this.h.setLook(l);
-          this.renderPanel();
+        practicePanel({
+          tab: this.practiceTab,
+          onTab: (k) => {
+            this.practiceTab = k;
+            this.renderPanel();
+          },
+          look: this.h.getLook(),
+          onPick: (l) => {
+            this.h.setLook(l);
+            this.renderPanel();
+          },
+          onRead: (id) => this.h.readSutra(id),
+          onGo: (id) => this.h.dailyGo(id),
+          script: this.h.getScript(),
         })
       );
     } else if (this.panelKind === 'seals') {
