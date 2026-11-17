@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { REAL, R, buildRealGeo, loadHead } from './body-real';
+import { ROBES, type RobeLook, type BeadLook } from './looks';
 
 
 export type Action =
@@ -184,23 +185,23 @@ const SCALP = '#cfa58d'; // 剃过的头顶，比脸色略青
 const SHOE = '#3b2a20';
 
 // 福田衣：一条条竖向布块，每条再分成长短两截、上下错开（田相），缝线细而暗，上下有一道缘边
-function fieldRobeTexture() {
+function fieldRobeTexture(k: RobeLook['kasaya'] = ROBES[0].kasaya) {
   const W = 512, H = 256;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
   const g = c.getContext('2d')!;
-  g.fillStyle = '#8a3420';
+  g.fillStyle = k.base;
   g.fillRect(0, 0, W, H);
   const strips = 7, sw = W / strips;
   const seam = (x0: number, y0: number, x1: number, y1: number) => {
-    g.strokeStyle = 'rgba(70,22,10,0.85)';
+    g.strokeStyle = k.seam;
     g.lineWidth = 3;
     g.beginPath();
     g.moveTo(x0, y0);
     g.lineTo(x1, y1);
     g.stroke();
-    g.strokeStyle = 'rgba(196,110,70,0.45)';
+    g.strokeStyle = k.light;
     g.lineWidth = 1;
     g.beginPath();
     g.moveTo(x0 + 2, y0 + 2);
@@ -223,7 +224,7 @@ function fieldRobeTexture() {
   }
   // 缘：上下边一道暗金色的边
   for (const y of [0, H - 16]) {
-    g.fillStyle = '#a8743a';
+    g.fillStyle = k.border;
     g.fillRect(0, y, W, 16);
     g.fillStyle = 'rgba(60,20,8,0.6)';
     g.fillRect(0, y === 0 ? 16 : H - 18, W, 2);
@@ -526,6 +527,46 @@ function geo() {
   return (sharedGeo ??= buildGeo());
 }
 
+// 衣钵：每种僧袍、念珠各一套材质，在默认材质上改颜色和贴图（写实身体的布纹设置也一并带上）
+const lookCache = new Map<string, THREE.Material>();
+function lookMat(key: string, make: () => THREE.Material) {
+  let m = lookCache.get(key);
+  if (!m) lookCache.set(key, (m = make()));
+  return m;
+}
+function robeMats(r: RobeLook) {
+  const S = mats();
+  if (r.id === ROBES[0].id) return { robe: S.robe, lining: S.lining, kasaya: S.kasaya };
+  return {
+    robe: lookMat(`robe-${r.id}`, () => {
+      const m = (S.robe as THREE.MeshPhysicalMaterial).clone();
+      m.color.set(r.robe);
+      m.sheenColor.set(r.sheen);
+      return m;
+    }),
+    lining: lookMat(`lining-${r.id}`, () => {
+      const m = (S.lining as THREE.MeshStandardMaterial).clone();
+      m.color.set(r.lining);
+      return m;
+    }),
+    kasaya: lookMat(`kasaya-${r.id}`, () => {
+      const m = (S.kasaya as THREE.MeshPhysicalMaterial).clone();
+      m.map = fieldRobeTexture(r.kasaya);
+      return m;
+    }),
+  };
+}
+function beadMat(b: BeadLook) {
+  const S = mats();
+  if (b.id === 'sandal') return S.bead;
+  return lookMat(`bead-${b.id}`, () => {
+    const m = (S.bead as THREE.MeshStandardMaterial).clone();
+    m.color.set(b.color);
+    m.roughness = b.rough;
+    return m;
+  });
+}
+
 // 身份：玩家（黄海青、红袈裟）、常住僧（褐色常服，不披袈裟）、老和尚（深黄海青、红袈裟，个子略大）、
 // 小沙弥（浅灰常服，个子小一圈）
 export type MonkStyle = 'guest' | 'resident' | 'elder' | 'novice';
@@ -723,6 +764,28 @@ export class Monk {
     blob.position.y = 0.02;
     blob.renderOrder = 1;
     this.root.add(blob);
+  }
+
+  // 换僧袍、念珠（只有香客/玩家这一种身份能换）
+  private lookSlots: Record<'robe' | 'lining' | 'kasaya' | 'bead', THREE.Mesh[]> | null = null;
+  setLook(r: RobeLook, b: BeadLook) {
+    if (this.style !== 'guest') return;
+    if (!this.lookSlots) {
+      const S = mats();
+      const slots: Record<'robe' | 'lining' | 'kasaya' | 'bead', THREE.Mesh[]> = { robe: [], lining: [], kasaya: [], bead: [] };
+      this.root.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh) return;
+        for (const k of ['robe', 'lining', 'kasaya', 'bead'] as const) if (m.material === S[k]) slots[k].push(m);
+      });
+      this.lookSlots = slots;
+    }
+    const rm = robeMats(r);
+    for (const m of this.lookSlots.robe) m.material = rm.robe;
+    for (const m of this.lookSlots.lining) m.material = rm.lining;
+    for (const m of this.lookSlots.kasaya) m.material = rm.kasaya;
+    const bm = beadMat(b);
+    for (const m of this.lookSlots.bead) m.material = bm;
   }
 
   // 真实比例的身体：关节位置按 body-real.ts 的尺寸摆

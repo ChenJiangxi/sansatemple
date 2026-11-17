@@ -20,6 +20,7 @@ const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'mokt
 const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
 const LANTERN_MAX = 30;
 const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d)$/;
+const LOOK_RE = /^[a-z]{2,10}\.[a-z]{2,10}\.[0-6]$/;
 const PLACES = new Set(['yard', 'altar']);
 
 const MIME = {
@@ -241,7 +242,7 @@ wss.on('connection', (ws) => {
         return;
       }
       room = r;
-      me = { id: crypto.randomBytes(6).toString('hex'), ws, name: cleanName(msg.name), x: 0, z: 22, yaw: Math.PI, a: 'idle', s: null, n: 0 };
+      me = { id: crypto.randomBytes(6).toString('hex'), ws, name: cleanName(msg.name), x: 0, z: 22, yaw: Math.PI, a: 'idle', s: null, n: 0, k: '' };
       room.players.set(me.id, me);
       send(ws, { t: 'welcome', id: me.id, room: id, capacity: CAPACITY });
       send(ws, incenseMsg(room));
@@ -257,6 +258,8 @@ wss.on('connection', (ws) => {
         me.yaw = num(msg.yaw, -100, 100);
         me.a = ACTIONS.has(msg.a) ? msg.a : 'idle';
         me.n = Math.floor(num(msg.n, 0, 100000));
+        // 衣钵与等级：只收「小写字母.小写字母.0-6」这种格式
+        if (typeof msg.k === 'string' && LOOK_RE.test(msg.k)) me.k = msg.k;
         if (msg.s === null || (typeof msg.s === 'string' && me.s === msg.s)) me.s = msg.s ?? null;
         break;
       case 'name':
@@ -325,7 +328,7 @@ setInterval(() => {
     room.lanterns = room.lanterns.filter((l) => l.until > now);
     if (room.lanterns.length !== lb) broadcast(room, lanternMsg(room));
     if (!room.players.size) continue;
-    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n]);
+    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n, q.k]);
     broadcast(room, { t: 'snap', p });
   }
 }, TICK_MS);

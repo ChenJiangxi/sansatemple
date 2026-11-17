@@ -193,6 +193,33 @@ canvas.main.point { cursor: pointer; }
 .icon-btn.ping { animation: ping 0.9s ease; }
 @keyframes ping { 30% { transform: scale(1.25); color: #f0b35c; } }
 
+/* —— 修行：称号进度、修行之路、衣钵 —— */
+.panel-practice { right: 14px; width: min(92vw, 400px); }
+.practice { padding: 0 16px 8px; max-height: min(72vh, 660px); overflow-y: auto; }
+.practice-head { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 8px; margin-bottom: 4px; }
+.practice-head b { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+.practice-head span { font-size: 13px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.practice-bar { grid-column: 1 / -1; height: 6px; border-radius: 3px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+.practice-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #c9963e, #e2b45c); }
+.practice-head small { grid-column: 1 / -1; font-size: 12px; color: var(--ink-muted); }
+.practice h3 { margin: 14px 0 6px; font-size: 13px; font-weight: 600; }
+.practice-path { list-style: none; margin: 0; padding: 0 !important; display: flex; flex-direction: column; gap: 2px; }
+.practice-path li { display: grid; grid-template-columns: 3.6em 3.4em 1fr; gap: 8px; align-items: baseline; padding: 5px 2px; border-bottom: 1px dashed rgba(0, 0, 0, 0.07); font-size: 12.5px; color: var(--ink-muted); }
+.practice-path li b { font-weight: 600; }
+.practice-path li small { font-variant-numeric: tabular-nums; font-size: 11px; }
+.practice-path li.got { color: var(--ink); }
+.practice-path li.got b { color: #a34a3a; }
+.look-row { display: grid; grid-template-columns: 2.6em 1fr; gap: 8px; align-items: start; margin-bottom: 8px; }
+.look-label { font-size: 12.5px; padding-top: 12px; color: var(--ink-muted); }
+.look-row ul { list-style: none; margin: 0; padding: 0 !important; display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+.look-sw { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px; border: 1.5px solid transparent; border-radius: 10px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.look-sw i { width: 34px; height: 34px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.look-sw small { font-size: 10.5px; line-height: 1.25; text-align: center; }
+.look-sw.on { border-color: #c9963e; background: rgba(201, 150, 62, 0.1); }
+.look-sw.locked { cursor: default; opacity: 0.42; }
+.look-sw.locked i { filter: grayscale(0.8); }
+.look-sw:not(.locked):hover { background: rgba(0, 0, 0, 0.04); }
+
 /* 得印：先重重盖下来，再缩小飞走 */
 .seal-pop { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; pointer-events: none; z-index: 8; }
 .seal-pop img { width: 168px; height: 168px; opacity: 0; transform: scale(1.9) rotate(-8deg); transition: transform 0.32s cubic-bezier(0.2, 1.4, 0.4, 1), opacity 0.2s ease; filter: drop-shadow(0 6px 18px rgba(60, 10, 0, 0.45)); }

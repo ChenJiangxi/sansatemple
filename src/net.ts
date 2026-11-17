@@ -10,6 +10,7 @@ export interface RemoteState {
   a: Action;
   s: string | null; // 占用的座位
   n: number; // 今天的礼拜数
+  k?: string; // 衣钵与等级：僧袍.念珠.等级（旧版客户端没有）
 }
 
 export interface RoomInfo {
@@ -134,7 +135,7 @@ export class Net {
         case 'snap':
           this.emit(
             'snapshot',
-            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7] }))
+            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7], k: typeof p[8] === 'string' ? p[8] : undefined }))
           );
           break;
         case 'leave':
@@ -195,16 +196,16 @@ export class Net {
     if (this.online) this.ws!.send(JSON.stringify(obj));
   }
 
-  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number }) {
+  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number; k: string }) {
     const now = performance.now();
     const r = (v: number) => Math.round(v * 100) / 100;
-    const key = `${r(s.x)},${r(s.z)},${r(s.yaw)},${s.a},${s.s},${s.n}`;
+    const key = `${r(s.x)},${r(s.z)},${r(s.yaw)},${s.a},${s.s},${s.n},${s.k}`;
     // 状态没变就不发；变了最多每秒 10 次
     if (key === this.lastSent && now - this.lastSentAt < 3000) return;
     if (now - this.lastSentAt < 100) return;
     this.lastSent = key;
     this.lastSentAt = now;
-    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n });
+    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n, k: s.k });
   }
 
   setName(name: string) {

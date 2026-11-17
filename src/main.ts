@@ -8,7 +8,8 @@ import { buildHall } from './world/hall';
 import { buildNature } from './world/nature';
 import { furnishSideHalls, LAMPS } from './world/sidehall';
 import { floatText, Rhythm, Charge, leafPile, waterRing, type QuestDef } from './play';
-import { LEVELS, levelOf } from './progress';
+import { LEVELS, levelOf, PLACE_LEVEL } from './progress';
+import { ROBES, BEADS, savedLook, saveLook, lookCode, parseLook, type Look } from './looks';
 import { preloadTreeTextures } from './world/ez-textures';
 import { loadHead, REAL } from './body-real';
 import { buildProps } from './world/props';
@@ -185,7 +186,7 @@ async function start() {
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
   interactives.push(...sideHalls.interactives, ...sideHalls.doorHits);
-  const HALL_LEVEL = [1, 2];
+  const HALL_LEVEL = [PLACE_LEVEL.guanyin, PLACE_LEVEL.dizang];
   const HALL_NAME = ['hallGuanyin', 'hallDizang'] as const;
   const lampKey = 'sansa.lamps';
   const lampsToday = () => {
@@ -219,6 +220,9 @@ async function start() {
   const svcShift = sp0.has('svc') ? Number(sp0.get('svc')) - ((Date.now() / 1000) % 3600) : 0;
   loadUiFonts();
 
+  // 衣钵：选好的僧袍和念珠（没到等级的不会被选中）
+  let myLook: Look = savedLook(progress.points());
+  const applyLook = (m: Monk, l: Look) => m.setLook(ROBES.find((r) => r.id === l.robe) ?? ROBES[0], BEADS.find((b) => b.id === l.beads) ?? BEADS[0]);
   const ui = new UI(app, {
     dock: (k) => {
       if (k === 'bow') toggleBow();
@@ -294,8 +298,18 @@ async function start() {
     moktakAuto: () => toggleMoktakAuto(),
     moktakClose: () => closeMoktak(),
     rosaryClose: () => closeRosary(),
+    getLook: () => myLook,
+    setLook: (l) => {
+      myLook = savedLook(progress.points());
+      const lv = levelOf(progress.points());
+      if (ROBES.some((r) => r.id === l.robe && r.lv <= lv)) myLook.robe = l.robe;
+      if (BEADS.some((b) => b.id === l.beads && b.lv <= lv)) myLook.beads = l.beads;
+      saveLook(myLook);
+      applyLook(me, myLook);
+    },
     langChanged: () => {
       renderMyTag();
+      for (const r of remotes.values()) renderRemoteTag(r);
       refreshStatus();
       ui.setMoktak(!!moktakAuto, moktakCount);
       ui.setRosary(beadCount);
@@ -310,6 +324,7 @@ async function start() {
   // —— 玩家 ——
   const me = new Monk();
   scene.add(me.root);
+  applyLook(me, myLook);
   const player = {
     x: SPAWN.x, z: SPAWN.z, yaw: SPAWN.yaw, y: 0,
     route: [] as { x: number; z: number }[],
@@ -659,7 +674,19 @@ async function start() {
       floatText(ui.root, innerWidth / 2, innerHeight * 0.4, t('levelUp', { t: title }), 'levelup');
       ui.toast(t('levelUp', { t: title }), 5000);
       setTimeout(() => refreshHalls(true), 2500);
+      // 这一级有新的僧袍或念珠：过一会儿提示去「修行」里换
+      const fresh = [
+        ...ROBES.filter((x) => x.lv > r.before && x.lv <= r.after).map((x) => t(`robe_${x.id}` as Key)),
+        ...BEADS.filter((x) => x.lv > r.before && x.lv <= r.after).map((x) => t(`bead_${x.id}` as Key)),
+      ];
+      if (fresh.length)
+        setTimeout(() => {
+          ui.toast(t('newLook', { x: fresh.join('、') }), 5600);
+          ui.practiceBtn.classList.add('ping');
+          setTimeout(() => ui.practiceBtn.classList.remove('ping'), 900);
+        }, 8000);
     }
+    ui.refreshPractice();
   }
 
   function refreshHalls(animate: boolean) {
@@ -1280,6 +1307,10 @@ async function start() {
   interface Remote {
     id: string; name: string; monk: Monk; tag: HTMLDivElement;
     x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number; a: Action; s: string | null; n: number;
+    k: string; lv: number; // 衣钵与等级（旧版客户端没有，lv 为 -1）
+  }
+  function renderRemoteTag(r: Remote) {
+    r.tag.innerHTML = (r.lv >= 0 ? `<span class="title">${t(LEVELS[r.lv].key as Key)}</span>` : '') + escapeHtml(r.name);
   }
   const remotes = new Map<string, Remote>();
   function removeRemote(id: string) {
@@ -1305,12 +1336,16 @@ async function start() {
         const tag = document.createElement('div');
         tag.className = 'tag other';
         ui.tags.appendChild(tag);
-        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n };
+        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n, k: '', lv: -1 };
         remotes.set(p.id, r);
       }
-      if (r.name !== p.name) {
+      if (r.name !== p.name || r.k !== (p.k ?? '')) {
         r.name = p.name;
-        r.tag.textContent = p.name;
+        r.k = p.k ?? '';
+        const L = parseLook(p.k);
+        if (L) applyLook(r.monk, L);
+        r.lv = L ? L.lv : -1;
+        renderRemoteTag(r);
       }
       r.tx = p.x;
       r.tz = p.z;
@@ -1434,6 +1469,13 @@ async function start() {
     if (sp.has('hideme')) me.root.scale.setScalar(0.001);
     const rt = Number(sp.get('routine'));
     if (sp.has('routine') && Number.isFinite(rt)) residents.setDebugTime(rt);
+    // 调试：&look=僧袍.念珠 换衣钵（要先有够的功德）；&panel=practice 打开修行面板
+    const dbgLook = sp.get('look')?.split('.');
+    if (dbgLook?.length === 2) {
+      myLook = { robe: dbgLook[0], beads: dbgLook[1] };
+      applyLook(me, myLook);
+    }
+    if (sp.get('panel') === 'practice') setTimeout(() => ui.togglePanel('practice'), 1500);
     // 调试：&seat=座位编号 直接坐上去（看人和蒲团、长椅贴不贴合）
     const dbgSeat = SEAT_BY_ID.get(sp.get('seat') ?? '');
     if (dbgSeat) setTimeout(() => sitAt(dbgSeat, dbgSeat.kind === 'bench' ? 'bench' : 'sit'), 1200);
@@ -1991,7 +2033,7 @@ async function start() {
     post.render(dt / slowmo);
     stage.render(dt);
     updateTags();
-    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday });
+    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())) });
     if (!booted) {
       booted = true;
       bootEl.classList.add('gone');

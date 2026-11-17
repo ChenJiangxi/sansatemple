@@ -42,6 +42,9 @@ export const LEVELS: { at: number; key: string }[] = [
   { at: 8000, key: 'lv6' },
 ];
 
+// 各处地方几级开放（LEVELS 的下标）：观音殿、地藏殿、藏经阁、登塔
+export const PLACE_LEVEL = { guanyin: 1, dizang: 2, library: 3, pagoda: 4 } as const;
+
 const KEY = 'sansa.progress';
 let data: Save = { seals: {}, merit: {} };
 try {

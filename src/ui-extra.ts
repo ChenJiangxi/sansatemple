@@ -1,6 +1,7 @@
 // 新增的界面：开场标题、寺游印谱（印章画在 canvas 上）、得印的盖章动画、签文卡片
 import { t, type Key } from './i18n';
-import { SEALS, progress, type SealId, type MeritKey } from './progress';
+import { SEALS, progress, LEVELS, levelOf, PLACE_LEVEL, type SealId, type MeritKey } from './progress';
+import { ROBES, BEADS, type Look } from './looks';
 import { LOTS, NUMERALS } from './fortune';
 
 const fontUrl = (f: string) => `url(${new URL(`fonts/${f}`, document.baseURI).toString()})`;
@@ -277,4 +278,91 @@ export function serviceChip(parent: HTMLElement, onGo: () => void) {
       btn.textContent = go ?? '';
     },
   };
+}
+
+// —— 修行面板：称号与功德进度、每一级开放什么、衣钵（僧袍和念珠，没到等级的锁着） ——
+export function practicePanel(look: Look, onPick: (l: Look) => void): HTMLElement {
+  const pts = progress.points();
+  const lv = levelOf(pts);
+  const wrap = document.createElement('div');
+  wrap.className = 'practice';
+  const head = document.createElement('div');
+  head.className = 'practice-head';
+  const next = LEVELS[lv + 1];
+  const k = next ? (pts - LEVELS[lv].at) / (next.at - LEVELS[lv].at) : 1;
+  head.innerHTML = `<b>${t(LEVELS[lv].key as Key)}</b><span>${t('practicePoints', { n: pts })}</span>
+    <div class="practice-bar"><i style="width:${(k * 100).toFixed(1)}%"></i></div>
+    <small>${next ? t('practiceNext', { t: t(next.key as Key), n: next.at - pts }) : t('practiceMax')}</small>`;
+  wrap.appendChild(head);
+
+  // 修行之路：每一级的称号、门槛，以及这一级开放的地方和衣钵
+  const path = document.createElement('ol');
+  path.className = 'practice-path';
+  const places: [number, Key][] = [
+    [PLACE_LEVEL.guanyin, 'hallGuanyin'],
+    [PLACE_LEVEL.dizang, 'hallDizang'],
+    [PLACE_LEVEL.library, 'placeLibrary'],
+    [PLACE_LEVEL.pagoda, 'placePagoda'],
+  ];
+  LEVELS.forEach((L, i) => {
+    if (i === 0) return;
+    const li = document.createElement('li');
+    li.className = i <= lv ? 'got' : '';
+    const gets = [
+      ...places.filter(([n]) => n === i).map(([, key]) => t(key)),
+      ...ROBES.filter((r) => r.lv === i).map((r) => t(`robe_${r.id}` as Key)),
+      ...BEADS.filter((b) => b.lv === i).map((b) => t(`bead_${b.id}` as Key)),
+    ];
+    li.innerHTML = `<b>${t(L.key as Key)}</b><small>${L.at}</small><span>${gets.join(' · ')}</span>`;
+    path.appendChild(li);
+  });
+  const h1 = document.createElement('h3');
+  h1.textContent = t('practicePath');
+  wrap.append(h1, path);
+
+  // 衣钵
+  const h2 = document.createElement('h3');
+  h2.textContent = t('practiceWardrobe');
+  wrap.appendChild(h2);
+  const row = (label: Key, items: { id: string; lv: number; sw: string; name: string }[], cur: string, pick: (id: string) => void) => {
+    const box = document.createElement('div');
+    box.className = 'look-row';
+    const lab = document.createElement('span');
+    lab.className = 'look-label';
+    lab.textContent = t(label);
+    const ul = document.createElement('ul');
+    for (const it of items) {
+      const open = it.lv <= lv;
+      const b = document.createElement('button');
+      b.className = `look-sw${it.id === cur ? ' on' : ''}${open ? '' : ' locked'}`;
+      b.disabled = !open;
+      b.title = open ? it.name : `${it.name} · ${t('unlockAt', { t: t(LEVELS[it.lv].key as Key) })}`;
+      b.setAttribute('aria-label', b.title);
+      b.setAttribute('aria-pressed', String(it.id === cur));
+      b.innerHTML = `<i style="background:${it.sw}"></i><small>${open ? it.name : t(LEVELS[it.lv].key as Key)}</small>`;
+      b.onclick = () => pick(it.id);
+      const li = document.createElement('li');
+      li.appendChild(b);
+      ul.appendChild(li);
+    }
+    box.append(lab, ul);
+    return box;
+  };
+  wrap.appendChild(
+    row(
+      'robeLabel',
+      ROBES.map((r) => ({ id: r.id, lv: r.lv, name: t(`robe_${r.id}` as Key), sw: `linear-gradient(135deg, ${r.robe} 0 48%, ${r.kasaya.border} 48% 56%, ${r.kasaya.base} 56%)` })),
+      look.robe,
+      (id) => onPick({ ...look, robe: id })
+    )
+  );
+  wrap.appendChild(
+    row(
+      'beadsLabel',
+      BEADS.map((b) => ({ id: b.id, lv: b.lv, name: t(`bead_${b.id}` as Key), sw: `radial-gradient(circle at 35% 30%, #fff8 0 12%, ${b.color} 40%)` })),
+      look.beads,
+      (id) => onPick({ ...look, beads: id })
+    )
+  );
+  return wrap;
 }
