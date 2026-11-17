@@ -254,7 +254,7 @@ wss.on('connection', (ws) => {
     switch (msg.t) {
       case 'state':
         me.x = num(msg.x, -46, 46);
-        me.z = num(msg.z, -38, 70);
+        me.z = num(msg.z, -52, 70);
         me.yaw = num(msg.yaw, -100, 100);
         me.a = ACTIONS.has(msg.a) ? msg.a : 'idle';
         me.n = Math.floor(num(msg.n, 0, 100000));

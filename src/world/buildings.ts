@@ -1,14 +1,14 @@
 // 配殿（观音殿、地藏殿）与钟楼、鼓楼：朱红柱、格扇门、彩画梁、带鸱吻的屋顶
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SIDE_HALLS, BELL, DRUM } from '../layout';
+import { HALLS, BELL, DRUM } from '../layout';
 import { plaqueTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
 import { buildTempleBell } from './bronze';
 import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
 import { pbr } from './pbr';
 
-const plaqueNames = ['觀音殿', '地藏殿'];
+const plaqueNames = ['觀音殿', '地藏殿', '藏經閣'];
 
 function plaqueMesh(text: string, width: number) {
   const M = chineseMats();
@@ -17,7 +17,7 @@ function plaqueMesh(text: string, width: number) {
   return mesh(new THREE.BoxGeometry(width, h, 0.12), [M.gold, M.gold, M.gold, M.gold, new THREE.MeshStandardMaterial({ map: plaqueTexture(text), roughness: 0.5, metalness: 0.2 }), M.redDark]);
 }
 
-function sideHall(def: (typeof SIDE_HALLS)[number], idx: number) {
+function sideHall(def: (typeof HALLS)[number], idx: number) {
   const M = chineseMats();
   const g = new THREE.Group();
   const L = def.d; // 面阔（本地 x）
@@ -98,14 +98,89 @@ function sideHall(def: (typeof SIDE_HALLS)[number], idx: number) {
   fill.position.y = colTop + 0.6;
   g.add(fill);
   beamRing(g, 0, 0, hx, hz, colTop, M, 1.0);
-  g.add(buildRoof({ cx: 0, cz: 0, W: hx + 2.2, D: hz + 2.2, rx: hx * 0.55, eaveY: colTop + 1.2, ridgeY: colTop + 4.4, lift: 0.9, ornate: true }));
-  const plaque = plaqueMesh(plaqueNames[idx % 2], 2.6);
-  plaque.position.set(0, colTop - 0.05, hz + 0.32);
-  plaque.rotation.x = -0.08;
-  g.add(plaque);
+  if (idx === 2) upperStorey(g, hx, hz, colTop);
+  else {
+    g.add(buildRoof({ cx: 0, cz: 0, W: hx + 2.2, D: hz + 2.2, rx: hx * 0.55, eaveY: colTop + 1.2, ridgeY: colTop + 4.4, lift: 0.9, ornate: true }));
+    const plaque = plaqueMesh(plaqueNames[idx], 2.6);
+    plaque.position.set(0, colTop - 0.05, hz + 0.32);
+    plaque.rotation.x = -0.08;
+    g.add(plaque);
+  }
   g.position.set(def.x, 0, def.z);
   g.rotation.y = def.yaw;
   return { g, doors, walls };
+}
+
+// 藏经阁的二层：一圈腰檐，上面是带栏杆的外廊（平座），再起一层小一圈的阁楼，匾额挂在二层檐下
+function upperStorey(g: THREE.Group, hx: number, hz: number, colTop: number) {
+  const M = chineseMats();
+  g.add(buildRoof({ cx: 0, cz: 0, W: hx + 1.8, D: hz + 1.8, rx: hx * 0.62, eaveY: colTop + 1.0, ridgeY: colTop + 1.7, lift: 0.6 }));
+  // 平座下的斗拱带，挡住腰檐和二层地板之间的空当
+  const band = mesh(new THREE.BoxGeometry(hx * 2 + 0.6, 0.55, hz * 2 + 0.6), M.green);
+  band.position.y = colTop + 1.32;
+  g.add(band);
+  const fy = colTop + 1.8;
+  const floor = mesh(worldBox(hx * 2 + 0.8, 0.22, hz * 2 + 0.8, 1), M.redDark);
+  floor.position.y = fy - 0.11;
+  g.add(floor);
+  const ux = hx - 0.9, uz = hz - 0.9, ch = 3.0;
+  const colGeo = meterUV(new THREE.CylinderGeometry(0.2, 0.22, ch, 14), 1.3, ch);
+  for (const x of [-ux, -ux / 2, 0, ux / 2, ux])
+    for (const z of [-uz, uz]) {
+      const c = mesh(colGeo, M.red);
+      c.position.set(x, fy + ch / 2, z);
+      g.add(c);
+    }
+  // 正面一排格扇窗，背面和两侧是红墙
+  const win: THREE.BufferGeometry[] = [];
+  const bays = 4, bw = (ux * 2) / bays;
+  for (let i = 0; i < bays; i++)
+    for (let k = 0; k < 4; k++) {
+      const w = (bw - 0.4) / 4;
+      const leaf = new THREE.BoxGeometry(w - 0.03, ch - 0.7, 0.1);
+      leaf.translate(-ux + i * bw + 0.2 + w * (k + 0.5), fy + (ch - 0.7) / 2, uz);
+      win.push(leaf);
+    }
+  g.add(mesh(mergeGeometries(win), M.geshan));
+  const back = mesh(worldBox(ux * 2, ch, 0.25, 1), M.redWall);
+  back.position.set(0, fy + ch / 2, -uz);
+  g.add(back);
+  for (const sx of [-1, 1]) {
+    const w = mesh(worldBox(0.25, ch, uz * 2, 1), M.redWall);
+    w.position.set(sx * ux, fy + ch / 2, 0);
+    g.add(w);
+  }
+  // 外廊栏杆：一圈望柱，上下两道扶手
+  const rail: THREE.BufferGeometry[] = [];
+  const ex = hx + 0.3, ez = hz + 0.3;
+  const side = (x0: number, z0: number, x1: number, z1: number) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(len / 1.3));
+    for (let i = 0; i <= n; i++) {
+      const p = new THREE.BoxGeometry(0.1, 0.85, 0.1);
+      p.translate(x0 + ((x1 - x0) * i) / n, fy + 0.42, z0 + ((z1 - z0) * i) / n);
+      rail.push(p);
+    }
+    for (const [y, h] of [[0.8, 0.07], [0.35, 0.05]]) {
+      const b = new THREE.BoxGeometry(Math.abs(x1 - x0) + 0.07, h, Math.abs(z1 - z0) + 0.07);
+      b.translate((x0 + x1) / 2, fy + y, (z0 + z1) / 2);
+      rail.push(b);
+    }
+  };
+  side(-ex, ez, ex, ez);
+  side(-ex, -ez, ex, -ez);
+  side(-ex, -ez, -ex, ez);
+  side(ex, -ez, ex, ez);
+  g.add(mesh(mergeGeometries(rail), M.red));
+  const top = fy + ch;
+  const fill = mesh(new THREE.BoxGeometry(ux * 2 + 0.2, 0.8, uz * 2 + 0.2), M.green);
+  fill.position.y = top + 0.5;
+  g.add(fill);
+  beamRing(g, 0, 0, ux, uz, top, M, 1.0);
+  g.add(buildRoof({ cx: 0, cz: 0, W: ux + 2.1, D: uz + 2.1, rx: ux * 0.55, eaveY: top + 1.05, ridgeY: top + 3.7, lift: 0.9, ornate: true }));
+  const plaque = plaqueMesh('藏經閣', 2.8);
+  plaque.position.set(0, top - 0.1, uz + 0.32);
+  plaque.rotation.x = -0.08;
+  g.add(plaque);
 }
 
 export interface StrikeBuild {
@@ -404,7 +479,7 @@ function drumTower(group: THREE.Group): StrikeBuild {
 
 export function buildBuildings(scene: THREE.Scene) {
   const group = new THREE.Group();
-  const halls = SIDE_HALLS.map((d, i) => {
+  const halls = HALLS.map((d, i) => {
     const h = sideHall(d, i);
     group.add(h.g);
     return h;

@@ -1,6 +1,6 @@
 // 本地存档：寺游印谱（十二处印）、功德簿（各种功课的累计次数）、今天求到的签。都存在 localStorage。
 export type SealId = 'gate' | 'bow' | 'incense' | 'bell' | 'drum' | 'moktak' | 'beads' | 'sit' | 'bridge' | 'koi' | 'lantern' | 'fortune';
-export type MeritKey = 'bow' | 'incense' | 'moktak' | 'beads' | 'bell' | 'drum' | 'lantern' | 'koi' | 'visits' | 'service';
+export type MeritKey = 'bow' | 'incense' | 'moktak' | 'beads' | 'bell' | 'drum' | 'lantern' | 'koi' | 'visits' | 'service' | 'sutra';
 
 // 印文用繁体，和寺里的匾额一致
 export const SEALS: { id: SealId; text: string }[] = [

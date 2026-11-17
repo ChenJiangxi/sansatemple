@@ -112,6 +112,7 @@ const MERIT: [MeritKey, Key][] = [
   ['drum', 'meritDrum'],
   ['lantern', 'meritLantern'],
   ['koi', 'meritKoi'],
+  ['sutra', 'meritSutra'],
 ];
 export function sealBook(): HTMLElement {
   const wrap = el('div', 'sealbook');

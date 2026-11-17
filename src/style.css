@@ -343,3 +343,30 @@ canvas.main.point { cursor: pointer; }
 /* 登塔、下塔时黑一下 */
 .fade-black { position: absolute; inset: 0; z-index: 7; background: #0d0b09; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
 .fade-black.on { opacity: 1; pointer-events: auto; }
+
+/* —— 抄经：一张宣纸，上面一句经文，下面一个米字格描字 —— */
+.sutra { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 10, 8, 0.42); }
+.sutra[hidden] { display: none; }
+.sutra-sheet {
+  width: min(92vw, 440px); max-height: 94vh; display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 18px; border-radius: 6px; color: #3a2a1e;
+  background: #f4ecda linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(0, 0, 0, 0.035)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42), inset 0 0 0 6px #f4ecda, inset 0 0 0 7px rgba(176, 58, 40, 0.5);
+}
+.sutra-sheet header { display: flex; align-items: center; gap: 10px; }
+.sutra-sheet h2 { margin: 0; font-family: SansaSutra, 'Kaiti TC', serif; font-weight: 400; font-size: 19px; letter-spacing: 3px; }
+.sutra-sheet header span { flex: 1; font-size: 12px; color: #8a6e58; font-variant-numeric: tabular-nums; }
+.sutra-sheet header .icon-btn { color: #6a5340; }
+.sutra-line { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 6px; min-height: 34px; font-family: SansaSutra, 'Kaiti TC', serif; font-size: 26px; line-height: 1.25; }
+.sutra-line span { color: rgba(90, 70, 50, 0.3); }
+.sutra-line span.done { color: #1d1612; }
+.sutra-line span.now { color: #b03a28; border-bottom: 2px solid #b03a28; }
+.sutra-cell { position: relative; width: min(78vw, 46vh, 360px); aspect-ratio: 1; align-self: center; background: #f8f1e1; }
+.sutra-cell canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sutra-ink { touch-action: none; cursor: crosshair; }
+.sutra-grade { position: absolute; left: 50%; top: 12%; transform: translate(-50%, 0) scale(0.6); font-family: SansaSeal, serif; font-size: 30px; color: #fff3e0; background: #b3261e; padding: 2px 12px 4px; border-radius: 4px; letter-spacing: 2px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.sutra-grade.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.sutra-grade.ok { background: #8a6e58; }
+.sutra-sheet footer { display: flex; align-items: center; gap: 8px; }
+.sutra-sheet footer small { flex: 1; font-size: 12px; color: #8a6e58; }
+.pill-btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(120, 60, 30, 0.3); background: transparent; color: #5a3a24; font: inherit; font-size: 13.5px; letter-spacing: 1px; cursor: pointer; }
+.pill-btn.primary { background: #b3261e; border-color: #b3261e; color: #fff3e0; }
+.pill-btn:disabled { opacity: 0.4; cursor: default; }

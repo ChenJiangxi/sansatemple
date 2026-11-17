@@ -4,7 +4,7 @@ import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Look } from './post';
 import { rng } from '../textures';
 import { pbr, loadTexture } from './pbr';
-import { HALL, COURT, POND, BELL, DRUM, SIDE_HALLS, BRIDGE } from '../layout';
+import { HALL, COURT, POND, BELL, DRUM, SIDE_HALLS, BRIDGE, LIBRARY } from '../layout';
 
 export type TimeMode = 'auto' | 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -342,6 +342,10 @@ export function buildTerrain(scene: THREE.Scene) {
   // 大殿前横向的路，连到两侧配殿
   for (const sh of SIDE_HALLS) addPath(0, 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, 2.6);
   for (const sh of SIDE_HALLS) addPath(sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), 3.2, sh.x - Math.sign(sh.x) * (sh.w / 2 + 1.4), sh.z, 2.6);
+  // 绕过大殿两侧到后院，再到藏经阁台阶前
+  for (const sx of [-1, 1]) addPath(sx * 19.2, 3.2, sx * 19.2, -28.6, 1.8);
+  addPath(-19.2, -28.6, 19.2, -28.6, 2.2);
+  addPath(0, -28.6, 0, LIBRARY.z + LIBRARY.w / 2 + 2.0, 2.8);
 
   // 远处的山：院墙外先是缓坡和林子，往外抬成几百米外的高山（大殿背后最高）
   const size = 1000;

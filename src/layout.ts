@@ -25,7 +25,7 @@ export const HALL = {
 export const ALTAR_SPOT = { x: 0, z: -16.75 };
 export const ALTAR_BURNER = { x: 0, z: HALL.tableZ1 - 0.32 };
 
-export const COURT = { x0: -44, x1: 44, z0: -36, z1: 68, gateX: 3.2 };
+export const COURT = { x0: -44, x1: 44, z0: -50, z1: 68, gateX: 3.2 };
 
 // 放生池在中轴线上，参道从石拱桥上过
 export const POND = { x: 0, z: 52, rx: 11, rz: 5.2 };
@@ -45,6 +45,15 @@ export const SIDE_HALLS: { x: number; z: number; w: number; d: number; yaw: numb
   { x: -29, z: -4, w: 9, d: 17, yaw: Math.PI / 2 },
   { x: 29, z: -4, w: 9, d: 17, yaw: -Math.PI / 2 },
 ];
+
+// 藏经阁：大殿正后方，两层，门朝大殿（本地坐标和配殿一样：x 沿面阔，z 朝殿门为正）
+export const LIBRARY = { x: 0, z: -41, w: 9, d: 19, yaw: 0 };
+// 两座配殿 + 藏经阁：共用一套殿门、解锁和殿内行走
+export const HALLS = [...SIDE_HALLS, LIBRARY];
+// 藏经阁里三张经案（本地 x）和经案的本地 z；人坐在经案后面（朝殿门那一侧）、面朝经橱
+export const LIB_DESKS = [-4.6, 0, 4.6];
+export const LIB_DESK_Z = 0.1;
+export const LIB_SEAT_Z = LIB_DESK_Z + 0.82;
 
 // 钟楼（左）与鼓楼（右）：晨钟暮鼓
 export const BELL = { x: -24, z: 27, size: 6.4, platform: 0.22 };
@@ -144,6 +153,8 @@ export const SIDE_LAMPS: [number, number][] = [
   [-11.5, 29.4], [-16.5, 29.4], [11.5, 29.4], [16.5, 29.4],
   // 放生池两侧石凳旁
   [-17, 52.2], [17, 52.2], [-16, 45.5], [16, 45.5],
+  // 藏经阁台阶两旁
+  [-3.4, -34.2], [3.4, -34.2],
 ];
 
 // 放生池边的河灯台（放河灯）与观音殿前的签筒（求签）：桌子位置、玩家站的位置和朝向
@@ -172,7 +183,12 @@ for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });
 boxes.push({ x0: FORTUNE.x - 0.38, x1: FORTUNE.x + 0.38, z0: FORTUNE.z - 0.38, z1: FORTUNE.z + 0.38 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
-for (const p of PAGODAS) circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
+for (const p of PAGODAS) {
+  circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
+  // 塔门前的三级石阶（朝中轴线），两个碰撞圆盖住台阶宽度
+  const dir = p.x < 0 ? 1 : -1;
+  for (const dz of [-0.5, 0.5]) circles.push({ x: p.x + dir * 2.37 * 0.75 * p.s, z: p.z + dz, r: 0.55 });
+}
 // 香炉两旁的烛台架
 for (const sx of [-1, 1]) boxes.push({ x0: INCENSE.x + sx * 2.6 - 0.85, x1: INCENSE.x + sx * 2.6 + 0.85, z0: INCENSE.z - 0.7, z1: INCENSE.z - 0.1 });
 for (const x of HALL.colX) circles.push({ x, z: HALL.colZFront, r: 0.4 });
@@ -192,20 +208,20 @@ boxes.push({ x0: -HALL.wallX, x1: HALL.wallX, z0: HALL.backZ - 0.3, z1: HALL.bac
 boxes.push({ x0: HALL.altarX0 - 0.15, x1: HALL.altarX1 + 0.15, z0: HALL.altarZ0, z1: HALL.altarZ1 + 0.2 });
 boxes.push({ x0: HALL.tableX0, x1: HALL.tableX1, z0: HALL.tableZ0, z1: HALL.tableZ1 });
 // 配殿：没解锁时整座不可进入；解锁后只挡墙、柱子、佛坛和灯架，台阶和殿内可以走
-export const sideHallOpen = [false, false];
+export const sideHallOpen = [false, false, false];
 // 配殿的本地坐标：x 沿面阔，z 朝殿门为正；尺寸和 buildings.ts 的 sideHall 一致
 export function hallLocal(i: number, x: number, z: number) {
-  const s = SIDE_HALLS[i];
+  const s = HALLS[i];
   const dx = x - s.x, dz = z - s.z, c = Math.cos(s.yaw), n = Math.sin(s.yaw);
   return { lx: dx * c - dz * n, lz: dx * n + dz * c };
 }
 export function hallWorld(i: number, lx: number, lz: number) {
-  const s = SIDE_HALLS[i];
+  const s = HALLS[i];
   const c = Math.cos(s.yaw), n = Math.sin(s.yaw);
   return { x: s.x + lx * c + lz * n, z: s.z - lx * n + lz * c };
 }
 export const SH = (i: number) => {
-  const s = SIDE_HALLS[i];
+  const s = HALLS[i];
   const L = s.d, D = s.w;
   return { L, D, base: 0.6, hx: L / 2 - 0.4, hz: D / 2 - 0.4, px: L / 2 + 0.8, pz: D / 2 + 0.8 };
 };
@@ -230,13 +246,20 @@ function sideHallBlocked(i: number, x: number, z: number) {
   }
   for (const cx of [-d.hx, -d.hx / 2, 0, d.hx / 2, d.hx])
     for (const cz of [-d.hz, d.hz]) if ((lx - cx) ** 2 + (lz - cz) ** 2 < (0.27 + R) ** 2) return true;
+  if (i === 2) {
+    // 藏经阁：后墙一排经橱、两侧墙后半段的经橱、三张经案
+    if (lz < -d.hz + 0.95 + R) return true;
+    if (Math.abs(lx) > d.hx - 0.85 - R && lz < 0.6 + R) return true;
+    for (const dx of LIB_DESKS) if (Math.abs(lx - dx) < 0.78 + R && Math.abs(lz - LIB_DESK_Z) < 0.32 + R) return true;
+    return false;
+  }
   if (Math.abs(lx) < 2.4 + R && lz < -d.hz + 2.55 + R) return true; // 佛坛与供桌
   if (i === 1 && lx > -6.7 - R && lx < -3.5 + R && lz < -d.hz + 1.7 + R) return true; // 长明灯架
   return false;
 }
 // 配殿台基与台阶的高度（只在开放时可走上去）
 function sideHallHeight(x: number, z: number) {
-  for (let i = 0; i < SIDE_HALLS.length; i++) {
+  for (let i = 0; i < HALLS.length; i++) {
     if (!sideHallOpen[i]) continue;
     const { lx, lz } = hallLocal(i, x, z);
     const d = SH(i);
@@ -289,7 +312,7 @@ export function blocked(x: number, z: number): boolean {
   for (const b of boxes) {
     if (x > b.x0 - R && x < b.x1 + R && z > b.z0 - R && z < b.z1 + R) return true;
   }
-  for (let i = 0; i < SIDE_HALLS.length; i++) if (sideHallBlocked(i, x, z)) return true;
+  for (let i = 0; i < HALLS.length; i++) if (sideHallBlocked(i, x, z)) return true;
   return false;
 }
 

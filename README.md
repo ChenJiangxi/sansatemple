@@ -53,7 +53,27 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 调试（与 `?debugview` 一起用）：`&moktak=9` 打开木鱼按拍敲 9 下，`&do=bell` 直接去撞钟，`&quest=sweep|water` 直接接寺务，再加 `&qauto` 自动做完并回禀。
 
-## 配殿：随修行解锁的新地方
+## 随修行解锁的地方与衣钵
+
+右上角莲花图标是「修行」面板：当前称号和到下一级的功德进度、每一级开放什么、衣钵（换僧袍和念珠）。
+
+| 等级 | 功德 | 开放 |
+|---|---|---|
+| 行者 | 60 | 观音殿、灰海青·褐袈裟 |
+| 沙弥 | 200 | 地藏殿、菩提子念珠 |
+| 比丘 | 500 | 藏经阁（抄经）、金黄袈裟、星月菩提 |
+| 法师 | 1200 | 登塔、金线袈裟 |
+| 禅师 | 3000 | 茶褐衣、蜜蜡念珠 |
+| 长老 | 8000 | 紫金袈裟、珊瑚念珠 |
+
+衣钵存在本地（`sansa.look`），联机时随位置一起发出（`僧袍.念珠.等级`），别人看到你的僧袍颜色，名牌上带称号。
+
+- **登塔**：点双塔任一座，走到朝中轴线的塔门，黑一下就到了顶层檐下；拖动环顾，院子里和山谷里升起云海（镜头高过 6 米才显出来，开场画面也看得到），殿顶、树冠从云里露出来。点「下塔」回到塔门前。每天第一次登塔给功德。
+- **藏经阁**：大殿正后方的两层楼阁（后院墙因此往后挪到 z = -50）。殿里一排排经橱，三张经案。点经案坐下抄《心经》：照着米字格里的灰色楷字描，覆盖够了自动换下一字，按描得贴不贴合评「妙 / 好 / 成」，每字 2–4 功德，抄完一句 +5，抄完全经（260 字）+100；进度存在本地（`sansa.sutra`）。
+
+调试：`&points=600` 加功德，`&panel=practice` 打开修行面板，`&look=crimson.amber` 换衣钵，`&climb=0` 直接登左塔，`&desk=1` 去中间的经案抄经，再加 `&sutraauto=6` 自动描 6 个字，`&seat=c7` 直接坐上大殿的蒲团。
+
+### 配殿
 
 院子两侧的观音殿、地藏殿起初关着门，点殿门会提示还差多少功德。修行到「行者」开观音殿，到「沙弥」开地藏殿，殿门会转开，殿里点起暖灯：
 
@@ -104,7 +124,7 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 ## 寺院布局（汉传佛寺）
 
 山门（三开间，挂「靜山禪寺」）→ 放生池与石拱桥 → 钟楼、鼓楼分列左右 → 红灯笼参道 →
-双塔（八角七层）与铜鼎香炉、红烛架 → 白石须弥座上的重檐大雄宝殿，两侧观音殿、地藏殿，
+双塔（八角七层，约 18 米，可登）与铜鼎香炉、红烛架 → 白石须弥座上的重檐大雄宝殿，两侧观音殿、地藏殿，殿后是两层的藏经阁，
 四周黄色寺墙，院中多是银杏。殿内：方砖地、千佛壁、井口天花、一佛二弟子（主尊释迦牟尼佛带鎏金背光，两侧迦叶、阿难立像带圆形头光）、华盖、
 经幡、朱漆供桌（黄桌围、铜鼎、红烛、莲花瓶）、木鱼与铜磬、112 个圆蒲团。
 
@@ -129,7 +149,10 @@ src/world/shrines.ts 河灯台、签筒桌
 src/residents.ts    常住僧人：岗位、各人的日常路线、迎客、钟鼓与整点共修的时刻表（全部由服务器时间推算，不需要额外联网消息）
 src/world/rock.ts   石头：整块焊接的网格、噪声起伏加平面削出的棱面，世界坐标三向投影的石纹
 src/world/lotus.ts  放生池的荷：浮叶、立叶、荷花和花苞
-src/progress.ts     本地存档：寺游印谱、功德簿、今天的签
+src/progress.ts     本地存档：寺游印谱、功德簿、今天的签、功德点与修行等级、各处几级开放
+src/looks.ts        衣钵：僧袍与念珠的配色、解锁等级、联机时的外观编码
+src/sutra.ts        抄经：《心经》经文、米字格描字、覆盖与出格的判定、进度
+src/world/clouds.ts 登塔时的云海（三层院中低云 + 一层山腰云带）
 src/fortune.ts      二十四支签的签诗与解签
 src/ui-extra.ts     开场标题、印谱、得印动画、签文卡片、共修提示条
 src/audio.ts        Web Audio 实时合成：风、鸟、木鱼、念珠、磬、梵钟、鼓、普通话「南无阿弥陀佛」念佛
@@ -149,6 +172,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/tex/*_color/normal/rough.jpg` | Poly Haven：dark_wooden_planks、wood_cabinet_worn_long、grey_stone_path、granite_tile、japanese_stone_wall、forest_floor、grey_roof_tiles、beige_wall_001 | [CC0](https://polyhaven.com/license) | 1K 版本再压缩 |
 | `public/fonts/title.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | [SIL OFL](https://openfontlicense.org/) | 只取「山寺」两字 |
 | `public/fonts/seal.woff2` | [LXGW WenKai TC](https://github.com/lxgw/LxgwWenkaiTC)（霞鹜文楷） | SIL OFL | 只取印文和签号用到的字 |
+| `public/fonts/sutra.woff2` | [LXGW WenKai TC](https://github.com/lxgw/LxgwWenkaiTC) v1.530（霞鹜文楷） | SIL OFL | 只取《心经》用到的 117 个字，抄经时才加载 |
 | `public/models/head/` | Lee Perry-Smith「Infinite, 3D Head Scan」（triplegangers.com，经 three.js 示例分发） | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | 运行时切掉肩颈、贴图上淡化胡茬，作所有僧人的头 |
 | `public/tex/tree/` | ez-tree 自带：橡树树皮（Poly Haven）、松树树皮（TextureCan）、树叶 | CC0 / MIT | 只留用到的几张，缩到 512 像素 |
 | `public/tex/linen_*.jpg` | Poly Haven「Rough Linen」 | CC0 | 只用法线和粗糙度，缩到 512 像素，作僧袍布纹 |

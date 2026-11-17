@@ -3,7 +3,7 @@
 // 远处再一层贴着山腰的云带。大殿、配殿里面不铺，免得从门里看到殿内有云。
 // 用标准材质接收场景的日光、天光和雾，所以清晨偏粉金、白天雪白、傍晚橘红、夜里是暗蓝的。
 import * as THREE from 'three';
-import { COURT, HALL, SIDE_HALLS } from '../layout';
+import { COURT, HALL, HALLS } from '../layout';
 
 // far：远处山腰的云带（离院墙 70 米外才有）；scale：云团大小（越小越大团）
 const LAYERS = [
@@ -25,11 +25,16 @@ export function buildCloudSea(scene: THREE.Scene) {
       sh.uniforms.uLayer = { value: new THREE.Vector4(L.off[0], L.off[1], L.a, L.scale) };
       sh.uniforms.uFar = { value: L.far };
       sh.uniforms.uCourt = { value: new THREE.Vector4(COURT.x1 + 2.5, COURT.z0 - 2.5, COURT.z1 + 2.5, 0) };
-      // 殿内不铺：大殿和两座配殿的矩形（x0, z0, x1, z1）
-      const sh0 = SIDE_HALLS[0], sh1 = SIDE_HALLS[1];
+      // 殿内不铺：大殿、两座配殿和藏经阁的矩形（x0, z0, x1, z1）；配殿横着放，藏经阁正着放
+      const rect = (h: (typeof HALLS)[number]) => {
+        const across = Math.abs(Math.sin(h.yaw)) > 0.5;
+        const ax = (across ? h.w : h.d) / 2, az = (across ? h.d : h.w) / 2;
+        return new THREE.Vector4(h.x - ax, h.z - az, h.x + ax, h.z + az);
+      };
       sh.uniforms.uHall = { value: new THREE.Vector4(-HALL.wallX - 0.3, HALL.backZ - 0.3, HALL.wallX + 0.3, HALL.colZFront + 0.3) };
-      sh.uniforms.uSideA = { value: new THREE.Vector4(sh0.x - sh0.w / 2, sh0.z - sh0.d / 2, sh0.x + sh0.w / 2, sh0.z + sh0.d / 2) };
-      sh.uniforms.uSideB = { value: new THREE.Vector4(sh1.x - sh1.w / 2, sh1.z - sh1.d / 2, sh1.x + sh1.w / 2, sh1.z + sh1.d / 2) };
+      sh.uniforms.uSideA = { value: rect(HALLS[0]) };
+      sh.uniforms.uSideB = { value: rect(HALLS[1]) };
+      sh.uniforms.uSideC = { value: rect(HALLS[2]) };
       sh.vertexShader = sh.vertexShader
         .replace('#include <common>', '#include <common>\nvarying vec3 vWp;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWp = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -39,7 +44,7 @@ export function buildCloudSea(scene: THREE.Scene) {
           `#include <common>
           varying vec3 vWp;
           uniform float uTime, uOpacity, uFar;
-          uniform vec4 uLayer, uCourt, uHall, uSideA, uSideB;
+          uniform vec4 uLayer, uCourt, uHall, uSideA, uSideB, uSideC;
           float inRect(vec2 p, vec4 r) { return step(r.x, p.x) * step(p.x, r.z) * step(r.y, p.y) * step(p.y, r.w); }
           float h2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
           float vn(vec2 p) {
@@ -62,7 +67,7 @@ export function buildCloudSea(scene: THREE.Scene) {
             float cover = mix(smoothstep(0.24, 0.6, d), smoothstep(0.4, 0.7, d), uFar);
             // 到院墙矩形的距离：近处的云铺满院子，殿内挖掉；远处的云带只在墙外 70 米以外；很远处淡出
             float dc = max(abs(vWp.x) - uCourt.x, max(uCourt.y - vWp.z, vWp.z - uCourt.z));
-            float halls = max(inRect(vWp.xz, uHall), max(inRect(vWp.xz, uSideA), inRect(vWp.xz, uSideB)));
+            float halls = max(max(inRect(vWp.xz, uHall), inRect(vWp.xz, uSideC)), max(inRect(vWp.xz, uSideA), inRect(vWp.xz, uSideB)));
             float keep = mix(1.0 - halls, smoothstep(70.0, 130.0, dc), uFar) * smoothstep(470.0, 360.0, length(vWp.xz));
             diffuseColor.a *= cover * keep * uLayer.z * uOpacity;
             // 云团中间亮、边缘和薄处发灰，看得出一团一团的起伏

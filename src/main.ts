@@ -19,6 +19,7 @@ import { placeStatues } from './world/statues';
 import { PostFX } from './world/post';
 import { buildPond } from './world/pond';
 import { buildCloudSea } from './world/clouds';
+import { SutraCopy } from './sutra';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
 import { buildResidents, type Role } from './residents';
@@ -28,7 +29,7 @@ import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, SIDE_HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -187,9 +188,9 @@ async function start() {
   const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, pond.water];
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
-  interactives.push(...sideHalls.interactives, ...sideHalls.doorHits);
-  const HALL_LEVEL = [PLACE_LEVEL.guanyin, PLACE_LEVEL.dizang];
-  const HALL_NAME = ['hallGuanyin', 'hallDizang'] as const;
+  interactives.push(...sideHalls.interactives, ...sideHalls.doorHits, ...sideHalls.deskHits);
+  const HALL_LEVEL = [PLACE_LEVEL.guanyin, PLACE_LEVEL.dizang, PLACE_LEVEL.library];
+  const HALL_NAME = ['hallGuanyin', 'hallDizang', 'placeLibrary'] as const;
   const lampKey = 'sansa.lamps';
   const lampsToday = () => {
     try {
@@ -338,7 +339,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -704,7 +705,7 @@ async function start() {
       if (o && k >= 0) interactives.splice(k, 1);
       if (!o && k < 0) interactives.push(hit);
       if (o && !was && animate) {
-        ui.toast(t('hallOpened', { h: t(HALL_NAME[i]) }), 5600);
+        ui.toast(i === 2 ? t('libraryOpened') : t('hallOpened', { h: t(HALL_NAME[i]) }), 5600);
         setTimeout(() => audio.templeBell(0.45), 600);
       }
     });
@@ -734,6 +735,7 @@ async function start() {
     else if (intent === 'fortune') ui.setStatus('statusFortune');
     else if (tower) ui.setStatus('towerTop', 'towerDown');
     else if (intent === 'climb') ui.setStatus('statusClimb');
+    else if (intent === 'desk') ui.setStatus('statusDesk');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -893,7 +895,7 @@ async function start() {
     const P = PAGODAS[i];
     const dir = P.x < 0 ? 1 : -1;
     // 塔门前三级石阶外沿在本地半径 2.62 处，再往外站一点
-    return { x: P.x + dir * (2.62 * 0.75 * P.s + 0.45), z: P.z, yaw: dir > 0 ? -Math.PI / 2 : Math.PI / 2 };
+    return { x: P.x + dir * (2.62 * 0.75 * P.s + 0.65), z: P.z, yaw: dir > 0 ? -Math.PI / 2 : Math.PI / 2 };
   };
   function requestClimb(i: number) {
     if (tower) return;
@@ -936,6 +938,58 @@ async function start() {
       }, 650);
     });
   }
+  // —— 抄经：点经案，走过去坐下，铺开纸描《心经》 ——
+  const sutra = new SutraCopy(ui.root, {
+    onChar: (grade, at) => {
+      progress.add('sutra');
+      gain(grade === 'perfect' ? 4 : grade === 'good' ? 3 : 2, at);
+      if (grade === 'perfect') audio.bell(0.16);
+    },
+    onLine: () => {
+      setTimeout(() => {
+        audio.bell(0.3);
+        ui.toast(t('sutraLineDone'), 2400);
+        gain(5, { x: innerWidth / 2, y: innerHeight * 0.18 });
+      }, 300);
+    },
+    onRound: () => {
+      setTimeout(() => {
+        audio.templeBell(0.5);
+        ui.toast(t('sutraRoundDone'), 6000);
+        gain(100, { x: innerWidth / 2, y: innerHeight * 0.3 });
+      }, 900);
+    },
+    onClose: () => {
+      if (me.action === 'sit' && !player.seat) me.setAction('idle');
+      refreshStatus();
+    },
+  });
+  function requestSutra(k: number) {
+    if (!sideHallOpen[2]) {
+      hallClick('hallDoor', 2);
+      return;
+    }
+    const seat = sideHalls.deskSeat(k);
+    for (const r of remotes.values())
+      if (Math.hypot(r.x - seat.x, r.z - seat.z) < 0.5 && r.a === 'sit') {
+        ui.toast(t('sutraDeskTaken'));
+        return;
+      }
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+    intent = 'desk';
+    refreshStatus();
+    walkTo(seat.x, seat.z, () => {
+      intent = null;
+      player.x = seat.x;
+      player.z = seat.z;
+      player.yaw = seat.yaw;
+      me.setAction('sit');
+      refreshStatus();
+      sutra.show();
+    });
+  }
+
   function descendPagoda() {
     if (!tower) return;
     fadeEl.classList.add('on');
@@ -1551,6 +1605,19 @@ async function start() {
     // 调试：&climb=0|1 直接登上左（右）塔
     const dbgClimb = Number(sp.get('climb'));
     if (sp.has('climb') && PAGODAS[dbgClimb]) setTimeout(() => requestClimb(dbgClimb), 1200);
+    // 调试：&desk=0|1|2 走到藏经阁的经案坐下抄经
+    const dbgDesk = Number(sp.get('desk'));
+    if (sp.has('desk') && dbgDesk >= 0 && dbgDesk < 3) setTimeout(() => requestSutra(dbgDesk), 1500);
+    // 调试：再加 &sutraauto=n 自动描 n 个字
+    const dbgAuto = Number(sp.get('sutraauto'));
+    if (dbgAuto > 0) {
+      let left = dbgAuto;
+      const iv = setInterval(() => {
+        if (!sutra.open) return;
+        sutra.autoTrace();
+        if (--left <= 0) clearInterval(iv);
+      }, 1100);
+    }
     // 调试：&seat=座位编号 直接坐上去（看人和蒲团、长椅贴不贴合）
     const dbgSeat = SEAT_BY_ID.get(sp.get('seat') ?? '');
     if (dbgSeat) setTimeout(() => sitAt(dbgSeat, dbgSeat.kind === 'bench' ? 'bench' : 'sit'), 1200);
@@ -1571,7 +1638,12 @@ async function start() {
     B(x0, 0, z1 - t, -gateX - 2.3, wh, z1 + t);
     B(gateX + 2.3, 0, z1 - t, x1, wh, z1 + t);
     B(-gateX - 2.6, 4.4, z1 - 1.6, gateX + 2.6, 8.6, z1 + 1.6);
-    for (const h of SIDE_HALLS) B(h.x - 6.3, 0, h.z - 10.3, h.x + 6.3, 9.5, h.z + 10.3);
+    for (const h of HALLS) {
+      // 面阔沿哪条轴：配殿横着放（转了 90°），藏经阁正着放
+      const across = Math.abs(Math.sin(h.yaw)) > 0.5;
+      const ax = (across ? h.w : h.d) / 2 + 1.8, az = (across ? h.d : h.w) / 2 + 1.8;
+      B(h.x - ax, 0, h.z - az, h.x + ax, h === HALLS[2] ? 14 : 9.5, h.z + az);
+    }
     for (const T of [BELL, DRUM]) B(T.x - 4.7, 5.0, T.z - 4.7, T.x + 4.7, 9.2, T.z + 4.7);
     for (const p of PAGODAS) B(p.x - 1.7 * p.s, 0, p.z - 1.7 * p.s, p.x + 1.7 * p.s, 22, p.z + 1.7 * p.s);
   }
@@ -1680,11 +1752,15 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay || fortuneOpen || intro || tower) return;
+    if (overlay || fortuneOpen || intro || tower || sutra.open) return;
     const p = pick(cx, cy);
     if (!p) return;
     if (p.interact?.type === 'pagoda') {
       requestClimb(p.interact.i as number);
+      return;
+    }
+    if (p.interact?.type === 'sutraDesk') {
+      requestSutra(p.interact.desk as number);
       return;
     }
     if (p.interact?.type === 'seat') {
@@ -1788,6 +1864,7 @@ async function start() {
     else if (it?.type === 'lantern') label = t('tipLantern');
     else if (it?.type === 'fortune') label = t('tipFortune');
     else if (it?.type === 'pagoda') label = t('placePagoda');
+    else if (it?.type === 'sutraDesk') label = t('tipDesk');
     else if (it?.type === 'pond') label = t('tipPond');
     else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
     else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
@@ -1888,7 +1965,7 @@ async function start() {
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
-    if (keys.size && !overlay && !tower) {
+    if (keys.size && !overlay && !tower && !sutra.open) {
       const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       if (f || s) {

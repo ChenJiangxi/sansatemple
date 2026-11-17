@@ -1,9 +1,10 @@
 // 两座配殿的殿内：佛坛、菩萨像（观音殿供宋代水月观音、地藏殿供地藏菩萨）、背光、供桌香炉蜡烛、暖灯；
 // 地藏殿另有一架三层长明灯。殿门、佛坛、灯架各有一个点击用的隐形盒子。
+// 藏经阁（第三座）里是一排排经橱和三张抄经的经案。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { SH, hallWorld, SIDE_HALLS } from '../layout';
+import { SH, hallWorld, HALLS, LIB_DESKS, LIB_DESK_Z, LIB_SEAT_Z } from '../layout';
 import { chineseMats } from './hall';
 import { mandorla } from './statues';
 import { mesh, worldBox } from './util';
@@ -30,11 +31,12 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
   const lights: THREE.PointLight[] = [];
   const floorMat = pbr('granite', { metersPerTile: 1.3, color: '#78695b', roughness: 0.72 });
   floorMat.envMapIntensity = 0.35;
-  const open = [false, false];
-  const doorK = [0, 0];
+  const open = halls.map(() => false);
+  const doorK = halls.map(() => 0);
   let flames: THREE.InstancedMesh | null = null;
   const flameAt: THREE.Vector3[] = [];
 
+  const deskHits: THREE.Mesh[] = [];
   halls.forEach((h, i) => {
     const d = SH(i);
     const g = h.g;
@@ -43,6 +45,19 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
     const floor = mesh(worldBox(d.hx * 2, 0.02, d.hz * 2, 1), floorMat);
     floor.position.set(0, fy + 0.01, 0);
     g.add(floor);
+    if (i === 2) {
+      furnishLibrary(g, d, fy, deskHits, hitMat, M);
+      const light = new THREE.PointLight('#ffd6a0', 0, 14, 1.5);
+      light.position.set(0, fy + 3.2, -0.5);
+      g.add(light);
+      lights.push(light);
+      const doorHit = new THREE.Mesh(new THREE.BoxGeometry(d.hx * 2, 4, 1.2), hitMat);
+      doorHit.position.set(0, fy + 2, d.hz + 0.4);
+      doorHit.userData.interact = { type: 'hallDoor', hall: i };
+      g.add(doorHit);
+      doorHits.push(doorHit);
+      return;
+    }
     // 须弥座佛坛
     const altar = mesh(worldBox(4.4, 0.95, 1.5, 1), M.red);
     altar.position.set(0, fy + 0.475, -d.hz + 0.95);
@@ -169,7 +184,7 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
   // 站位（世界坐标）：佛前礼拜处、灯架前
   const stand = (i: number, lx: number, lz: number) => {
     const w = hallWorld(i, lx, lz);
-    return { x: w.x, z: w.z, yaw: SIDE_HALLS[i].yaw + Math.PI };
+    return { x: w.x, z: w.z, yaw: HALLS[i].yaw + Math.PI };
   };
 
   return {
@@ -178,6 +193,9 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
     walls: halls.flatMap((h) => h.walls),
     statueStand: (i: number) => stand(i, 0, -SH(i).hz + 3.0),
     lampStand: () => stand(1, -5.1, -SH(1).hz + 2.35),
+    // 经案：点经案坐下抄经；人坐在经案朝门的一侧、面朝经橱
+    deskHits,
+    deskSeat: (k: number) => stand(2, LIB_DESKS[k], LIB_SEAT_Z),
     setLamps,
     setOpen(i: number, o: boolean, animate: boolean) {
       open[i] = o;
@@ -193,6 +211,102 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       void t;
     },
   };
+}
+
+// 经橱正面：一格一格的经函，黄、蓝、赭色的包袱皮，每函一个白签条
+function shelfTexture() {
+  const W = 512, H = 512;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#4a2416';
+  g.fillRect(0, 0, W, H);
+  const cols = 4, rows = 6, cw = W / cols, rh = H / rows;
+  const cloth = ['#c99a3a', '#2f4a6a', '#9a5a2a', '#b8873a', '#3d5a4a', '#8a2e22'];
+  let seed = 11;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < cols; x++) {
+      const x0 = x * cw + 8, y0 = y * rh + 8, w = cw - 16, h = rh - 14;
+      g.fillStyle = '#1e0e08';
+      g.fillRect(x0, y0, w, h);
+      // 一格里横放两三函经
+      const n = 2 + Math.floor(r() * 2);
+      for (let k = 0; k < n; k++) {
+        const bh = (h - 6) / 3;
+        const by = y0 + h - (k + 1) * bh - 2;
+        g.fillStyle = cloth[Math.floor(r() * cloth.length)];
+        g.fillRect(x0 + 4, by, w - 8 - r() * 10, bh - 3);
+        g.fillStyle = 'rgba(0,0,0,0.25)';
+        g.fillRect(x0 + 4, by + bh - 6, w - 8, 3);
+        g.fillStyle = '#efe6cf';
+        g.fillRect(x0 + w / 2 - 6, by + 3, 12, bh - 9);
+      }
+      g.strokeStyle = '#7a3a22';
+      g.lineWidth = 3;
+      g.strokeRect(x0 - 2, y0 - 2, w + 4, h + 4);
+    }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 藏经阁殿内：后墙一排经橱，两侧墙后半段也立着经橱；殿中三张矮经案，案上铺纸、笔架、砚台，案后一张坐垫
+function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, deskHits: THREE.Mesh[], hitMat: THREE.Material, M: ReturnType<typeof chineseMats>) {
+  const wood = new THREE.MeshStandardMaterial({ color: '#5a2a1a', roughness: 0.6 });
+  const front = new THREE.MeshStandardMaterial({ map: shelfTexture(), roughness: 0.75 });
+  const shelf = (x: number, z: number, w: number, yaw: number) => {
+    const b = mesh(worldBox(w, 2.7, 0.62, 1.3), [wood, wood, wood, wood, front, wood]);
+    b.position.set(x, fy + 1.35, z);
+    b.rotation.y = yaw;
+    g.add(b);
+    const cap = mesh(worldBox(w + 0.12, 0.1, 0.72, 1), wood);
+    cap.position.set(x, fy + 2.75, z);
+    cap.rotation.y = yaw;
+    g.add(cap);
+  };
+  const n = 6, sw = (d.hx * 2 - 0.6) / n;
+  for (let k = 0; k < n; k++) shelf(-d.hx + 0.3 + sw * (k + 0.5), -d.hz + 0.45, sw - 0.08, 0);
+  for (const sx of [-1, 1]) for (const z of [-2.0, -0.4]) shelf(sx * (d.hx - 0.45), z, 1.5, -sx * Math.PI / 2);
+  const paper = new THREE.MeshStandardMaterial({ color: '#f1e8d2', roughness: 0.95 });
+  const ink = new THREE.MeshStandardMaterial({ color: '#1a1614', roughness: 0.35 });
+  const mat = new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.95 });
+  LIB_DESKS.forEach((dx, k) => {
+    const top = mesh(worldBox(1.5, 0.06, 0.56, 1), M.redDark);
+    top.position.set(dx, fy + 0.4, LIB_DESK_Z);
+    g.add(top);
+    for (const sx of [-1, 1]) {
+      const leg = mesh(worldBox(0.08, 0.37, 0.5, 1), M.redDark);
+      leg.position.set(dx + sx * 0.66, fy + 0.185, LIB_DESK_Z);
+      g.add(leg);
+    }
+    const sheet = mesh(worldBox(0.62, 0.005, 0.4, 1), paper, false);
+    sheet.position.set(dx, fy + 0.433, LIB_DESK_Z + 0.02);
+    g.add(sheet);
+    // 纸上几行淡淡的字迹
+    for (let r = 0; r < 5; r++) {
+      const line = mesh(worldBox(0.012, 0.002, 0.3, 1), ink, false);
+      line.position.set(dx + 0.22 - r * 0.07, fy + 0.437, LIB_DESK_Z + 0.02);
+      g.add(line);
+    }
+    const stone = mesh(worldBox(0.16, 0.03, 0.24, 1), ink, false);
+    stone.position.set(dx + 0.52, fy + 0.445, LIB_DESK_Z - 0.04);
+    g.add(stone);
+    const brush = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.26, 6), M.redDark, false);
+    brush.rotation.x = Math.PI / 2;
+    brush.position.set(dx - 0.5, fy + 0.445, LIB_DESK_Z);
+    g.add(brush);
+    const cushion = mesh(worldBox(0.62, 0.04, 0.5, 1), mat);
+    cushion.position.set(dx, fy + 0.02, LIB_SEAT_Z);
+    g.add(cushion);
+    const hit = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 1.5), hitMat);
+    hit.position.set(dx, fy + 0.5, (LIB_DESK_Z + LIB_SEAT_Z) / 2);
+    hit.userData.interact = { type: 'sutraDesk', desk: k };
+    g.add(hit);
+    deskHits.push(hit);
+  });
 }
 
 // 模型朝向：按截图校正后的绕 y 旋转（让菩萨面朝殿门，也就是本地 +z）
