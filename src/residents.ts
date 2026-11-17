@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { Monk, GAITS, type Action, BOW_DURATION } from './monk';
 import { planRoute, heightAt, SIDE_HALLS, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat } from './layout';
 import type { StrikeBuild } from './world/buildings';
+import { REAL } from './body-real';
 
 export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
@@ -400,6 +401,8 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     m.root.rotation.y += Math.atan2(Math.sin(yaw - m.root.rotation.y), Math.cos(yaw - m.root.rotation.y)) * Math.min(1, k);
   };
   const SEATED: Action[] = ['sit', 'tea', 'teach', 'read'];
+  const PINNED: Action[] = [...SEATED, 'bench', 'bow', 'fill'];
+  const BODY_R = REAL ? 0.36 : 0.3; // 身体半径（乘各人的缩放）
   const LEFTOVER: Action[] = ['sweep', 'wipe', 'read', 'tea', 'teach', 'water', 'fill', 'serve', 'feed', 'incense'];
 
   return {
@@ -562,6 +565,35 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
         m.root.visible = visible && m.root.position.distanceTo(camPos) < 70;
         if (m.root.visible) m.update(dt);
       });
+
+      // 僧人之间互相让开一点身位：只看此刻各人的位置，算法固定，所以每个人看到的错开都一样；
+      // 坐着、跪着的不动，只挪站着走着的那位
+      const pinned = (r: Resident) => PINNED.includes(r.monk.action);
+      const bodies = list.filter((r) => r.role !== 'assembly' || r.monk.root.visible);
+      for (let it = 0; it < 2; it++)
+        for (let i = 0; i < bodies.length; i++)
+          for (let j = i + 1; j < bodies.length; j++) {
+            const a = bodies[i], b = bodies[j];
+            const pa = a.monk.root.position, pb = b.monk.root.position;
+            const min = BODY_R * (a.monk.root.scale.x + b.monk.root.scale.x);
+            let dx = pb.x - pa.x, dz = pb.z - pa.z;
+            const d2 = dx * dx + dz * dz;
+            if (d2 >= min * min) continue;
+            const pA = pinned(a), pB = pinned(b);
+            if (pA && pB) continue;
+            let d = Math.sqrt(d2);
+            if (d < 1e-4) {
+              dx = 1;
+              dz = 0;
+              d = 1;
+            }
+            const ov = min - (d2 < 1e-8 ? 0 : d);
+            const wa = pA ? 0 : pB ? 1 : 0.5;
+            pa.x -= (dx / d) * ov * wa;
+            pa.z -= (dz / d) * ov * wa;
+            pb.x += (dx / d) * ov * (1 - wa);
+            pb.z += (dz / d) * ov * (1 - wa);
+          }
 
       // 远处的人不画（省手机）
       for (const r of list) {

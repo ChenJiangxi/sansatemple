@@ -1727,6 +1727,35 @@ async function start() {
     me.update(dt);
   }
 
+  // 人和人不穿过去：碰到僧人或别的玩家就由自己这边让开（僧人按时刻表走，不能被挡住）
+  function separatePlayer() {
+    if (player.seat || me.action === 'bow' || me.action === 'sit' || me.action === 'bench') return;
+    const rp = REAL ? 0.36 : 0.3;
+    const push = (o: THREE.Object3D) => {
+      if (!o.visible) return;
+      let dx = player.x - o.position.x, dz = player.z - o.position.z;
+      const min = rp * (1 + o.scale.x);
+      const d2 = dx * dx + dz * dz;
+      if (d2 >= min * min) return;
+      let d = Math.sqrt(d2);
+      if (d < 1e-4) {
+        dx = Math.sin(player.yaw + Math.PI);
+        dz = Math.cos(player.yaw + Math.PI);
+        d = 1;
+      }
+      const ov = min - (d2 < 1e-8 ? 0 : Math.sqrt(d2));
+      const tx = player.x + (dx / d) * ov, tz = player.z + (dz / d) * ov;
+      if (canStep(player.x, player.z, tx, tz)) {
+        player.x = tx;
+        player.z = tz;
+      }
+    };
+    for (const r of residents.list) push(r.monk.root);
+    for (const r of remotes.values()) push(r.monk.root);
+    me.root.position.x = player.x;
+    me.root.position.z = player.z;
+  }
+
   function updateRemotes(dt: number) {
     const k = 1 - Math.exp(-dt * 8);
     for (const r of remotes.values()) {
@@ -1826,6 +1855,7 @@ async function start() {
     if (!intro && residents.greet(player.x, player.z, elapsed)) say('greeter', 0);
     updateService(dt);
     updateRemotes(dt);
+    separatePlayer();
     updateCamera(dt);
     nature.update(dt, elapsed);
     life.update(dt, elapsed, env.lanternLevel, camera.position);
