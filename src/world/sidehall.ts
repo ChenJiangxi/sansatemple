@@ -3,11 +3,12 @@
 // 藏经阁（第三座）里是一排排经橱和三张抄经的经案。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { SH, hallWorld, HALLS, LIB_DESKS, LIB_DESK_Z, LIB_SEAT_Z } from '../layout';
 import { chineseMats, cushionMesh } from './hall';
 import { buildDing } from './bronze';
-import { altarClothTexture } from '../textures';
+import { altarClothTexture, plaqueTexture } from '../textures';
 import { mandorla } from './statues';
 import { mesh, worldBox, lathe } from './util';
 import { pbr } from './pbr';
@@ -108,8 +109,9 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
     g.add(floor);
     if (i === 2) {
       furnishLibrary(g, d, fy, deskHits, hitMat, M);
-      const light = new THREE.PointLight('#ffd6a0', 0, 14, 1.5);
+      const light = new THREE.PointLight('#ffd6a0', 0, 18, 1.4);
       light.position.set(0, fy + 3.2, -0.5);
+      light.userData.base = 11; // 藏经阁进深浅、面阔大，灯要亮一些
       g.add(light);
       lights.push(light);
       const doorHit = new THREE.Mesh(new THREE.BoxGeometry(d.hx * 2, 4, 1.2), hitMat);
@@ -331,7 +333,7 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       halls.forEach((h, i) => {
         doorK[i] += ((open[i] ? 1 : 0) - doorK[i]) * Math.min(1, dt * 1.5);
         for (const p of h.doors) p.rotation.y = (p.userData.openSign as number) * 1.35 * doorK[i];
-        lights[i].intensity = 7 * doorK[i];
+        lights[i].intensity = ((lights[i].userData.base as number | undefined) ?? 7) * doorK[i];
       });
       if (flames) flames.rotation.y = 0;
       void t;
@@ -396,6 +398,29 @@ function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, de
   const n = 6, sw = (d.hx * 2 - 0.6) / n;
   for (let k = 0; k < n; k++) shelf(-d.hx + 0.3 + sw * (k + 0.5), -d.hz + 0.45, sw - 0.08, 0);
   for (const sx of [-1, 1]) for (const z of [-2.0, -0.4]) shelf(sx * (d.hx - 0.45), z, 1.5, -sx * Math.PI / 2);
+  // 后墙经橱上方一块匾「如是我聞」（佛经的开头四个字）
+  {
+    const pw = 3.0, ph = pw * (340 / (260 * 4 + 140));
+    const plaque = mesh(new THREE.BoxGeometry(pw, ph, 0.1), [M.gold, M.gold, M.gold, M.gold, new THREE.MeshStandardMaterial({ map: plaqueTexture('如是我聞'), roughness: 0.5, metalness: 0.2 }), M.redDark]);
+    plaque.position.set(0, fy + 3.45, -d.hz + 0.22);
+    g.add(plaque);
+  }
+  // 三盏小宫灯吊在经案上方：红框、发光的黄绢灯罩（只是发光材质，不另加光源）
+  {
+    const silk = new THREE.MeshStandardMaterial({ color: '#f2d79a', roughness: 0.85, emissive: '#ffc070', emissiveIntensity: 0.9, side: THREE.DoubleSide });
+    const frame: THREE.BufferGeometry[] = [];
+    const shades: THREE.BufferGeometry[] = [];
+    for (const dx of LIB_DESKS) {
+      const y = fy + 2.85;
+      shades.push(new THREE.CylinderGeometry(0.2, 0.2, 0.36, 6, 1, true).translate(dx, y, LIB_DESK_Z));
+      for (const yy of [y - 0.19, y + 0.19]) frame.push(new THREE.CylinderGeometry(0.23, 0.23, 0.04, 6).translate(dx, yy, LIB_DESK_Z));
+      frame.push(new THREE.ConeGeometry(0.24, 0.13, 6).translate(dx, y + 0.27, LIB_DESK_Z));
+      frame.push(new THREE.CylinderGeometry(0.006, 0.006, 4.35 - 3.12, 4).translate(dx, fy + (4.35 + 3.12) / 2, LIB_DESK_Z));
+      frame.push(new THREE.ConeGeometry(0.03, 0.14, 6).rotateX(Math.PI).translate(dx, y - 0.28, LIB_DESK_Z));
+    }
+    g.add(mesh(mergeGeometries(frame.map((x) => x.toNonIndexed()))!, M.red, false));
+    g.add(mesh(mergeGeometries(shades)!, silk, false));
+  }
   const paper = new THREE.MeshStandardMaterial({ color: '#f1e8d2', roughness: 0.95 });
   const ink = new THREE.MeshStandardMaterial({ color: '#1a1614', roughness: 0.35 });
   const mat = new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.95 });
