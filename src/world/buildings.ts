@@ -5,7 +5,7 @@ import { HALLS, BELL, DRUM } from '../layout';
 import { plaqueTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
 import { buildTempleBell } from './bronze';
-import { buildRoof, beamRing, chineseMats, meterUV } from './hall';
+import { buildRoof, beamRing, chineseMats, meterUV, aged } from './hall';
 import { pbr } from './pbr';
 
 const plaqueNames = ['觀音殿', '地藏殿', '藏經閣'];
@@ -200,8 +200,10 @@ function pavilion(T: { x: number; z: number; size: number; platform: number }, n
   const S = T.size;
   const base = T.platform;
   // 台基：青灰条石，台面一圈压阑石，底下再放宽一道土衬石
-  const platTop = pbr('granite', { metersPerTile: 1.1, color: new THREE.Color().setRGB(4.4, 4.2, 3.9) });
-  const platSide = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(3.5, 3.35, 3.1) });
+  const platTop = pbr('granite', { metersPerTile: 1.1, color: new THREE.Color().setRGB(2.7, 2.6, 2.44) });
+  const platSide = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(2.25, 2.17, 2.03) });
+  aged(platTop, 0.1, 0.28);
+  aged(platSide, 0.1, 0.32);
   const plat = mesh(worldBox(S + 1.2, base, S + 1.2, 1), [platSide, platSide, platTop, platTop, platSide, platSide]);
   plat.position.y = base / 2;
   plat.name = 'walkable';
@@ -209,7 +211,8 @@ function pavilion(T: { x: number; z: number; size: number; platform: number }, n
   const plinth = mesh(worldBox(S + 1.5, 0.07, S + 1.5, 1), platSide);
   plinth.position.y = 0.035;
   g.add(plinth);
-  const edgeMat = pbr('granite', { metersPerTile: 0.8, color: new THREE.Color().setRGB(5.2, 5.0, 4.7) });
+  const edgeMat = pbr('granite', { metersPerTile: 0.8, color: new THREE.Color().setRGB(3.0, 2.9, 2.72) });
+  aged(edgeMat, 0.1, 0.25);
   const edge: THREE.BufferGeometry[] = [];
   const E = (S + 1.2) / 2;
   for (const sgn of [-1, 1]) {

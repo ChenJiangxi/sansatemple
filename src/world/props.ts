@@ -213,7 +213,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     const sc = new THREE.Vector3(L.s, L.s, L.s);
     m4.compose(L.p, q, sc);
     lm.setMatrixAt(i, m4);
-    lm.setColorAt(i, new THREE.Color(r() > 0.12 ? '#d42a1c' : '#e0a030'));
+    lm.setColorAt(i, new THREE.Color(r() > 0.12 ? '#d8361a' : '#e0a030'));
     m4.compose(L.p.clone().add(new THREE.Vector3(0, 0.17 * L.s, 0)), q, sc);
     caps.setMatrixAt(i * 2, m4);
     m4.compose(L.p.clone().add(new THREE.Vector3(0, -0.17 * L.s, 0)), q, sc);
@@ -715,8 +715,9 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     interactives,
     setLanternLevel(level) {
       night.setLevel(level);
-      pagodaLampMat.emissiveIntensity = 0.1 + Math.max(0, (level - 0.6) / 1.8) * 2.4;
-      lanternMat.emissiveIntensity = 0.25 + level * 0.9;
+      pagodaLampMat.emissiveIntensity = 0.1 + Math.max(0, (level - 0.6) / 1.8) * 1.3;
+      // 夜里不要太亮：太亮了灯笼中心发白，和红光叠在一起看着像粉色
+      lanternMat.emissiveIntensity = 0.25 + level * 0.42;
       silk.emissiveIntensity = 0.12 + Math.min(level, 2.4) * 0.38;
       for (const l of pathLights) l.intensity = Math.max(0, level - 0.8) * 7;
     },

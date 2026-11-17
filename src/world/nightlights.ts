@@ -37,7 +37,7 @@ function lanternGeos(hang: number) {
 export function buildNightLights(scene: THREE.Scene) {
   const group = new THREE.Group();
   const M = chineseMats();
-  const lanternMat = new THREE.MeshStandardMaterial({ color: '#c8281c', roughness: 0.6, emissive: '#ff4a20', emissiveIntensity: 0.15 });
+  const lanternMat = new THREE.MeshStandardMaterial({ color: '#c8281c', roughness: 0.6, emissive: '#ff4410', emissiveIntensity: 0.15 });
   const lampLightMat = new THREE.MeshStandardMaterial({ color: '#f3dfb5', roughness: 0.8, emissive: '#ffbe6a', emissiveIntensity: 0.1 });
   const tasselMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.8 });
   const glowMat = new THREE.SpriteMaterial({
@@ -144,7 +144,7 @@ export function buildNightLights(scene: THREE.Scene) {
     // level：环境给出的灯笼亮度（白天约 0.25，黄昏 1.3，夜里 2.4）
     setLevel(level: number) {
       const n = Math.min(1, Math.max(0, (level - 0.6) / 1.8));
-      lanternMat.emissiveIntensity = 0.15 + n * 1.8;
+      lanternMat.emissiveIntensity = 0.15 + n * 1.05;
       lampLightMat.emissiveIntensity = 0.1 + n * 1.1;
       geshan.emissiveIntensity = n * 0.75;
       glowMat.opacity = n * 0.85;
