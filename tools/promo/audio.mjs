@@ -13,6 +13,7 @@ const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 const at = (id) => SHOTS.find((s) => s.id === id)?.start;
 const has = (id) => at(id) !== undefined;
 const EXPLAIN = CUT === 'explainer'; // 讲解视频：配乐垫在口播底下，旋律压低
+const FEATURES = CUT === 'features'; // 功能介绍：一天的顺序是 清晨（片头、山门）→ 白天（各项功能）→ 殿内（礼佛、念珠）→ 黄昏（钟、木鱼）→ 夜里
 
 function add(buf, time, gain, pan = 0, send = 0.3) {
   const i0 = Math.round(time * SR);
@@ -238,15 +239,17 @@ const N = {
 const play = (time, note, gain = 0.5, o = {}, pan = 0) => add(qin(N[note], o.dur ?? 5, o), time, gain, pan, 0.35);
 const barT = (k) => DOWNBEAT + k * BAR;
 const barAt = (t) => Math.max(0, Math.ceil((t - DOWNBEAT) / BAR - 0.2));
-const END = at('end') ?? at('eEnd');
+const END = at('end') ?? at('eEnd') ?? at('fEnd');
 const LAST = barAt(END); // 收束和弦落在片尾这一小节
-const HALL0 = at('hallEnter') ?? at('hallFront'), HALL1 = at('rosary') ?? at('bell');
+const HALL0 = at('hallEnter') ?? at('hallFront') ?? at('rows'), HALL1 = at('rosary') ?? at('bell');
+// 各段从哪个镜头开始（功能介绍的镜头不同）
+const A = FEATURES ? { day: 'incense', hall: 'rows', dusk: 'bell', night: 'night' } : { day: 'pond', hall: 'hallFront', dusk: 'bell', night: 'nightSide' };
 const SEC = {
-  dawn: [0, barAt(at('pond'))],
-  day: [barAt(at('pond')), barAt(at('hallFront'))],
-  hall: [barAt(at('hallFront')), barAt(at('bell'))],
-  dusk: [barAt(at('bell')), barAt(at('nightSide'))],
-  night: [barAt(at('nightSide')), LAST],
+  dawn: [0, barAt(at(A.day))],
+  day: [barAt(at(A.day)), barAt(at(A.hall))],
+  hall: [barAt(at(A.hall)), barAt(at(A.dusk))],
+  dusk: [barAt(at(A.dusk)), barAt(at(A.night))],
+  night: [barAt(at(A.night)), LAST],
 };
 const secOf = (k) => Object.keys(SEC).find((n) => k >= SEC[n][0] && k < SEC[n][1]) ?? 'end';
 const CH = {
@@ -298,6 +301,7 @@ const PH = {
 // 旋律从哪个镜头开始；与上一段不重叠，也不跨进下一个大段
 PH.P7 = [[0, 0, 'D5', 2], [0, 2, 'B4', 1], [0, 3, 'A4', 1], [1, 0, 'Fs4', 4]]; // 两小节，殿内
 const SCHEDULES = {
+  features: [['gate', 'P1'], ['quest', 'P2'], ['looks', 'P1b'], ['library', 'P2b'], ['uiReader', 'P5'], ['rows', 'P3'], ['night', 'P6']],
   short34: [['gate', 'P1'], ['court', 'P5'], ['buddha', 'P7'], ['nightSide', 'P6']],
 };
 const SCHEDULE = SCHEDULES[CUT] ?? [['gate', 'P1'], ['leaves', 'P2'], ['bridge', 'P1b'], ['sideHall', 'P2b'], ['ding', 'P5'], ['hallEnter', 'P3'], ['buddha', 'P3b'], ['altar', 'P5b'], ['nightSide', 'P4'], ['night', 'P6']];
@@ -351,13 +355,14 @@ play(0.14, 'A2', 0.25, { t60: 6, dur: 6 }, 0.1);
 {
   const chars = [...PROMPT_LINES.join('')];
   const t0 = EXPLAIN ? at('ePrompt') ?? 0 : 0;
-  chars.forEach((_, i) => add(tick(), t0 + EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
+  // 功能介绍的片头不打字，没有这串轻响
+  if (!FEATURES) chars.forEach((_, i) => add(tick(), t0 + EVENTS.titleType.from + i * EVENTS.titleType.perChar, 0.05, 0.2, 0.1));
 }
 add(harm(N.A5), EVENTS.titleReveal, 0.14, 0.2, 0.5);
 add(qing(), EVENTS.titleSeal, 0.26, 0.25, 0.45);
 
 // 清晨的鸟
-for (const [shot, dts] of [['grove', [0.4, 1.6, 2.9]], ['leaves', [0.8, 2.4]], ['pond', [1.2]]]) if (has(shot)) for (const dt of dts) add(bird(), at(shot) + dt, 0.03, rnd() - 0.5, 0.4);
+for (const [shot, dts] of [['grove', [0.4, 1.6, 2.9]], ['leaves', [0.8, 2.4]], ['pond', [1.2]], ['quest', [0.9, 4.2]], ['looks', [2.6]], ['library', [1.4, 5.5]], ['tower', [1.0, 3.8, 6.6]]]) if (has(shot)) for (const dt of dts) add(bird(), at(shot) + dt, 0.03, rnd() - 0.5, 0.4);
 // 殿内低声齐诵：从进殿到撞钟前
 add(chant(at('bell') - HALL0 + 0.6), HALL0, EXPLAIN ? 0.7 : 1.1, 0, 0.5);
 // 念珠一颗颗拨过的轻响
@@ -368,7 +373,7 @@ for (const dt of EVENTS.drum) add(drum(), at('drum') + dt + EVENTS.drumDelay, 0.
 for (const dt of EVENTS.moktak) add(moktak(), at('moktak') + dt + EVENTS.moktakDelay, 0.34, 0.1, 0.25);
 // 夜里的虫鸣
 {
-  const t0 = at('nightSide'), dur = END + 1 - t0;
+  const t0 = at('nightSide') ?? at('night'), dur = END + 1 - t0;
   const n = Math.round(dur * SR), cr = new Float32Array(n);
   for (let i = 0; i < n; i++) {
     const t = i / SR;

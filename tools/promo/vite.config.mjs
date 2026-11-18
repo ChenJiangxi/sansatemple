@@ -7,6 +7,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const OUT = process.env.PROMO_OUT || '/tmp/sansa-promo';
+// 和游戏的 vite.config.ts 一样：ez-tree 用源码版本，贴图模块换成按需加载的版本
+const ezTextures = {
+  name: 'ez-tree-textures',
+  enforce: 'pre',
+  resolveId(source, importer) {
+    if (importer && importer.includes('/ez-tree/src/lib/') && /^\.\/textures(\.js)?$/.test(source)) return path.join(root, 'src/world/ez-textures.ts');
+    return null;
+  },
+};
 
 function capture() {
   return {
@@ -60,5 +69,6 @@ export default defineConfig({
   base: '/',
   publicDir: path.join(root, 'public'),
   server: { host: '127.0.0.1', port: 4327, strictPort: true },
-  plugins: [capture()],
+  plugins: [ezTextures, capture()],
+  resolve: { alias: { 'ez-tree-src': path.join(root, 'node_modules/@dgreenheck/ez-tree/src/lib/index.js') } },
 });

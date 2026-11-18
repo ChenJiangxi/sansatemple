@@ -14,11 +14,18 @@ import { placeStatues } from '../../src/world/statues';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from '../../src/world/pbr';
 import { Monk, BOW_DURATION } from '../../src/monk';
 import { MoktakView, RosaryView } from '../../src/overlays';
-import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, DRUM, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, heightAt } from '../../src/layout';
+import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, DRUM, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, LIBRARY, heightAt } from '../../src/layout';
+import { furnishSideHalls } from '../../src/world/sidehall';
+import { buildShrines } from '../../src/world/shrines';
+import { PostFX } from '../../src/world/post';
+import { buildCloudSea } from '../../src/world/clouds';
+import { leafPile } from '../../src/play';
+import { ROBES, BEADS } from '../../src/looks';
 // @ts-ignore 共用的分镜表
 import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS } from './timeline.mjs';
 
-type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string };
+type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string; feature?: [string, string] };
+const FEATURES = CUT === 'features';
 type V3 = [number, number, number];
 
 const statusEl = document.getElementById('status')!;
@@ -44,6 +51,8 @@ async function main() {
   // —— 字体 ——
   const fonts = [new FontFace('ZMX', 'url(/__promo/fonts/ZhiMangXing-Regular.ttf)'), new FontFace('MSZ', 'url(/__promo/fonts/MaShanZheng-Regular.ttf)')];
   for (const f of fonts) document.fonts.add(await f.load());
+  // 抄经镜头用的楷字（游戏里同一份，只截了《心经》用到的字）
+  document.fonts.add(await new FontFace('SansaSutra', 'url(/fonts/sutra.woff2)').load());
   await document.fonts.load('40px "Songti SC"');
 
   // —— 渲染器 ——
@@ -63,9 +72,7 @@ async function main() {
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   const roomEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-  const skyTex = loadTexture('sky.jpg');
-  skyTex.mapping = THREE.EquirectangularReflectionMapping;
-  scene.environment = pmrem.fromEquirectangular(skyTex).texture;
+  // 环境光由 Environment 根据天空实时生成（和游戏里一样），这里不再单独从天空贴图生成
   const camera = new THREE.PerspectiveCamera(58, W / H, 0.1, 900);
   const LAND = W > H;
   const setFov = (f: number) => {
@@ -74,22 +81,37 @@ async function main() {
 
   const env = new Environment(scene, renderer);
   env.sun.shadow.mapSize.set(4096, 4096);
-  buildTerrain(scene);
+  const terrain = buildTerrain(scene);
   const hall = buildHall(scene);
-  const nature = buildNature(scene);
+  const nature = buildNature(scene, { renderer, heightAt: terrain.heightAt, size: terrain.size, lite: false });
+  buildShrines(scene);
+  // 功能介绍：和游戏同一套后期（环境光遮蔽、泛光、调色）；别的版本照旧直接渲染
+  const post = FEATURES ? new PostFX(renderer, scene, camera, false) : null;
+  if (post) {
+    post.setSize(W, H, 1);
+    env.onLook = (l) => post.setLook(l);
+  }
   const props = buildProps(scene);
   const buildings = buildBuildings(scene);
   const pond = buildPond(scene, { isTouch: false, lanternFrom: { x: -6.15, z: 47.65 } });
   const life = buildLife(scene);
+  // 配殿与藏经阁的殿内陈设；三座殿门都开着（观音殿的镜头里再演一次开门）
+  const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
+  for (const i of [0, 1, 2]) sideHalls.setOpen(i, true, false);
+  sideHalls.setLamps(24);
+  // 云海：只在登塔的镜头里显出来
+  const clouds = buildCloudSea(scene);
+  let showClouds = false;
   const sunDir = new THREE.Vector3();
   const sunCol = new THREE.Color();
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
   hall.group.traverse((o) => {
     const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-    if (m && (m as any).isMeshStandardMaterial && m.metalness >= 0.75) {
+    // 和游戏一致：背光之类标了 keepEnv 的不动，免得过曝
+    if (m && (m as any).isMeshStandardMaterial && m.metalness >= 0.75 && !m.userData.keepEnv) {
       m.envMap = roomEnv;
-      m.envMapIntensity = 1.5;
+      m.envMapIntensity = FEATURES ? 1.15 : 1.5;
     }
   });
 
@@ -102,6 +124,17 @@ async function main() {
       if (g?.attributes?.position && g.attributes.position.count > 15000) n++;
     });
     if (n >= 3) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  // 配殿的两尊菩萨也是异步加载的
+  for (let k = 0; k < 150 && FEATURES; k++) {
+    let n = 0;
+    for (const h of buildings.halls)
+      h.g.traverse((o) => {
+        const g = (o as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
+        if (g?.attributes?.position && g.attributes.position.count > 15000) n++;
+      });
+    if (n >= 2) break;
     await new Promise((r) => setTimeout(r, 100));
   }
 
@@ -147,7 +180,21 @@ async function main() {
   const me = new Monk();
   scene.add(me.root);
   me.root.visible = false;
-  const CUSHION_TOP = HALL.baseH + 0.12; // 和 main.ts 一致
+  // 功能介绍里另外几位：扫地僧（常住僧的褐色常服）、换了衣钵的五位
+  const extras: Monk[] = [];
+  const sweeperNpc = new Monk('resident');
+  const looksRow = [0, 1, 2, 3, 5].map((ri, k) => {
+    const m = new Monk();
+    m.setLook(ROBES[ri], BEADS[k]);
+    return m;
+  });
+  for (const m of [sweeperNpc, ...looksRow]) {
+    scene.add(m.root);
+    m.root.visible = false;
+    extras.push(m);
+  }
+  let pile: ReturnType<typeof leafPile> | null = null;
+  const CUSHION_TOP = HALL.baseH + 0.18; // 和 main.ts 一致
   const hallSeats = CUSHIONS.filter((_, i) => (i * 7) % 10 < 6);
   let heroSeat: (typeof CUSHIONS)[number] | null = null;
   function fillHall(phase: number) {
@@ -185,12 +232,20 @@ async function main() {
     for (const [i, f] of hall.candleFlames.entries()) f.scale.set(1, 2.2 + Math.sin(elapsed * 9 + i * 2) * 0.25, 1);
     for (const m of pool) if (m.root.visible) m.update(dt);
     if (me.root.visible) me.update(dt);
+    for (const m of extras) if (m.root.visible) m.update(dt);
+    sideHalls.update(dt, elapsed);
+    clouds.update(dt, elapsed, showClouds, camera.position.y);
+    pile?.update(dt);
   }
   function render3d() {
     env.sky.position.copy(camera.position);
-    renderer.render(scene, camera);
+    // 后期的自动降档按帧耗时判断；离线逐帧渲染时传一个很小的帧间隔，保持最高画质
+    if (post) post.render(0.01);
+    else renderer.render(scene, camera);
   }
   function grade(frame: number) {
+    // 功能介绍已经用了游戏的后期调色，不再叠这层暖色和暗角
+    if (FEATURES) return;
     // 暖色、轻微压暗四角、胶片颗粒
     ctx.save();
     ctx.globalCompositeOperation = 'soft-light';
@@ -286,6 +341,113 @@ async function main() {
     ctx.restore();
   }
 
+  // 功能介绍：底部一块字幕，大字功能名、小字一句玩法；镜头开头慢慢浮上来
+  function featureCaption(shot: Shot, t: number) {
+    const f = shot.feature;
+    if (!f) return;
+    const a = ease(clamp01((t - 0.3) / 0.7));
+    if (a <= 0) return;
+    ctx.save();
+    const g = ctx.createLinearGradient(0, H - 520, 0, H);
+    g.addColorStop(0, 'rgba(12,9,6,0)');
+    g.addColorStop(0.45, 'rgba(12,9,6,0.55)');
+    g.addColorStop(1, 'rgba(12,9,6,0.78)');
+    ctx.globalAlpha = a;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, H - 520, W, 520);
+    ctx.translate(0, (1 - a) * 24);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = '#fbf3e2';
+    ctx.font = '96px MSZ';
+    ctx.fillText(f[0], W / 2, H - 300);
+    // 功能名下面一道短金线
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(226,180,92,0.9)';
+    ctx.fillRect(W / 2 - 60, H - 228, 120, 4);
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(251,245,230,0.92)';
+    ctx.font = '44px "Songti SC"';
+    ctx.fillText(f[1], W / 2, H - 165);
+    ctx.restore();
+  }
+  // 功能介绍里，撞钟、木鱼两个镜头叠上游戏里的蓄力条、节拍圈，看得出是怎么玩的
+  function featureOverlay(shot: Shot, t: number) {
+    if (shot.id === 'bell') {
+      // 按住蓄力：力度来回摆，落在金色区间时松手
+      const tStrike = EVENTS.bellStrike as number;
+      const holdT = Math.min(t, tStrike) - 0.4;
+      const power = holdT <= 0 ? 0 : t < tStrike ? (1 - Math.cos(holdT * 2.6)) / 2 : Math.max(0, 0.86 - (t - tStrike) * 2);
+      const mw = 640, mh = 26, mx = (W - mw) / 2, my = H * 0.64;
+      ctx.save();
+      ctx.globalAlpha = clamp01(t / 0.4) * clamp01((tStrike + 1.6 - t) / 0.4);
+      roundRect(ctx, mx - 8, my - 8, mw + 16, mh + 16, 21);
+      ctx.fillStyle = 'rgba(20,15,10,0.72)';
+      ctx.fill();
+      ctx.fillStyle = 'rgba(226,180,92,0.35)';
+      ctx.fillRect(mx + mw * 0.78, my, mw * 0.15, mh);
+      ctx.fillStyle = power >= 0.78 && power <= 0.93 ? '#f3d38a' : '#fbf3e2';
+      roundRect(ctx, mx, my, mw * power, mh, 13);
+      ctx.fill();
+      ctx.font = '40px "Songti SC"';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#fbf3e2';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 10;
+      ctx.fillText(t < tStrike ? '按住，把撞木往后拉' : '', W / 2, my - 44);
+      ctx.restore();
+      const ha = clamp01((t - (EVENTS.bellHit as number)) / 0.3) * clamp01((EVENTS.bellHit + 3.4 - t) / 0.6);
+      if (ha > 0) {
+        ctx.save();
+        ctx.globalAlpha = ha;
+        ctx.textAlign = 'center';
+        ctx.font = '76px MSZ';
+        ctx.fillStyle = '#f3d38a';
+        ctx.shadowColor = 'rgba(0,0,0,0.65)';
+        ctx.shadowBlur = 18;
+        ctx.fillText('洪钟！钟声传出十八里', W / 2, H * 0.56 - (t - EVENTS.bellHit) * 18);
+        ctx.restore();
+      }
+    }
+    if (shot.id === 'moktak') {
+      // 节拍圈从外往里收，收到木鱼上那一刻敲下去是「妙」
+      const beats = EVENTS.moktak as number[];
+      const next = beats.find((b) => b + 0.07 >= t);
+      const cx = W / 2, cy = H * 0.47;
+      if (next !== undefined) {
+        const ph = clamp01(1 - (next + 0.07 - t) / 0.42);
+        ctx.save();
+        ctx.strokeStyle = `rgba(251,243,226,${0.2 + 0.7 * ph * ph})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 250 * (1 + 1.4 * (1 - ph)), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      const hits = beats.filter((b) => b + 0.07 <= t);
+      const last = hits[hits.length - 1];
+      if (last !== undefined) {
+        const k = t - last - 0.07;
+        const a = clamp01(1 - k / 0.5);
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(0,0,0,0.6)';
+        ctx.shadowBlur = 14;
+        ctx.globalAlpha = a;
+        ctx.font = '84px MSZ';
+        ctx.fillStyle = '#f3d38a';
+        ctx.fillText('妙', cx + ((hits.length % 3) - 1) * 70, cy - 300 - k * 120);
+        ctx.globalAlpha = 1;
+        ctx.font = '46px "Songti SC"';
+        ctx.fillStyle = '#fbf3e2';
+        ctx.fillText(`连击 ${hits.length}`, cx, H * 0.69);
+        ctx.restore();
+      }
+    }
+  }
+
   // 竖版的片头片尾按 1080×1920 设计，其他竖屏画幅等比缩放到中间
   function portrait() {
     const k = Math.min(W / 1080, H / 1920);
@@ -293,7 +455,7 @@ async function main() {
   }
   // 线上实拍截图：慢慢推近到要讲的地方
   const uiImg: Record<string, HTMLImageElement> = {};
-  for (const id of ['uiRooms', 'uiBow']) {
+  for (const id of ['uiRooms', 'uiBow', 'uiPractice', 'uiReader']) {
     if (!SHOTS.some((x: Shot) => x.id === id)) continue;
     const im = new Image();
     im.src = `/__promo/ui/${id}.jpg`;
@@ -303,6 +465,8 @@ async function main() {
   const UI_FOCUS: Record<string, { cx: number; cy: number; z0: number; z1: number }> = {
     uiRooms: { cx: 0.2, cy: 0.2, z0: 1.15, z1: 1.9 },
     uiBow: { cx: 0.36, cy: 0.62, z0: 1.0, z1: 1.3 },
+    uiPractice: { cx: 0.6, cy: 0.4, z0: 1.02, z1: 1.14 },
+    uiReader: { cx: 0.5, cy: 0.34, z0: 1.02, z1: 1.14 },
   };
   function uiCard(id: string, u: number) {
     const im = uiImg[id], f = UI_FOCUS[id];
@@ -967,6 +1131,322 @@ async function main() {
         place(pool[1], 0.9, 16 - t * 1.1, Math.PI);
       },
     },
+    // —— 功能介绍 ——
+    fTitle: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        ctx.save();
+        portrait();
+        inkTitle(ctx, '山寺', 540, 760, 380, t - 0.3, 1.0);
+        const sa = clamp01((t - 1.6) / 0.18);
+        if (sa > 0) seal(ctx, 905, 900, 110, '静山', sa, 1.25 - 0.25 * ease(sa));
+        const a = clamp01((t - 1.9) / 0.6);
+        ctx.globalAlpha = a;
+        ctx.textAlign = 'center';
+        ctx.font = '78px MSZ';
+        ctx.fillStyle = '#2a2320';
+        ctx.fillText('一座可以修行的线上古寺', 540, 1100);
+        const b = clamp01((t - 2.8) / 0.6);
+        ctx.globalAlpha = b;
+        ctx.font = '42px "Songti SC"';
+        ctx.fillStyle = '#6b5f50';
+        ctx.fillText('礼佛 · 上香 · 撞钟 · 抄经 · 读经 · 登塔', 540, 1220);
+        ctx.restore();
+      },
+    },
+    quest: {
+      // 寺务：扫地僧请你帮忙，你拿起扫帚扫银杏下的落叶，叶子一扬而散
+      setup() {
+        cast(0);
+        const px = -9.8, pz = 29.2;
+        if (!pile) {
+          pile = leafPile(px, pz, 3);
+          scene.add(pile.group);
+        }
+        pile.group.visible = true;
+        me.root.visible = true;
+        place(me, px + 0.9, pz + 0.5, Math.atan2(-0.9, -0.5));
+        me.setAction('idle');
+        sweeperNpc.root.visible = true;
+        place(sweeperNpc, -7.0, 31.6, Math.atan2(-1.9, -1.9));
+        sweeperNpc.setAction('sweep');
+        env.follow(-9, 30);
+      },
+      update(t, u) {
+        setFov(46);
+        camPath([
+          { p: [-12.9, 1.9, 25.6], l: [-9.5, 0.7, 29.7] },
+          { p: [-12.2, 1.6, 26.6], l: [-9.4, 0.6, 29.8] },
+        ])(u, camera);
+        if (t >= 2.4 && me.action !== 'sweep') {
+          me.setAction('sweep');
+          pile!.sweep();
+        }
+      },
+    },
+    uiPractice: {
+      setup() {},
+      update() {},
+      draw(t) {
+        uiCard('uiPractice', t / curDur);
+        grade(Math.round(t * FPS));
+        featureCaption(curShot!, t);
+      },
+    },
+    looks: {
+      // 衣钵：五位换了不同僧袍、念珠的小和尚站成一排，镜头慢慢横移；脚下写着几级的衣钵
+      setup() {
+        cast(0);
+        looksRow.forEach((m, k) => {
+          m.root.visible = true;
+          place(m, -3.2 + k * 1.6, 3.0 + Math.abs(k - 2) * 0.3, 0);
+          m.setAction('hapjang');
+          m.actionTime = k * 0.5;
+        });
+        env.follow(0, 6);
+      },
+      update(_t, u) {
+        setFov(50);
+        camPath([
+          // 镜头走在小和尚和院中大鼎之间（鼎在 z = 7，半径 1.2），别穿进鼎里
+          { p: [-2.7, 1.4, 5.35], l: [-1.9, 0.95, 3.1] },
+          { p: [2.7, 1.4, 5.35], l: [1.9, 0.95, 3.1] },
+        ])(u, camera);
+      },
+      draw(t, frame) {
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        render3d();
+        ctx.drawImage(renderer.domElement, 0, 0);
+        grade(frame);
+        const names = ['居士 · 赤袈裟', '行者 · 褐袈裟', '比丘 · 金黄袈裟', '法师 · 金线袈裟', '长老 · 紫金袈裟'];
+        const v = new THREE.Vector3();
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = '36px "Songti SC"';
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur = 10;
+        looksRow.forEach((m, k) => {
+          v.copy(m.root.position).setY(m.root.position.y + 1.75).project(camera);
+          if (v.z > 1) return;
+          const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+          ctx.globalAlpha = clamp01((t - 0.5 - k * 0.25) / 0.5);
+          roundRect(ctx, x - 150, y - 34, 300, 60, 30);
+          ctx.fillStyle = 'rgba(20,15,10,0.5)';
+          ctx.fill();
+          ctx.fillStyle = '#fbf3e2';
+          ctx.fillText(names[k], x, y + 10);
+        });
+        ctx.restore();
+        featureCaption(curShot!, t);
+      },
+    },
+    guanyin: {
+      // 解锁殿堂：观音殿的门转开，殿里点起暖灯，镜头慢慢推进到菩萨面前
+      setup() {
+        cast(0);
+        sideHalls.setOpen(0, false, false);
+        env.follow(-29, -4);
+      },
+      update(t, u) {
+        setFov(50);
+        if (t >= 0.9) sideHalls.setOpen(0, true, true);
+        const H0 = SIDE_HALLS[0];
+        // 正中一间是柱子，镜头从旁边一间敞开的门斜着看进去，停在殿外（殿门往里开，进去会被门扇挡住）
+        camPath([
+          { p: [H0.x + 9.0, 2.1, H0.z + 2.8], l: [H0.x - 3.1, 2.1, H0.z] },
+          { p: [H0.x + 6.2, 1.85, H0.z + 1.9], l: [H0.x - 3.1, 2.2, H0.z] },
+        ])(u, camera);
+      },
+    },
+    library: {
+      // 藏经阁：从后院仰看两层的楼阁，一位小和尚走上台阶
+      setup() {
+        cast(0);
+        me.root.visible = true;
+        me.setAction('walk');
+        me.speed = 1.1;
+        env.follow(0, -38);
+      },
+      update(t, u) {
+        setFov(56);
+        place(me, 0.6, -29.4 - t * 0.55, Math.PI);
+        camPath([
+          { p: [6.4, 1.4, -27.6], l: [0, 4.2, -40] },
+          { p: [4.6, 2.4, -27.2], l: [0, 5.6, -41] },
+        ])(u, camera);
+      },
+    },
+    copy: {
+      // 抄经：藏经阁里的经案虚化作底，一张宣纸上描《心经》：灰色范字上墨一点点写出来，写完盖「妙」
+      setup() {
+        cast(0);
+        env.follow(0, -40);
+        camera.position.set(1.4, 1.5, -38.0);
+        camera.lookAt(0, 0.9, -41.5);
+      },
+      update() {
+        setFov(50);
+      },
+      draw(t, frame) {
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        render3d();
+        ctx.save();
+        ctx.filter = 'blur(14px) brightness(0.55)';
+        ctx.drawImage(renderer.domElement, -40, -60, W + 80, H + 120);
+        ctx.restore();
+        const chars = ['行', '深'];
+        const per = 3.6;
+        const k = Math.min(chars.length - 1, Math.floor(Math.max(0, t - 0.4) / per));
+        const lt = Math.max(0, t - 0.4) - k * per;
+        // 纸
+        const pw = 860, ph = 1120, px = (W - pw) / 2, py = 330;
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.45)';
+        ctx.shadowBlur = 40;
+        roundRect(ctx, px, py, pw, ph, 10);
+        ctx.fillStyle = '#f4ecda';
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.strokeStyle = 'rgba(176,58,40,0.5)';
+        ctx.lineWidth = 2;
+        roundRect(ctx, px + 12, py + 12, pw - 24, ph - 24, 6);
+        ctx.stroke();
+        ctx.fillStyle = '#3a2a1e';
+        ctx.font = '46px SansaSutra';
+        ctx.textAlign = 'left';
+        ctx.fillText('般若波羅蜜多心經', px + 50, py + 90);
+        ctx.font = '30px "Songti SC"';
+        ctx.fillStyle = '#8a6e58';
+        ctx.fillText(`第 ${6 + k} / 260 字`, px + 520, py + 88);
+        // 这一句：抄过的墨色，正在抄的朱红
+        const line = '行深般若波羅蜜多時';
+        ctx.font = '64px SansaSutra';
+        ctx.textAlign = 'center';
+        [...line].forEach((c, i) => {
+          ctx.fillStyle = i < k ? '#1d1612' : i === k ? '#b03a28' : 'rgba(90,70,50,0.3)';
+          ctx.fillText(c, px + pw / 2 + (i - 4) * 78, py + 200);
+        });
+        // 米字格
+        const cs = 620, cx0 = (W - cs) / 2, cy0 = py + 270;
+        ctx.fillStyle = '#f8f1e1';
+        ctx.fillRect(cx0, cy0, cs, cs);
+        ctx.strokeStyle = 'rgba(176,58,40,0.55)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(cx0, cy0, cs, cs);
+        ctx.setLineDash([16, 12]);
+        ctx.strokeStyle = 'rgba(176,58,40,0.28)';
+        for (const [a, b, c, d] of [[0, cs / 2, cs, cs / 2], [cs / 2, 0, cs / 2, cs], [0, 0, cs, cs], [cs, 0, 0, cs]]) {
+          ctx.beginPath();
+          ctx.moveTo(cx0 + a, cy0 + b);
+          ctx.lineTo(cx0 + c, cy0 + d);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+        ctx.font = `${cs * 0.8}px SansaSutra`;
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(120,104,86,0.3)';
+        ctx.fillText(chars[k], W / 2, cy0 + cs * 0.53);
+        // 墨：从左上往右下一点点写出来（大致是汉字的笔顺方向）
+        const wp = ease(clamp01(lt / 2.6));
+        if (wp > 0) {
+          const ink = document.createElement('canvas');
+          ink.width = ink.height = cs;
+          const g = ink.getContext('2d')!;
+          g.font = `${cs * 0.8}px SansaSutra`;
+          g.textAlign = 'center';
+          g.textBaseline = 'middle';
+          g.fillStyle = 'rgba(24,18,14,0.95)';
+          g.fillText(chars[k], cs / 2, cs * 0.53);
+          g.globalCompositeOperation = 'destination-in';
+          const grd = g.createLinearGradient(0, 0, cs, cs);
+          const edge = wp * 1.15;
+          grd.addColorStop(0, 'rgba(0,0,0,1)');
+          grd.addColorStop(Math.max(0, Math.min(1, edge - 0.12)), 'rgba(0,0,0,1)');
+          grd.addColorStop(Math.max(0.001, Math.min(1, edge)), 'rgba(0,0,0,0)');
+          grd.addColorStop(1, 'rgba(0,0,0,0)');
+          g.fillStyle = grd;
+          g.fillRect(0, 0, cs, cs);
+          ctx.drawImage(ink, cx0, cy0);
+        }
+        // 写完：盖一方「妙」，飘一个「功德 +4」
+        const ga = clamp01((lt - 2.7) / 0.2) * clamp01((per - 0.1 - lt) / 0.25);
+        if (ga > 0) {
+          ctx.globalAlpha = ga;
+          roundRect(ctx, W / 2 - 64, cy0 + 40, 128, 84, 10);
+          ctx.fillStyle = '#b3261e';
+          ctx.fill();
+          ctx.fillStyle = '#fff3e0';
+          ctx.font = '60px MSZ';
+          ctx.fillText('妙', W / 2, cy0 + 84);
+          ctx.fillStyle = '#e2b45c';
+          ctx.font = '40px "Songti SC"';
+          ctx.fillText('功德 +4', W / 2 + 230, cy0 + 70 - (lt - 2.7) * 30);
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+        grade(frame);
+        featureCaption(curShot!, t);
+      },
+    },
+    uiReader: {
+      setup() {},
+      update() {},
+      draw(t) {
+        uiCard('uiReader', t / curDur);
+        grade(Math.round(t * FPS));
+        featureCaption(curShot!, t);
+      },
+    },
+    tower: {
+      // 登塔：站在左塔顶层檐下的外廊，清晨的云海铺满院子和山谷，镜头慢慢转向山门
+      setup() {
+        cast(0);
+        showClouds = true;
+        for (let k = 0; k < 8; k++) clouds.update(1, elapsed, true, 20);
+        env.follow(-10, 15);
+      },
+      update(_t, u) {
+        setFov(58);
+        const P = PAGODAS[0], sc = P.s * 0.75;
+        // 从左塔望向东边的右塔和大殿：殿顶、塔刹从云里露出来（白天，云是白的）
+        const yaw = -1.25 + 0.85 * glide(clamp01(u));
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        const eyeY = 9.0 * sc;
+        camera.position.set(P.x + fx * 1.15 * sc, eyeY, P.z + fz * 1.15 * sc);
+        camera.lookAt(camera.position.x + fx * 10, eyeY - Math.tan(0.17) * 10, camera.position.z + fz * 10);
+      },
+    },
+    fEnd: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        ctx.save();
+        portrait();
+        inkTitle(ctx, '山寺', 540, 760, 360, t - 0.2, 0.9);
+        const sa = clamp01((t - EVENTS.endSeal) / 0.18);
+        if (sa > 0) seal(ctx, 948, 870, 96, '静山', sa, 1.25 - 0.25 * ease(sa));
+        const a = clamp01((t - 0.9) / 0.5);
+        ctx.globalAlpha = a;
+        ctx.textAlign = 'center';
+        ctx.font = '70px MSZ';
+        ctx.fillStyle = '#2a2320';
+        ctx.fillText('浏览器打开就能逛', 540, 1060);
+        const b = clamp01((t - 1.8) / 0.6);
+        ctx.globalAlpha = b;
+        ctx.font = '40px "Songti SC"';
+        ctx.fillStyle = '#6b5f50';
+        ctx.fillText('礼佛 上香 撞钟 木鱼 念珠', 540, 1180);
+        ctx.fillText('寺务 · 抄经 · 读经 · 登塔 · 衣钵', 540, 1250);
+        ctx.fillText('五十人同在一寺', 540, 1320);
+        ctx.restore();
+      },
+    },
     end: {
       setup() {},
       update() {},
@@ -998,6 +1478,7 @@ async function main() {
     },
   };
   let struck = false;
+  let curShot: Shot | null = null;
   let curDur = 4;
   let mk = 0;
   let rk = 0;
@@ -1138,6 +1619,7 @@ async function main() {
 
   // —— 逐帧录制 ——
   const want = new URL(location.href).searchParams.get('shots')?.split(',') ?? SHOTS.map((s: Shot) => s.id);
+  const every = Number(new URL(location.href).searchParams.get('every')) || 1;
   for (const shot of SHOTS as Shot[]) {
     if (!want.includes(shot.id)) continue;
     const S = shots[shot.id];
@@ -1150,6 +1632,10 @@ async function main() {
       if (shot.time === 'night') renderer.toneMappingExposure *= 1.45;
     }
     struck = false;
+    curShot = shot;
+    showClouds = false;
+    for (const m of extras) m.root.visible = false;
+    if (pile) pile.group.visible = false;
     S.setup();
     // 先空跑一秒：让香烟、落叶、动作进入状态
     for (let k = 0; k < 30; k++) {
@@ -1161,6 +1647,8 @@ async function main() {
       const t = i / FPS;
       S.update(t, t / shot.dur);
       tickWorld(1 / FPS);
+      // 试看：&every=N 只出每第 N 帧（世界照常逐帧推进）
+      if (every > 1 && i % every) continue;
       if (S.draw) S.draw(t, i);
       else {
         camera.aspect = W / H;
@@ -1177,8 +1665,13 @@ async function main() {
           ctx.drawImage(ovr.domElement, 0, ((shot.id === 'moktak' ? 120 : 60) * H) / 1920);
         } else ctx.drawImage(renderer.domElement, 0, 0);
         grade(i);
-        header();
-        caption(shot, t);
+        if (FEATURES) {
+          featureOverlay(shot, t);
+          featureCaption(shot, t);
+        } else {
+          header();
+          caption(shot, t);
+        }
       }
       if (CUT === 'explainer') subtitles(shot.start + t);
       const blob: Blob = await new Promise((r) => out.toBlob((b) => r(b!), 'image/jpeg', 0.93));

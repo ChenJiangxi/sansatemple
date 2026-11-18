@@ -223,7 +223,16 @@ node tools/promo/audio.mjs /tmp/sansa-promo/score.wav
 node tools/promo/assemble.mjs /tmp/sansa-promo/shots /tmp/sansa-promo/score.wav 宣传片.mp4
 ```
 
-三个版本用 `cut` 参数切换（页面 `?cut=`，Node 脚本用环境变量 `CUT=`）：`vertical`（9:16，2 分钟，默认）、`short34`（3:4，约 1 分钟）、`explainer`（16:9 讲解视频）。讲解视频的口播稿在 `explainer-script.mjs`，先用 `secret exec MINIMAX_API_KEY_MPLAN -- node tools/promo/voice.mjs 配音目录` 生成克隆音（已有的段落不会重复生成），再录制；拼接时把配音目录作为第四个参数传给 `assemble.mjs`，配乐会在说话时自动压低。实拍截图放在 `PROMO_UI` 指向的目录。
+四个版本用 `cut` 参数切换（页面 `?cut=`，Node 脚本用环境变量 `CUT=`）：`vertical`（9:16，2 分钟，默认）、`short34`（3:4，约 1 分钟）、`explainer`（16:9 讲解视频）、`features`（9:16 功能介绍，约 2 分钟）。
+
+**功能介绍（`features`）**：一天里走一遍寺院，17 个镜头每个 6～9 秒，镜头慢、底部字幕写功能名和一句玩法。
+- 内容：上香、寺务、修行进度、衣钵、解锁殿堂、藏经阁、抄经、读经、登塔看云海、大殿礼佛、念珠、撞钟、木鱼、夜景。
+- 画面：用游戏同一套后期，场景里有配殿陈设和云海；撞钟、木鱼叠了游戏里的蓄力条、节拍圈。
+- 界面截图：修行面板、读经页从游戏里截。浏览器 540×960、两倍像素，截成 PNG 后转 JPG 放进 `PROMO_UI`。URL 参数：
+  - 修行面板：`?debugview&nointro&lang=zh&time=10&at=0,13&cam=0,0.12,6.5&points=780&daily=bow:10,incense:1,moktak:18,beads:40,read:2&panel=practice`
+  - 读经页：同样的参数，把 `daily…panel=practice` 换成 `&read=pumen`
+- 录制前本地起 `node server/server.mjs`，免得截图里出现「未连上服务器」的提示。
+- 试看：页面加 `&every=40` 只出每第 40 帧。讲解视频的口播稿在 `explainer-script.mjs`，先用 `secret exec MINIMAX_API_KEY_MPLAN -- node tools/promo/voice.mjs 配音目录` 生成克隆音（已有的段落不会重复生成），再录制；拼接时把配音目录作为第四个参数传给 `assemble.mjs`，配乐会在说话时自动压低。实拍截图放在 `PROMO_UI` 指向的目录。
 
 封面：打开 `promo.html?cover`，会生成 9:16 和 3:4 两张（`/tmp/sansa-promo/shots/cover*/00000.jpg`）。
 

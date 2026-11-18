@@ -1678,6 +1678,11 @@ async function start() {
       applyLook(me, myLook);
     }
     if (sp.get('panel') === 'practice') setTimeout(() => ui.openPractice((sp.get('ptab') as 'progress' | 'sutras' | 'rules' | 'look' | null) ?? 'progress'), 1500);
+    // 调试：&daily=bow:6,incense:1 设今天各项功课的次数（录宣传片的界面截图用）
+    for (const kv of (sp.get('daily') ?? '').split(',')) {
+      const [k, v] = kv.split(':');
+      if (k && Number(v) > 0) progress.tick(k, Number(v));
+    }
     // 调试：&read=经的编号 直接打开读经
     const dbgRead = sp.get('read');
     if (dbgRead) setTimeout(() => reader.show(dbgRead), 1500);

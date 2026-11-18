@@ -3,13 +3,14 @@
 //   vertical  竖屏 9:16，2 分钟宣传片（默认）
 //   short34   竖屏 3:4，约 1 分钟的短视频
 //   explainer 横屏 16:9 讲解视频，克隆音口播 + 字幕，镜头时长跟着口播走
+//   features  竖屏 9:16 功能介绍，约 2 分钟：一天里走一遍寺院，每个镜头一个功能，节奏放慢（每个 7～9 秒），底部字幕写功能名和玩法
 // 画面里不出现任何网址
 import { SEGMENTS } from './explainer-script.mjs';
 import { VOICE_TIMING } from './explainer-voice.mjs';
 
 export const CUT =
   (typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cut') : globalThis.process?.env?.CUT) || 'vertical';
-const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080] };
+const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080], features: [1080, 1920] };
 export const [W, H] = SIZES[CUT] ?? SIZES.vertical;
 export const FPS = 30;
 export const XF = 0.5;
@@ -57,6 +58,37 @@ const DEF = {
   eEnd: {},
   uiRooms: {},
   uiBow: {},
+  // 功能介绍专用
+  fTitle: {},
+  quest: { time: 'day' },
+  uiPractice: {},
+  looks: { time: 'day' },
+  guanyin: { time: 'day' },
+  library: { time: 'day' },
+  copy: {},
+  uiReader: {},
+  tower: { time: 'day' },
+  fEnd: {},
+};
+// 功能介绍里换时段的镜头：黄昏撞钟的特写逆光，钟正面一片黑，改用白天的光（配乐仍按黄昏那一段走）
+const FEATURE_TIME = { bell: 'day' };
+// 功能介绍：每个镜头底部的字幕（功能名、一句玩法）
+const FEATURE_TEXT = {
+  gate: ['一座在线古寺', '打开网页就能进山门，五十人同在一寺'],
+  incense: ['上香', '点香炉，人会走过去，亲手插上一炷香'],
+  quest: ['寺务', '头上有「！」的僧人会请你帮忙：扫落叶、浇树'],
+  uiPractice: ['修行进度', '功德攒够就升一级；每天六项功课，做满有奖励'],
+  looks: ['衣钵', '每升一级，开放新的僧袍和念珠'],
+  guanyin: ['解锁殿堂', '修行到「行者」，观音殿的门为你打开'],
+  library: ['藏经阁', '修行到「比丘」开放，里面能抄经、读经'],
+  copy: ['抄经', '照着灰色的楷字描《心经》，描得准功德多'],
+  uiReader: ['读经', '六部经书，繁简可切换，慢慢读，记下读过几遍'],
+  tower: ['登塔看云海', '修行到「法师」，可以登上塔顶看云海'],
+  rows: ['大殿礼佛', '整点共修，满殿的人一起礼拜'],
+  rosary: ['拨念珠', '一颗一颗拨，满一百零八颗记一圈'],
+  bell: ['撞钟', '按住蓄力，在金色区间松手，钟声最洪亮'],
+  moktak: ['敲木鱼', '跟着拍子敲，敲准是「妙」，连击功德更多'],
+  night: ['入夜', '灯笼一盏盏亮起，夜里的寺院另有一番样子'],
 };
 // 讲解视频里，殿堂器物的名目做小字幕（不放诗句，免得和口播打架）
 const EXPLAIN_LINE = {
@@ -71,6 +103,10 @@ const LISTS = {
     ['pagoda', 4.5], ['sideHall', 4.5], ['bench', 4.0], ['incense', 4.5], ['ding', 4.5], ['hallFront', 4.5], ['hallEnter', 4.5],
     ['rows', 4.5], ['ceiling', 4.5], ['buddha', 4.5], ['triad', 4.0], ['wall', 4.0], ['altar', 4.0], ['bowClose', 4.5], ['rosary', 4.0],
     ['bell', 4.0], ['drum', 4.0], ['moktak', 3.5], ['nightSide', 4.5], ['nightPagoda', 4.0], ['night', 5.0], ['crowd', 4.5], ['end', 4.5],
+  ],
+  features: [
+    ['fTitle', 6.0], ['gate', 8.0], ['incense', 8.0], ['quest', 8.0], ['uiPractice', 8.0], ['looks', 8.0], ['guanyin', 8.5], ['library', 8.0],
+    ['copy', 8.5], ['uiReader', 8.0], ['tower', 9.0], ['rows', 8.0], ['rosary', 7.5], ['bell', 8.0], ['moktak', 8.5], ['night', 8.0], ['fEnd', 6.5],
   ],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
@@ -108,6 +144,7 @@ export const SHOTS = list.map(([id, dur]) => ({
   dur,
   ...DEF[id],
   ...(CUT === 'explainer' ? { line: EXPLAIN_LINE[id] } : {}),
+  ...(CUT === 'features' ? { line: undefined, feature: FEATURE_TEXT[id], ...(FEATURE_TIME[id] ? { time: FEATURE_TIME[id] } : {}) } : {}),
 }));
 
 // 每个镜头在成片里的起点（秒）
@@ -142,7 +179,7 @@ export const EVENTS = {
   titleSeal: 2.9,
   bellStrike: bellHit - STRIKER_DELAY,
   bellHit,
-  moktak: beatsIn('moktak', 0.25, Math.min(3.2, durOf('moktak') - 0.3), BEAT / 2, MOKTAK_DELAY),
+  moktak: beatsIn('moktak', 0.25, CUT === 'features' ? durOf('moktak') - 0.6 : Math.min(3.2, durOf('moktak') - 0.3), BEAT / 2, MOKTAK_DELAY),
   moktakDelay: MOKTAK_DELAY,
   drum: beatsIn('drum', 0.5, durOf('drum') - 0.4, BEAT, DRUM_DELAY),
   drumDelay: DRUM_DELAY,
