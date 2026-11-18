@@ -34,7 +34,7 @@ import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY } from './layout';
+import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY, cafeLocal } from './layout';
 import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
@@ -73,7 +73,8 @@ function loadBows() {
 
 // 殿内地砖顶面 baseH + 0.06，蒲团高 0.184；身子坐在蒲团顶上、略压下去一点
 const CUSHION_TOP = HALL.baseH + 0.18;
-const seatY = (s: Seat) => (s.kind === 'cushion' ? CUSHION_TOP : 0);
+// 长椅、凳子坐在所在地面的高度上（咖啡馆的平台垫高了一点）
+const seatY = (s: Seat) => (s.kind === 'cushion' ? CUSHION_TOP : heightAt(s.x, s.z));
 const seatPos = (s: Seat) => (s.kind === 'cushion' ? { x: s.x, z: s.z + 0.32 } : { x: s.x, z: s.z });
 
 function angleLerp(a: number, b: number, k: number) {
@@ -391,9 +392,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian', barista: 'roleBarista',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian', barista: 'roleBarista', waiter: 'roleWaiter',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian', barista: 'npcBarista' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian', barista: 'npcBarista', waiter: 'npcWaiter' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -2173,6 +2174,9 @@ async function start() {
     {
       const A = WISH_ALLEY;
       if (pos.x > A.xW - 0.8 && pos.x < A.xE + 0.8 && pos.z > A.zs[0] - 0.8 && pos.z < A.zs[A.zs.length - 1] + 0.8) pos.y = Math.min(pos.y, 2.25);
+      // 咖啡馆厅里：镜头不穿过天花
+      const c = cafeLocal(pos.x, pos.z);
+      if (Math.abs(c.lx) < CAFE.hw + 0.3 && c.lz > -CAFE.hd && c.lz < CAFE.hd + 0.6) pos.y = Math.min(pos.y, CAFE.base + CAFE.colH - 0.3);
     }
     pos.y = Math.max(pos.y, heightAt(pos.x, pos.z) + 0.3);
     if (cine.on && !cineValid()) endIncenseScene();

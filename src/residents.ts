@@ -8,12 +8,12 @@
 //   钟头、鼓头扫楼、擦鼓；两位僧人拨着念珠绕塔。
 import * as THREE from 'three';
 import { Monk, GAITS, type Action, BOW_DURATION } from './monk';
-import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat, CAFE, cafeWorld } from './layout';
+import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat, CAFE, cafeWorld, CAFE_TABLES } from './layout';
 import type { StrikeBuild } from './world/buildings';
 import { REAL } from './body-real';
 import { cushionMesh } from './world/hall';
 
-export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian' | 'barista';
+export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian' | 'barista' | 'waiter';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
 export type Activity =
   | 'sweep' | 'rest' | 'read' | 'water' | 'fill' | 'bring' | 'serve' | 'tea' | 'teach' | 'listen' | 'incense'
@@ -393,8 +393,9 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     { to: libSeat, v: 0.45, direct: true },
   ]);
 
-  // —— 咖啡师父：守在东院茶寮的柜台后面，做咖啡、擦台面、歇一会儿（不出柜台） ——
-  const barSpot = cafeWorld(-0.25, 0.1), barSide = cafeWorld(0.9, 0.05);
+  // —— 咖啡师父：两位守在吧台后面，一位在咖啡机前，一位管手冲和点心柜（不出吧台） ——
+  const bz = CAFE.bar - 0.6 - 0.55;
+  const barSpot = cafeWorld(-2.1, bz), barSide = cafeWorld(-0.6, bz);
   const barista = add('barista', 'resident', { ...barSpot, yaw: CAFE.yaw, action: 'brew' });
   barista.prog = program(at(barista), [
     { stay: 36, act: 'brew', yaw: CAFE.yaw, label: 'brew' },
@@ -402,6 +403,35 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     { stay: 9, act: 'wipe', yaw: CAFE.yaw, label: 'wipe' },
     { to: barSpot, v: 0.4, direct: true, label: 'brew' },
     { stay: 14, act: 'idle', yaw: CAFE.yaw, label: 'brew' },
+  ]);
+  const pourSpot = cafeWorld(0.4, bz), caseSpot = cafeWorld(2.0, bz);
+  const barista2 = add('barista', 'resident', { ...pourSpot, yaw: CAFE.yaw, action: 'brew' });
+  barista2.prog = program(at(barista2), [
+    { stay: 28, act: 'brew', yaw: CAFE.yaw, label: 'brew' },
+    { to: caseSpot, v: 0.4, direct: true, label: 'tidy' },
+    { stay: 10, act: 'wipe', yaw: CAFE.yaw, label: 'tidy' },
+    { to: pourSpot, v: 0.4, direct: true, label: 'brew' },
+  ]);
+  barista2.offset = 19;
+  // —— 跑堂小沙弥：从吧台一头端着托盘，送到露台的桌上，再回来 ——
+  const pick = cafeWorld(4.5, CAFE.bar + 0.35);
+  const aisle = cafeWorld(1.2, 3.0), aisle2 = cafeWorld(-1.2, 3.0);
+  const tA = cafeWorld(3.0, 4.2), tB = cafeWorld(-3.0, 6.5), tC = cafeWorld(-3.0, 4.2);
+  const waiter = add('waiter', 'novice', { ...pick, yaw: CAFE.yaw, action: 'idle' });
+  const toward = (p: P, q: { x: number; z: number }) => Math.atan2(q.x - p.x, q.z - p.z);
+  waiter.prog = program(at(waiter), [
+    { stay: 10, act: 'idle', yaw: CAFE.yaw, label: 'bring' },
+    { to: aisle, v: 0.55, gait: 'tray', direct: true, label: 'bring' },
+    { to: tA, v: 0.55, gait: 'tray', direct: true, label: 'bring' },
+    { stay: 4, act: 'serve', yaw: toward(tA, CAFE_TABLES[1]), label: 'serve', say: 'sayServeCoffee' },
+    { to: aisle2, v: 0.6, direct: true, label: 'bring' },
+    { to: tB, v: 0.6, direct: true, label: 'tidy' },
+    { stay: 6, act: 'wipe', yaw: toward(tB, CAFE_TABLES[2]), label: 'tidy' },
+    { to: tC, v: 0.6, direct: true, label: 'tidy' },
+    { stay: 5, act: 'wipe', yaw: toward(tC, CAFE_TABLES[0]), label: 'tidy' },
+    { to: aisle2, v: 0.6, direct: true, label: 'bring' },
+    { to: aisle, v: 0.6, direct: true, label: 'bring' },
+    { to: pick, v: 0.6, direct: true, label: 'bring' },
   ]);
 
   // —— 大众：四位，两位从观音殿、两位从地藏殿走来，在供桌两侧跪拜 ——

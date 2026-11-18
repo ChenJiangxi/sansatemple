@@ -19,7 +19,7 @@ const INCENSE_MS = 3 * 60 * 1000;
 const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune', 'hang']);
 const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
 const LANTERN_MAX = 30;
-const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d)$/;
+const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d{1,2})$/;
 // 手里的咖啡：饮品.还剩几口
 const CUP_RE = /^(latte|americano|coldbrew|osmanthus|decaf)\.[0-3]$/;
 const LOOK_RE = /^[a-z]{2,10}\.[a-z]{2,10}\.[0-6]$/;

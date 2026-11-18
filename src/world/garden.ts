@@ -459,7 +459,7 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
       if (Math.abs(x) < 4.2 || z < -48 || z > COURT.z1 - 1.2 || Math.abs(x) > COURT.x1 - 1.2) return false;
       if (z < 33 && Math.abs(x) < 21) return false;
       if (inPond(x, z, 1.4) || onPath(x, z) || blocked(x, z)) return false;
-      if (Math.abs(x - CAFE.x) < 4 && Math.abs(z - CAFE.z) < 3.4) return false;
+      if (x > CAFE.x - CAFE.deck - 1.2 && x < CAFE.x + CAFE.hd + 1.2 && Math.abs(z - CAFE.z) < CAFE.hw + 1.2) return false;
       if (x > WISH_ALLEY.xW - 0.6 && x < WISH_ALLEY.xE + 0.6 && z > WISH_ALLEY.zs[0] - 0.6 && z < WISH_ALLEY.zs[WISH_ALLEY.zs.length - 1] + 0.6) return false;
       return true;
     };
