@@ -179,6 +179,11 @@ export class Environment {
     this.update();
   }
 
+  // 指定钟点（0–24，带小数）：宣传片里一路从清晨走到入夜，天色连续变化
+  setHour(h: number) {
+    this.apply(presetForHour(((h % 24) + 24) % 24));
+  }
+
   update() {
     let p: Preset;
     if (this.mode === 'auto') {

@@ -6,6 +6,9 @@
 //   features  竖屏 9:16 功能介绍，约 2 分钟：一天里走一遍寺院，每个镜头一个功能，节奏放慢（每个 7～9 秒），底部字幕写功能名和玩法
 //   news      竖屏 9:16「山寺 · 修行」，约 1 分半：以修行为主（礼佛、上香、功课、抄经、读经、念珠、祈福、撞钟、木鱼），咖啡只一个镜头；
 //             没有片头，直接进；配乐 100 拍/分钟、有鼓点（不要太舒缓），
+//   walk      竖屏 9:16「一镜到底」，约 2 分 45 秒：镜头跟着小和尚从山门连贯走一圈——过桥、撞晨钟、上香、进殿礼佛、
+//             升过殿顶落到藏经阁抄经、升到高处看日落、落进祈福灯廊挂灯、入夜；天色从清晨连续变到夜里；配乐同 news（WALK、MUSIC）
+//
 //             镜头仍然慢（每个 3 小节 = 7.2 秒），每个镜头的起点都落在小节线上，画面里的动作卡在拍子上
 // 画面里不出现任何网址
 import { SEGMENTS } from './explainer-script.mjs';
@@ -13,15 +16,18 @@ import { VOICE_TIMING } from './explainer-voice.mjs';
 
 export const CUT =
   (typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cut') : globalThis.process?.env?.CUT) || 'vertical';
-const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080], features: [1080, 1920], news: [1080, 1920] };
+const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080], features: [1080, 1920], news: [1080, 1920], walk: [1080, 1920] };
 export const [W, H] = SIZES[CUT] ?? SIZES.vertical;
 export const FPS = 30;
 export const XF = 0.5;
 const NEWS = CUT === 'news';
-export const BPM = NEWS ? 100 : 72;
+const WALKCUT = CUT === 'walk';
+// 两版都用明快的 100 拍配乐，成片从第一拍开始
+const BEATY = NEWS || WALKCUT;
+export const BPM = BEATY ? 100 : 72;
 export const BEAT = 60 / BPM;
 export const BAR = BEAT * 4;
-export const DOWNBEAT = NEWS ? 0 : 1.75;
+export const DOWNBEAT = BEATY ? 0 : 1.75;
 
 // 每个镜头的时段和字幕（诗句出自唐·常建《题破山寺后禅院》，「坐看云起时」出自王维《终南别业》）
 const DEF = {
@@ -157,12 +163,72 @@ const LISTS = {
     ['rows', 7.7], ['incense', 7.7], ['uiPractice', 7.7], ['nSutra', 7.7], ['uiReader', 7.7], ['rosary', 7.7],
     ['nHang', 7.7], ['nCafe', 7.7], ['bell', 7.7], ['moktak', 7.7], ['nNight', 7.7], ['nEnd', 5.5],
   ],
+  // 一镜到底：一个长镜头加片尾落款；片尾的起点落在小节线上（66 小节 = 158.4 秒）
+  walk: [['walk', 158.9], ['wEnd', 5.5]],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
     ['buddha', 4.0], ['triad', 3.6], ['bowClose', 4.0], ['bell', 3.6], ['drum', 3.6], ['moktak', 3.2], ['nightSide', 4.0], ['nightPagoda', 3.6],
     ['crowd', 4.0], ['end', 4.2],
   ],
 };
+
+// —— 一镜到底的时间表（成片秒数）。动作都卡在拍子上：撞钟、插香、第一次叩首、灯离手、每一组落墨 ——
+const onBeat = (t) => Math.round(t / BEAT) * BEAT;
+export const WALK = (() => {
+  const bellHit = onBeat(32.4);
+  const incensePlant = onBeat(55.2);
+  const bowStart = onBeat(69.9) - 2.9; // 第一次额头触地在拍子上
+  const hangRelease = onBeat(139.8);
+  const inks = [];
+  for (let b = onBeat(103.8); b <= 111.7; b += BEAT) inks.push(b);
+  return {
+    gate: [0.4, 14.0], // 进山门、过桥
+    toBell: [14.0, 29.0],
+    bellStrike: bellHit - 1.05, // 撞木开始摆
+    bellHit,
+    toIncense: [36.2, incensePlant - 2.75 - 0.15],
+    incenseStart: incensePlant - 2.75,
+    incensePlant,
+    toHall: [58.8, bowStart - 0.35],
+    bowStart,
+    bowTouches: [bowStart + 2.9, bowStart + 8.5],
+    bowEnd: bowStart + 11.2,
+    walkOut: [bowStart + 11.6, 84.2], // 起身、出殿到月台
+    craneLib: [84.2, 99.6], // 镜头升过殿顶，落到藏经阁门口
+    libTeleport: 90.0, // 人在殿顶挡着的时候换到藏经阁门前
+    libWalk: [91.6, 99.4],
+    sit: 99.6,
+    sheet: [102.4, 112.6], // 经纸在画面上
+    inks,
+    sitEnd: 114.0,
+    aerial: [114.0, 129.6], // 升到高处看日落，落进西院灯廊
+    alleyTeleport: 119.0,
+    alleyWalk: [125.8, hangRelease - 1.0 - 0.2],
+    hangStart: hangRelease - 1.0,
+    hangRelease,
+    nightWalk: [hangRelease + 4.6, 156.8],
+    end: 158.4,
+    // 钟点：清晨 → 上午 → 正午 → 午后 → 黄昏 → 夜
+    hours: [[0, 6.2], [14, 7.0], [36, 8.6], [66, 10.5], [99, 13.0], [114, 15.6], [124, 18.2], [138, 18.9], [150, 19.9], [158.4, 20.6]],
+    caps: [
+      [0.8, 6.6, '山门', '清晨，一个人走进山寺'],
+      [7.6, 13.4, '放生池', '过石拱桥，池里锦鲤游'],
+      [29.4, 35.8, '晨钟', '撞木一拉，钟声传遍山谷'],
+      [52.2, 58.4, '上香', '院中大香炉，亲手插一炷香'],
+      [bowStart + 0.4, bowStart + 11.0, '大殿礼佛', '在蒲团上跪下，五体投地'],
+      [90.6, 98.6, '藏经阁', '修到「比丘」，殿后的经阁就开了'],
+      [102.8, 112.6, '抄经', '电脑上用输入法打字，打对一个落一个墨字'],
+      [118.8, 126.8, '日暮', '一天的功课，慢慢做完'],
+      [128.4, 134.8, '祈福灯廊', '一百多盏灯，每盏下面一张心愿'],
+      [hangRelease - 1.6, hangRelease + 4.4, '挂一盏灯', '写一句心愿，灯自己升到绳上'],
+      [hangRelease + 5.6, 156.6, '入夜', '灯火都亮了，明天再来'],
+    ],
+  };
+})();
+// 配乐的段落：哪些时段鼓组收成半拍子、从哪里加笛子、哪里打镲、片尾在哪
+export const MUSIC = WALKCUT
+  ? { light: [[WALK.bowStart - 0.6, WALK.bowEnd + 0.6], [WALK.sit, WALK.sitEnd]], leadFrom: WALK.craneLib[0], crash: [WALK.craneLib[0], WALK.aerial[0], WALK.alleyWalk[0], WALK.nightWalk[0]], end: WALK.end }
+  : null;
 
 // 讲解视频：每段口播配一组镜头，镜头平分这段的时长；段与段之间留一点气口
 const LEAD = 0.8, GAP = 0.55, TAIL = 3.2;

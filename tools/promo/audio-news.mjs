@@ -5,7 +5,7 @@
 //   抄经、敲木鱼的镜头收成半拍子，从祈福灯廊起加笛子，片尾收在主和弦上；撞钟、木鱼、念珠、落墨都在画面动作的同一拍发声
 // 用法：CUT=news node tools/promo/audio-news.mjs 输出.wav
 import fs from 'node:fs';
-import { SHOTS, EVENTS, TOTAL, BEAT, BAR } from './timeline.mjs';
+import { SHOTS, EVENTS, TOTAL, BEAT, BAR, CUT, WALK, MUSIC } from './timeline.mjs';
 
 const SR = 48000;
 const LEN = Math.ceil((TOTAL + 0.3) * SR);
@@ -196,9 +196,11 @@ const shotAtBar = (k) => {
 };
 const barOf = (id) => (has(id) ? Math.round(at(id) / BAR) : -1);
 const LIGHT = new Set(['nSutra', 'moktak']);
-const END0 = barOf('nEnd') >= 0 ? barOf('nEnd') : bars;
-const LEAD0 = barOf('nHang') >= 0 ? barOf('nHang') : Math.floor(bars / 2);
-const CRASH = new Set([1, barOf('nHang'), barOf('bell'), barOf('nNight')]);
+// 一镜到底没有分镜头，段落按时间表（MUSIC）走
+const lightBar = (k) => (MUSIC ? MUSIC.light.some(([a, b]) => barT(k) >= a - 0.05 && barT(k) < b) : LIGHT.has(shotAtBar(k)));
+const END0 = MUSIC ? Math.round(MUSIC.end / BAR) : barOf('nEnd') >= 0 ? barOf('nEnd') : bars;
+const LEAD0 = MUSIC ? Math.round(MUSIC.leadFrom / BAR) : barOf('nHang') >= 0 ? barOf('nHang') : Math.floor(bars / 2);
+const CRASH = new Set(MUSIC ? [1, ...MUSIC.crash.map((t) => Math.round(t / BAR))] : [1, barOf('nHang'), barOf('bell'), barOf('nNight')]);
 const CH = [
   { root: N.D2, tones: [N.D4, N.Fs4, N.A4], pad: [N.D3, N.Fs3, N.A3] },
   { root: N.A1, tones: [N.Cs4, N.E4, N.A4], pad: [N.A2 * 1, N.Cs4 / 2, N.E3] },
@@ -229,8 +231,7 @@ for (let k = 0; k < bars; k++) {
   const t0 = barT(k);
   if (t0 > TOTAL) break;
   const ch = CH[k % 4];
-  const id = shotAtBar(k);
-  const intro = k === 0, END = k >= END0, light = LIGHT.has(id), lead = k >= LEAD0 && !END && !light;
+  const intro = k === 0, END = k >= END0, light = lightBar(k), lead = k >= LEAD0 && !END && !light;
   // 鼓
   if (END) {
     if (k === END0) {
@@ -335,6 +336,21 @@ if (has('rosary'))
   }
 // 撞钟：撞木碰到钟的那一拍一声梵钟
 hit('bell', EVENTS.bellHit, (t) => add(templeBell(), t, 0.55, 0, 0.55));
+// 一镜到底：撞钟、插香、叩首、落墨、灯离手
+if (CUT === 'walk') {
+  add(templeBell(), WALK.bellHit, 0.6, 0, 0.55);
+  add(ding(1568), WALK.incensePlant, 0.26, 0.2, 0.4);
+  for (const t of WALK.bowTouches) add(ding(1175), t, 0.24, 0, 0.45);
+  for (const t of WALK.inks) add(woodblock(1150), t, 0.36, 0.15, 0.2);
+  {
+    const t = WALK.hangRelease;
+    const n = Math.floor(1.6 * SR), b = new Float32Array(n);
+    for (let i = 0; i < n; i++) b[i] = (rnd() * 2 - 1) * Math.sin((Math.PI * i) / n) * 0.5;
+    bp(b, 2400, 0.8);
+    add(b, t, 0.18, 0, 0.4);
+    [1760, 2093, 2637].forEach((f, i) => add(ding(f), t + 0.4 + (i * BEAT) / 2, 0.16, (i - 1) * 0.3, 0.45));
+  }
+}
 
 // —— 混响（Schroeder：四个梳状 + 两个全通），左右声道错开一点 ——
 function reverb(input, spread) {

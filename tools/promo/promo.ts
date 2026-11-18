@@ -23,13 +23,13 @@ import { leafPile } from '../../src/play';
 import { ROBES, BEADS } from '../../src/looks';
 import { buildCafe } from '../../src/world/cafe';
 import { buildGarden } from '../../src/world/garden';
-import { CAFE, CAFE_SEATS, cafeWorld } from '../../src/layout';
+import { CAFE, CAFE_SEATS, cafeWorld, planRoute, setSideHallOpen, WISH_ALLEY } from '../../src/layout';
 // @ts-ignore 共用的分镜表
-import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS } from './timeline.mjs';
+import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS, WALK } from './timeline.mjs';
 
 type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string; feature?: [string, string] };
 // 功能介绍和山寺上新：用游戏同一套后期，底部一块功能字幕
-const FEATURES = CUT === 'features' || CUT === 'news';
+const FEATURES = CUT === 'features' || CUT === 'news' || CUT === 'walk';
 type V3 = [number, number, number];
 
 const statusEl = document.getElementById('status')!;
@@ -623,6 +623,7 @@ async function main() {
   const GROUPS: [string, string][] = [
     ['觀自在', 'guanzizai'], ['菩薩', 'pusa'], ['行深', 'xingshen'], ['般若', 'bore'], ['波羅蜜多', 'boluomiduo'],
     ['時', 'shi'], ['照見', 'zhaojian'], ['五蘊', 'wuyun'], ['皆空', 'jiekong'], ['度一切苦厄', "duyiqieku'e"],
+    ['舍利子', 'shelizi'], ['色不異空', 'sebuyikong'], ['空不異色', 'kongbuyise'], ['色即是空', 'sejishikong'],
   ];
   const sheetCols = 8, sheetRows = 13, cell = 90;
   const sheet = (() => {
@@ -656,7 +657,7 @@ async function main() {
     };
     return { rot: (r(1) - 0.5) * 0.09, sc: 0.93 + r(2) * 0.1, op: 0.84 + r(5) * 0.16 };
   }
-  function drawSutraSheet(t: number) {
+  function drawSutraSheet(t: number, inkTimes?: number[]) {
     const sw = sheet.width, sh = sheet.height, sx = (W - sw) / 2, sy = 190;
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.45)';
@@ -672,7 +673,7 @@ async function main() {
     ctx.fillStyle = '#1d1612';
     [...'般若波羅蜜多心經'].forEach((c, r) => ctx.fillText(c, colX(0), rowY(r) + 4));
     // 每一组上屏的时刻和这一组从第几个字开始
-    const ink = EVENTS.nInk as number[];
+    const ink = inkTimes ?? (EVENTS.nInk as number[]);
     let start = 0;
     const startOf: number[] = [];
     for (const [s] of GROUPS) {
@@ -735,6 +736,85 @@ async function main() {
       floatWord(`功德 +${[...GROUPS[k][0]].length}`, colX(1 + Math.floor(i0 / sheetRows)) - 120, rowY(i0 % sheetRows) - d * 50, clamp01(1 - d), 34, '"Songti SC"');
     });
     ctx.restore();
+  }
+
+  // —— 一镜到底：小和尚从山门连贯走一圈，镜头一直跟着；停下来做事时镜头绕到合适的位置，转场时升过殿顶 ——
+  const librarian = new Monk('resident');
+  librarian.seatKind = 'floor';
+  scene.add(librarian.root);
+  librarian.root.visible = false;
+  extras.push(librarian);
+  const heroCushion = CUSHIONS.find((c) => Math.abs(c.x + 1.7) < 0.01 && Math.abs(c.z + 6.0) < 0.01) ?? CUSHIONS[0];
+  const deskSeat = sideHalls.deskSeat(1);
+  type Move = { t: [number, number]; c: THREE.CatmullRomCurve3; len: number };
+  let moves: Move[] = [];
+  const curveOf = (pts: [number, number][], direct = false) => {
+    const route: THREE.Vector3[] = [new THREE.Vector3(pts[0][0], 0, pts[0][1])];
+    for (let i = 1; i < pts.length; i++) {
+      const a = route[route.length - 1], b = pts[i];
+      const seg = direct ? [{ x: b[0], z: b[1] }] : planRoute(a.x, a.z, b[0], b[1]);
+      for (const q of seg) route.push(new THREE.Vector3(q.x, 0, q.z));
+    }
+    const clean = route.filter((p, i) => i === 0 || i === route.length - 1 || p.distanceTo(route[i - 1]) > 0.6);
+    if (clean.length < 2) clean.push(clean[0].clone().add(new THREE.Vector3(0, 0, 0.01)));
+    return new THREE.CatmullRomCurve3(clean, false, 'centripetal', 0.5);
+  };
+  // 走路的快慢：起步、停下各用一成的时间缓一缓
+  const plateau = (u: number, a = 0.12) => (u < a ? (u * u) / (2 * a * (1 - a)) : u > 1 - a ? 1 - ((1 - u) * (1 - u)) / (2 * a * (1 - a)) : (u - a / 2) / (1 - a));
+  const camP = new THREE.Vector3(), camL = new THREE.Vector3(), wantP = new THREE.Vector3(), wantL = new THREE.Vector3();
+  let walkYaw = Math.PI, lastWalkT = -1, struckW = false, hungW = false, satW = '', crane: THREE.CatmullRomCurve3[] | null = null, aerial: THREE.CatmullRomCurve3[] | null = null;
+  const W_ = WALK as {
+    gate: number[]; toBell: number[]; bellStrike: number; bellHit: number; toIncense: number[]; incenseStart: number; incensePlant: number;
+    toHall: number[]; bowStart: number; bowTouches: number[]; bowEnd: number; walkOut: number[]; craneLib: number[]; libTeleport: number; libWalk: number[];
+    sit: number; sheet: number[]; inks: number[]; sitEnd: number; aerial: number[]; alleyTeleport: number; alleyWalk: number[]; hangStart: number; hangRelease: number;
+    nightWalk: number[]; end: number; hours: number[][]; caps: [number, number, string, string][];
+  };
+  const BELL_AT: [number, number] = [BELL.x - 2.6, BELL.z + 1.0];
+  const LIB_DOOR_X = LIBRARY.x + 2.275;
+  const INC_AT: [number, number] = [0, INCENSE.z + 1.9];
+  const ALLEY_IN: [number, number] = [-23.0, 46.6];
+  function hourAt(t: number) {
+    const H = W_.hours;
+    for (let i = 0; i < H.length - 1; i++) if (t <= H[i + 1][0]) return H[i][1] + ((H[i + 1][1] - H[i][1]) * (t - H[i][0])) / (H[i + 1][0] - H[i][0]);
+    return H[H.length - 1][1];
+  }
+  function followCam(dist = 5.2, height = 2.1, side = 0.55, ahead = 1.8, lookY = 1.15) {
+    const fx = Math.sin(walkYaw), fz = Math.cos(walkYaw);
+    const p = me.root.position;
+    wantP.set(p.x - fx * dist + fz * side, p.y + height, p.z - fz * dist - fx * side);
+    wantL.set(p.x + fx * ahead, p.y + lookY, p.z + fz * ahead);
+  }
+  // 时间段内沿一串关键位置走（位置、看点各一条曲线）
+  const keyCurves = (keys: [V3, V3][]) => [new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k[0]))), new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k[1])))];
+  function walkCaption(t: number) {
+    for (const [t0, t1, title, sub] of W_.caps) {
+      const a = ease(clamp01((t - t0) / 0.6)) * clamp01((t1 - t) / 0.6);
+      if (a <= 0) continue;
+      ctx.save();
+      const g = ctx.createLinearGradient(0, H - 520, 0, H);
+      g.addColorStop(0, 'rgba(12,9,6,0)');
+      g.addColorStop(0.45, 'rgba(12,9,6,0.5)');
+      g.addColorStop(1, 'rgba(12,9,6,0.74)');
+      ctx.globalAlpha = a;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, H - 520, W, 520);
+      ctx.translate(0, (1 - a) * 24);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = '#fbf3e2';
+      ctx.font = '96px MSZ';
+      ctx.fillText(title, W / 2, H - 300);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(226,180,92,0.9)';
+      ctx.fillRect(W / 2 - 60, H - 228, 120, 4);
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = 'rgba(251,245,230,0.92)';
+      ctx.font = '44px "Songti SC"';
+      ctx.fillText(sub, W / 2, H - 165);
+      ctx.restore();
+    }
   }
 
   // —— 各个镜头 ——
@@ -2021,6 +2101,255 @@ async function main() {
         ctx.restore();
       },
     },
+    walk: {
+      setup() {
+        // 殿里一堂人在礼拜（主角的蒲团空着）；香炉边两位拨念珠
+        const seats = CUSHIONS.filter((c, i) => c.id !== heroCushion.id && (i * 7) % 10 < 5);
+        const ms = cast(seats.length + 2);
+        seats.forEach((st, i) => {
+          place(ms[i], st.x, st.z + 0.32, st.yaw, CUSHION_TOP);
+          ms[i].setAction('bow');
+          ms[i].actionTime = ((i * 0.37) % 1) * BOW_DURATION;
+        });
+        place(ms[seats.length], 2.2, INCENSE.z + 2.4, Math.PI * 0.92);
+        place(ms[seats.length + 1], -2.4, INCENSE.z + 2.6, Math.PI * 1.08);
+        ms[seats.length].setAction('rosary');
+        ms[seats.length + 1].setAction('rosary');
+        librarian.root.visible = true;
+        place(librarian, LIBRARY.x + 7.0, LIBRARY.z + 2.2, -Math.PI / 2, heightAt(LIBRARY.x + 7.0, LIBRARY.z + 2.2) + 0.03);
+        librarian.setAction('read');
+        garden.setLanterns(demoLanterns.filter((v) => v.hook !== HANG_HOOK));
+        for (const i of [0, 1, 2]) setSideHallOpen(i, true);
+        const hk = garden.hooks[HANG_HOOK];
+        moves = [
+          { t: W_.gate, pts: [[0.3, 64.6], [0, 58.6], [0, 45.4], [0, 36.6]], direct: true },
+          { t: W_.toBell, pts: [[0, 36.6], BELL_AT] },
+          { t: W_.toIncense, pts: [BELL_AT, INC_AT] },
+          { t: W_.toHall, pts: [INC_AT, [heroCushion.x, heroCushion.z + 0.85]] },
+          { t: W_.walkOut, pts: [[heroCushion.x, heroCushion.z + 0.85], [heroCushion.x, 2.6]], direct: true },
+          // 藏经阁正中一间是柱子，从右边那扇开着的门进（门洞中心 x = 2.275）
+          { t: W_.libWalk, pts: [[LIB_DOOR_X, -30.4], [LIB_DOOR_X, -37.4], [deskSeat.x + 0.6, deskSeat.z + 0.4], [deskSeat.x, deskSeat.z]], direct: true },
+          { t: W_.alleyWalk, pts: [ALLEY_IN, [-24.0, 51.4], [hk.stand.x, hk.stand.z]] },
+          { t: W_.nightWalk, pts: [[hk.stand.x, hk.stand.z], [-27.0, 51.0], [-27.0, 47.4]], direct: true },
+        ].map((m) => {
+          const c = curveOf(m.pts as [number, number][], !!m.direct);
+          return { t: m.t as [number, number], c, len: c.getLength() };
+        });
+        me.root.visible = true;
+        me.setAction('idle');
+        place(me, 0.3, 64.6, Math.PI);
+        me.onIncensePlant = () => {
+          yardList = [...yardList, { id: 'mine', mine: true, remain: 1 }];
+          props.setIncense(yardList);
+        };
+        walkYaw = Math.PI;
+        lastWalkT = -1;
+        struckW = hungW = false;
+        satW = '';
+        crane = aerial = null;
+        followCam();
+        camP.copy(wantP);
+        camL.copy(wantL);
+      },
+      update(t) {
+        const dt = lastWalkT < 0 ? 1 / FPS : Math.max(0, t - lastWalkT);
+        lastWalkT = t;
+        // 天色：按时间表的钟点连续变化；夜里灯廊的灯再亮一些
+        env.setHour(hourAt(t));
+        const lv = env.lanternLevel;
+        props.setLanternLevel(lv);
+        cafe.setLanternLevel(lv);
+        garden.setLanternLevel(lv * (lv > 1 ? 1.2 : 1));
+        // 天黑以后画面整体提亮一些，手机上看得清
+        const hr = hourAt(t);
+        renderer.toneMappingExposure *= 1 + 0.38 * THREE.MathUtils.smoothstep(hr, 17.6, 19.8);
+        // —— 人 ——
+        const mv = moves.find((m) => t >= m.t[0] && t <= m.t[1]);
+        const hk = garden.hooks[HANG_HOOK];
+        if (mv) {
+          const u = (t - mv.t[0]) / (mv.t[1] - mv.t[0]);
+          const s = clamp01(plateau(clamp01(u)));
+          const p = mv.c.getPointAt(s);
+          const tg = mv.c.getTangentAt(Math.min(0.999, Math.max(0.001, s)));
+          const want = Math.atan2(tg.x, tg.z);
+          walkYaw += Math.atan2(Math.sin(want - walkYaw), Math.cos(want - walkYaw)) * (1 - Math.exp(-dt * 6));
+          place(me, p.x, p.z, walkYaw);
+          const s2 = clamp01(plateau(clamp01(u + 0.01)));
+          me.speed = Math.max(0.6, ((s2 - s) * mv.len) / ((mv.t[1] - mv.t[0]) * 0.01));
+          if (me.action !== 'walk') me.setAction('walk');
+          satW = '';
+        } else if (t >= W_.toBell[1] && t < W_.toIncense[0]) {
+          place(me, BELL_AT[0], BELL_AT[1], Math.PI / 2);
+          walkYaw = Math.PI / 2;
+          if (satW !== 'bell') {
+            satW = 'bell';
+            me.setAction('hapjang', true);
+          }
+          if (!struckW && t >= W_.bellStrike) {
+            struckW = true;
+            buildings.bell.strike();
+          }
+        } else if (t >= W_.toIncense[1] && t < W_.toHall[0]) {
+          place(me, INC_AT[0], INC_AT[1], Math.PI);
+          walkYaw = Math.PI;
+          if (t >= W_.incenseStart && satW !== 'incense') {
+            satW = 'incense';
+            me.setAction('incense', true);
+          } else if (t < W_.incenseStart && me.action !== 'idle' && satW !== 'incense') me.setAction('idle');
+        } else if (t >= W_.toHall[1] && t < W_.walkOut[0]) {
+          walkYaw = Math.PI;
+          if (t >= W_.bowStart && t < W_.bowEnd) {
+            place(me, heroCushion.x, heroCushion.z + 0.32, Math.PI, CUSHION_TOP);
+            if (satW !== 'bow') {
+              satW = 'bow';
+              me.setAction('bow', true);
+            }
+          } else {
+            place(me, heroCushion.x, heroCushion.z + 0.85, Math.PI);
+            if (me.action !== 'idle') me.setAction('idle');
+          }
+        } else if (t > W_.walkOut[1] && t < W_.libTeleport) {
+          place(me, heroCushion.x, 2.6, 0);
+          if (me.action !== 'idle') me.setAction('idle');
+        } else if (t >= W_.libTeleport && t < W_.libWalk[0]) {
+          place(me, LIB_DOOR_X, -30.4, Math.PI);
+          walkYaw = Math.PI;
+          if (me.action !== 'idle') me.setAction('idle');
+        } else if (t > W_.libWalk[1] && t < W_.alleyTeleport) {
+          place(me, deskSeat.x, deskSeat.z, deskSeat.yaw);
+          walkYaw = deskSeat.yaw;
+          if (t >= W_.sit && satW !== 'sit') {
+            satW = 'sit';
+            me.setAction('sit', true);
+          }
+        } else if (t >= W_.alleyTeleport && t < W_.alleyWalk[0]) {
+          place(me, ALLEY_IN[0], ALLEY_IN[1], Math.PI * 0.1);
+          walkYaw = Math.PI * 0.1;
+          if (me.action !== 'idle') me.setAction('idle');
+        } else if (t > W_.alleyWalk[1] && t < W_.nightWalk[0]) {
+          const yaw = Math.atan2(hk.x - hk.stand.x, hk.z - hk.stand.z);
+          place(me, hk.stand.x, hk.stand.z, yaw);
+          walkYaw = yaw;
+          if (t >= W_.hangStart && satW !== 'hang') {
+            satW = 'hang';
+            me.setAction('hang', true);
+          } else if (t < W_.hangStart && me.action !== 'idle') me.setAction('idle');
+          if (!hungW && t >= W_.hangRelease) {
+            hungW = true;
+            garden.setLanterns([...demoLanterns.filter((v) => v.hook !== HANG_HOOK), { hook: HANG_HOOK, color: 0, tag: 2 }]);
+            garden.rise(HANG_HOOK, new THREE.Vector3(hk.stand.x + Math.sin(yaw) * 0.25, heightAt(hk.stand.x, hk.stand.z) + 1.45, hk.stand.z + Math.cos(yaw) * 0.25));
+          }
+        } else if (me.action === 'walk') me.setAction('idle');
+        env.follow(me.root.position.x, me.root.position.z);
+
+        // —— 镜头 ——
+        let k = 2.2; // 跟得多紧
+        const B = BELL;
+        if (t < W_.toBell[1] - 1.5) followCam(5.4, 2.0, 0.5);
+        else if (t < W_.toIncense[0] + 0.6) {
+          wantP.set(B.x + 3.0, 1.9, B.z + 5.4);
+          wantL.set(B.x - 0.8, 2.5, B.z + 0.6);
+          k = 1.6;
+        } else if (t < W_.toIncense[1] - 1.5) followCam(5.4, 2.1, 0.6);
+        else if (t < W_.toHall[0] + 0.5) {
+          wantP.set(2.9, 2.35, 4.2);
+          wantL.set(0, 1.45, 7.9);
+          k = 1.6;
+        } else if (t < W_.toHall[1] - 1.2) followCam(5.0, 2.2, 0.5);
+        else if (t < W_.bowEnd + 0.4) {
+          // 从中间走道上方往殿门方向看：前面是叩首的小和尚，两旁一排排在礼拜
+          wantP.set(0.3, 2.5, heroCushion.z - 3.7);
+          wantL.set(heroCushion.x, 0.8, heroCushion.z + 0.7);
+          k = 1.4;
+        } else if (t < W_.craneLib[0]) followCam(5.0, 2.4, 0.4);
+        else if (t < W_.craneLib[1] + 0.2) {
+          // 升过殿顶，落到藏经阁门口
+          if (!crane) crane = keyCurves([
+            [[camP.x, camP.y, camP.z], [camL.x, camL.y, camL.z]],
+            [[-2.5, 11.0, 10.0], [0, 7.0, -4.0]],
+            [[0, 24.0, -10.0], [0, 4.0, -34.0]],
+            [[LIB_DOOR_X, 7.5, -30.5], [LIB_DOOR_X, 2.2, -37.0]],
+            [[LIB_DOOR_X, 2.4, -33.4], [1.0, 1.3, -39.0]],
+          ]);
+          const v = glide(clamp01((t - W_.craneLib[0]) / (W_.craneLib[1] - W_.craneLib[0])));
+          wantP.copy(crane[0].getPoint(v));
+          wantL.copy(crane[1].getPoint(v));
+          k = 4;
+        } else if (t < W_.aerial[0]) {
+          wantP.set(deskSeat.x + 1.2, 2.0, deskSeat.z + 1.9);
+          wantL.set(deskSeat.x, 0.95, deskSeat.z - 0.8);
+          k = 1.3;
+        } else if (t < W_.aerial[1] - 2.5) {
+          // 退出藏经阁，升到高处看整座寺院的日落，再转向西院
+          if (!aerial) aerial = keyCurves([
+            [[camP.x, camP.y, camP.z], [camL.x, camL.y, camL.z]],
+            [[LIB_DOOR_X, 2.4, -33.4], [1.0, 1.6, -40.0]],
+            [[0, 34.0, -16.0], [0, 2.0, 16.0]],
+            [[-12.0, 18.0, 30.0], [-26.0, 2.5, 50.0]],
+            [[-19.5, 3.4, 41.5], [-24.5, 1.6, 49.0]],
+          ]);
+          const v = glide(clamp01((t - W_.aerial[0]) / (W_.aerial[1] - 2.5 - W_.aerial[0])));
+          wantP.copy(aerial[0].getPoint(v));
+          wantL.copy(aerial[1].getPoint(v));
+          k = 4;
+        } else if (t < W_.alleyWalk[1] - 1.2) followCam(4.6, 1.55, 0.4, 2.2, 1.6);
+        else if (t < W_.nightWalk[0] + 0.4) {
+          wantP.set(hk.x + 1.9, 1.0, hk.z + 2.6);
+          wantL.set(hk.x - 0.1, 2.3, hk.z);
+          k = 1.5;
+        } else if (t < W_.nightWalk[1] - 0.6) followCam(4.4, 1.35, 0.3, 4.0, 2.4);
+        else {
+          wantP.set(-24.0, 7.5, 58.5);
+          wantL.set(-27.0, 2.2, 49.0);
+          k = 0.9;
+        }
+        const f = 1 - Math.exp(-dt * k);
+        camP.lerp(wantP, f);
+        camL.lerp(wantL, f);
+        // 灯廊里镜头压在灯笼底下
+        const A = WISH_ALLEY;
+        if (camP.x > A.xW - 0.8 && camP.x < A.xE + 0.8 && camP.z > A.zs[0] - 0.8 && camP.z < A.zs[A.zs.length - 1] + 0.8) camP.y = Math.min(camP.y, 2.2);
+        camP.y = Math.max(camP.y, heightAt(camP.x, camP.z) + 0.6);
+        setFov(t > W_.alleyWalk[0] && t < W_.nightWalk[1] ? 62 : 56);
+        camera.position.copy(camP);
+        camera.lookAt(camL);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        // 抄经：经纸从下面滑上来，背景压暗、虚化
+        const S0 = W_.sheet[0], S1 = W_.sheet[1];
+        const a = clamp01((t - S0) / 0.6) * clamp01((S1 - t) / 0.6);
+        if (a > 0) {
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.filter = 'blur(14px) brightness(0.55)';
+          ctx.drawImage(renderer.domElement, -40, -60, W + 80, H + 120);
+          ctx.restore();
+          ctx.save();
+          ctx.translate(0, (1 - ease(a)) * H * 0.6);
+          drawSutraSheet(t, W_.inks);
+          ctx.restore();
+        }
+        // 叩首、插香的功德
+        const fl = (t0: number, text: string) => {
+          const d = t - t0;
+          if (d < 0 || d > 1.4) return;
+          const p = worldToScreen(me.root.position.x, me.root.position.y + 1.7, me.root.position.z);
+          floatWord(text, p.x, p.y - d * 50, clamp01(1 - d / 1.4), 50);
+        };
+        for (const tt of W_.bowTouches) fl(tt + 0.2, '功德 +2');
+        fl(W_.incensePlant + 0.3, '功德 +5');
+        fl(W_.bellHit + 0.2, '功德 +3');
+        // 挂好的灯旁边显出心愿签
+        const ha = clamp01((t - W_.hangRelease - 1.9) / 0.4) * clamp01((W_.nightWalk[0] + 1.0 - t) / 0.5);
+        if (ha > 0) {
+          const hk = garden.hooks[HANG_HOOK];
+          const p = worldToScreen(hk.x, hk.y - 0.55, hk.z);
+          wishTag('愿家人安康', '静静的云', p.x + 150, p.y - 60, ha);
+        }
+        walkCaption(t);
+      },
+    },
     fEnd: {
       setup() {},
       update() {},
@@ -2077,6 +2406,7 @@ async function main() {
       },
     },
   };
+  shots.wEnd = shots.nEnd;
   let struck = false;
   let curShot: Shot | null = null;
   let curDur = 4;
