@@ -339,6 +339,9 @@ hit('bell', EVENTS.bellHit, (t) => add(templeBell(), t, 0.55, 0, 0.55));
 // 一镜到底：撞钟、插香、叩首、落墨、灯离手
 if (CUT === 'walk') {
   add(templeBell(), WALK.bellHit, 0.6, 0, 0.55);
+  add(ding(1568), WALK.cupReady, 0.3, 0.3, 0.4);
+  for (const t of WALK.sipAt) add(ding(2093), t + 0.7, 0.12, -0.2, 0.4);
+  [1175, 1397, 1760, 2093].forEach((f, i) => add(ding(f), WALK.persimmonWord + i * 0.1, 0.17, (i - 1.5) * 0.25, 0.45));
   add(ding(1568), WALK.incensePlant, 0.26, 0.2, 0.4);
   for (const t of WALK.bowTouches) add(ding(1175), t, 0.24, 0, 0.45);
   for (const t of WALK.inks) add(woodblock(1150), t, 0.36, 0.15, 0.2);

@@ -6,8 +6,8 @@
 //   features  竖屏 9:16 功能介绍，约 2 分钟：一天里走一遍寺院，每个镜头一个功能，节奏放慢（每个 7～9 秒），底部字幕写功能名和玩法
 //   news      竖屏 9:16「山寺 · 修行」，约 1 分半：以修行为主（礼佛、上香、功课、抄经、读经、念珠、祈福、撞钟、木鱼），咖啡只一个镜头；
 //             没有片头，直接进；配乐 100 拍/分钟、有鼓点（不要太舒缓），
-//   walk      竖屏 9:16「一镜到底」，约 2 分 45 秒：镜头跟着小和尚从山门连贯走一圈——过桥、撞晨钟、上香、进殿礼佛、
-//             升过殿顶落到藏经阁抄经、升到高处看日落、落进祈福灯廊挂灯、入夜；天色从清晨连续变到夜里；配乐同 news（WALK、MUSIC）
+//   walk      竖屏 9:16 走动长镜头版，约 3 分钟：每段都是跟着小和尚走的连贯镜头，段与段之间叠化——山门、过桥、晨钟 ‖ 上香、礼佛、
+//             升过殿顶到藏经阁抄经 ‖ 午后茶寮喝咖啡、升高看日落、柿柿如意、祈福灯廊挂灯、入夜；天色连续变化；配乐同 news（WALK、MUSIC）
 //
 //             镜头仍然慢（每个 3 小节 = 7.2 秒），每个镜头的起点都落在小节线上，画面里的动作卡在拍子上
 // 画面里不出现任何网址
@@ -164,7 +164,7 @@ const LISTS = {
     ['nHang', 7.7], ['nCafe', 7.7], ['bell', 7.7], ['moktak', 7.7], ['nNight', 7.7], ['nEnd', 5.5],
   ],
   // 一镜到底：一个长镜头加片尾落款；片尾的起点落在小节线上（66 小节 = 158.4 秒）
-  walk: [['walk', 158.9], ['wEnd', 5.5]],
+  walk: [['walk', 178.1], ['wEnd', 5.5]],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
     ['buddha', 4.0], ['triad', 3.6], ['bowClose', 4.0], ['bell', 3.6], ['drum', 3.6], ['moktak', 3.2], ['nightSide', 4.0], ['nightPagoda', 3.6],
@@ -172,62 +172,79 @@ const LISTS = {
   ],
 };
 
-// —— 一镜到底的时间表（成片秒数）。动作都卡在拍子上：撞钟、插香、第一次叩首、灯离手、每一组落墨 ——
+// —— 走动长镜头的时间表（成片秒数）：每一段都是跟着小和尚走的连贯镜头，段与段之间可以叠化切过去（cuts，都在小节线上）。
+// 修行是主线，中间到茶寮喝杯咖啡。动作都卡在拍子上：撞钟、插香、第一次叩首、每一组落墨、咖啡做好、喝一口、柿柿如意、灯离手 ——
 const onBeat = (t) => Math.round(t / BEAT) * BEAT;
 export const WALK = (() => {
   const bellHit = onBeat(32.4);
-  const incensePlant = onBeat(55.2);
-  const bowStart = onBeat(69.9) - 2.9; // 第一次额头触地在拍子上
-  const hangRelease = onBeat(139.8);
+  const incensePlant = onBeat(43.4);
+  const bowStart = onBeat(57.6) - 2.9; // 第一次额头触地在拍子上
+  const cupReady = onBeat(114.6);
+  const hangRelease = onBeat(159.2);
   const inks = [];
-  for (let b = onBeat(103.8); b <= 111.7; b += BEAT) inks.push(b);
+  for (let b = onBeat(91.2); b <= 99.7; b += BEAT) inks.push(b);
   return {
+    cuts: [36.0, 103.2], // 叠化切换：撞完钟 → 上香；抄完经 → 午后的茶寮
     gate: [0.4, 14.0], // 进山门、过桥
     toBell: [14.0, 29.0],
-    bellStrike: bellHit - 1.05, // 撞木开始摆
+    bellStrike: bellHit - 1.05,
     bellHit,
-    toIncense: [36.2, incensePlant - 2.75 - 0.15],
+    incenseFrom: [4.6, 14.2],
+    toIncense: [36.0, incensePlant - 2.75 - 0.15],
     incenseStart: incensePlant - 2.75,
     incensePlant,
-    toHall: [58.8, bowStart - 0.35],
+    toHall: [46.6, bowStart - 0.35],
     bowStart,
     bowTouches: [bowStart + 2.9, bowStart + 8.5],
     bowEnd: bowStart + 11.2,
-    walkOut: [bowStart + 11.6, 84.2], // 起身、出殿到月台
-    craneLib: [84.2, 99.6], // 镜头升过殿顶，落到藏经阁门口
-    libTeleport: 90.0, // 人在殿顶挡着的时候换到藏经阁门前
-    libWalk: [91.6, 99.4],
-    sit: 99.6,
-    sheet: [102.4, 112.6], // 经纸在画面上
+    walkOut: [bowStart + 11.6, 71.6],
+    craneLib: [71.6, 87.0], // 镜头升过殿顶，落到藏经阁门口
+    libTeleport: 77.4,
+    libWalk: [79.0, 86.8],
+    sit: 87.0,
+    sheet: [89.8, 100.2],
     inks,
-    sitEnd: 114.0,
-    aerial: [114.0, 129.6], // 升到高处看日落，落进西院灯廊
-    alleyTeleport: 119.0,
-    alleyWalk: [125.8, hangRelease - 1.0 - 0.2],
+    sitEnd: 103.2,
+    // 午后的茶寮：走上露台进厅、吧台前等咖啡、端着出来坐到伞下、喝两口
+    cafeIn: [103.2, 111.6],
+    brew: [111.6, cupReady],
+    cupReady,
+    toSeat: [117.6, 123.0],
+    sipAt: [onBeat(124.8), onBeat(127.2)],
+    aerial: [129.6, 143.4], // 从露台升起来看日落，转向西院
+    persimmonTeleport: 134.4,
+    toPersimmon: [143.4, 147.0],
+    persimmonBow: 147.2,
+    persimmonWord: onBeat(148.2),
+    alleyWalk: [150.0, hangRelease - 1.0 - 0.2],
     hangStart: hangRelease - 1.0,
     hangRelease,
-    nightWalk: [hangRelease + 4.6, 156.8],
-    end: 158.4,
-    // 钟点：清晨 → 上午 → 正午 → 午后 → 黄昏 → 夜
-    hours: [[0, 6.2], [14, 7.0], [36, 8.6], [66, 10.5], [99, 13.0], [114, 15.6], [124, 18.2], [138, 18.9], [150, 19.9], [158.4, 20.6]],
+    nightWalk: [hangRelease + 4.6, 176.0],
+    end: 177.6,
+    // 钟点：清晨 → 上午 → 正午；切到茶寮时是午后；看完日落入夜
+    hours: [[0, 6.2], [14, 7.0], [36, 8.0], [46.6, 8.8], [71.6, 10.5], [87, 12.0], [103.1, 13.0], [103.3, 14.6], [129.6, 16.0], [140, 17.2], [150, 18.2], [160, 19.0], [168, 19.9], [177.6, 20.6]],
     caps: [
       [0.8, 6.6, '山门', '清晨，一个人走进山寺'],
       [7.6, 13.4, '放生池', '过石拱桥，池里锦鲤游'],
-      [29.4, 35.8, '晨钟', '撞木一拉，钟声传遍山谷'],
-      [52.2, 58.4, '上香', '院中大香炉，亲手插一炷香'],
+      [29.4, 35.4, '晨钟', '撞木一拉，钟声传遍山谷'],
+      [37.0, 46.2, '上香', '院中大香炉，亲手插一炷香'],
       [bowStart + 0.4, bowStart + 11.0, '大殿礼佛', '在蒲团上跪下，五体投地'],
-      [90.6, 98.6, '藏经阁', '修到「比丘」，殿后的经阁就开了'],
-      [102.8, 112.6, '抄经', '电脑上用输入法打字，打对一个落一个墨字'],
-      [118.8, 126.8, '日暮', '一天的功课，慢慢做完'],
-      [128.4, 134.8, '祈福灯廊', '一百多盏灯，每盏下面一张心愿'],
+      [78.6, 86.6, '藏经阁', '修到「比丘」，殿后的经阁就开了'],
+      [90.2, 100.2, '抄经', '电脑上用输入法打字，打对一个落一个墨字'],
+      [104.0, 110.8, '山寺咖啡', '修行间隙，到东院茶寮喝一杯'],
+      [111.8, 117.2, '咖啡师父现做', '般若拿铁 · 上岸冷萃 · 桂花拿铁'],
+      [123.2, 129.4, '露台 · 油纸伞', '坐下来，一口一口慢慢喝'],
+      [134.0, 141.4, '日暮', '一天的功课，慢慢做完'],
+      [146.8, 151.6, '柿柿如意', '柿饼架前合十，得一句好彩头'],
+      [152.4, 157.6, '祈福灯廊', '一百多盏灯，每盏下面一张心愿'],
       [hangRelease - 1.6, hangRelease + 4.4, '挂一盏灯', '写一句心愿，灯自己升到绳上'],
-      [hangRelease + 5.6, 156.6, '入夜', '灯火都亮了，明天再来'],
+      [hangRelease + 5.6, 175.8, '入夜', '灯火都亮了，明天再来'],
     ],
   };
 })();
 // 配乐的段落：哪些时段鼓组收成半拍子、从哪里加笛子、哪里打镲、片尾在哪
 export const MUSIC = WALKCUT
-  ? { light: [[WALK.bowStart - 0.6, WALK.bowEnd + 0.6], [WALK.sit, WALK.sitEnd]], leadFrom: WALK.craneLib[0], crash: [WALK.craneLib[0], WALK.aerial[0], WALK.alleyWalk[0], WALK.nightWalk[0]], end: WALK.end }
+  ? { light: [[WALK.bowStart - 0.6, WALK.bowEnd + 0.6], [WALK.sit, WALK.sheet[1] + 1.0]], leadFrom: WALK.craneLib[0], crash: [...WALK.cuts, WALK.craneLib[0], WALK.aerial[0], WALK.alleyWalk[0], WALK.nightWalk[0]], end: WALK.end }
   : null;
 
 // 讲解视频：每段口播配一组镜头，镜头平分这段的时长；段与段之间留一点气口
