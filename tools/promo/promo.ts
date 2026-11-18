@@ -465,7 +465,7 @@ async function main() {
   // 线上实拍截图：慢慢推近到要讲的地方
   const uiImg: Record<string, HTMLImageElement> = {};
   for (const id of ['uiRooms', 'uiBow', 'uiPractice', 'uiReader', 'uiCafeMenu', 'uiWishWrite']) {
-    const need = SHOTS.some((x: Shot) => x.id === id) || (CUT === 'news' && (id === 'uiCafeMenu' || id === 'uiWishWrite'));
+    const need = SHOTS.some((x: Shot) => x.id === id || (x.id === 'nMenu' && id === 'uiCafeMenu') || (x.id === 'nWish' && id === 'uiWishWrite'));
     if (!need) continue;
     const im = new Image();
     im.src = `/__promo/ui/${id}.jpg`;
@@ -2016,8 +2016,8 @@ async function main() {
         ctx.globalAlpha = b;
         ctx.font = '42px "Songti SC"';
         ctx.fillStyle = '#6b5f50';
-        ctx.fillText('山寺咖啡 · 祈福灯廊', 540, 1180);
-        ctx.fillText('柿柿如意 · 键盘抄经', 540, 1250);
+        ctx.fillText('礼佛 · 上香 · 抄经 · 读经', 540, 1180);
+        ctx.fillText('念珠 · 撞钟 · 木鱼 · 祈福', 540, 1250);
         ctx.restore();
       },
     },

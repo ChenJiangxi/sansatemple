@@ -4,7 +4,8 @@
 //   short34   竖屏 3:4，约 1 分钟的短视频
 //   explainer 横屏 16:9 讲解视频，克隆音口播 + 字幕，镜头时长跟着口播走
 //   features  竖屏 9:16 功能介绍，约 2 分钟：一天里走一遍寺院，每个镜头一个功能，节奏放慢（每个 7～9 秒），底部字幕写功能名和玩法
-//   news      竖屏 9:16「山寺上新」，约 1 分半：咖啡馆、祈福灯廊、柿饼架、键盘抄经；配乐 100 拍/分钟、有鼓点（不要太舒缓），
+//   news      竖屏 9:16「山寺 · 修行」，约 1 分半：以修行为主（礼佛、上香、功课、抄经、读经、念珠、祈福、撞钟、木鱼），咖啡只一个镜头；
+//             没有片头，直接进；配乐 100 拍/分钟、有鼓点（不要太舒缓），
 //             镜头仍然慢（每个 3 小节 = 7.2 秒），每个镜头的起点都落在小节线上，画面里的动作卡在拍子上
 // 画面里不出现任何网址
 import { SEGMENTS } from './explainer-script.mjs';
@@ -87,8 +88,15 @@ const DEF = {
   nNight: { time: 'night' },
   nEnd: {},
 };
-// 山寺上新：每个镜头底部的字幕
+// 山寺 · 修行：每个镜头底部的字幕（修行为主，咖啡只是修行间隙歇一歇）
 const NEWS_TEXT = {
+  rows: ['大殿礼佛', '整点共修，满殿的人一起礼拜'],
+  incense: ['上香', '点香炉，亲手插上一炷香'],
+  uiPractice: ['每日功课', '礼佛、上香、木鱼、念珠、读经、抄经，做满有功德'],
+  uiReader: ['读经', '六部经书，繁简可切换，记下读过几遍'],
+  rosary: ['拨念珠', '一颗一颗拨，满一百零八颗记一圈'],
+  bell: ['撞钟', '按住蓄力，在金色区间松手，钟声最洪亮'],
+  moktak: ['敲木鱼', '跟着拍子敲，敲准是「妙」，连击功德更多'],
   nCafe: ['山寺咖啡', '东院新开一间茶寮，咖啡师父现做'],
   nTerrace: ['露台 · 油纸伞', '撑伞的小桌，晒着太阳坐一会儿'],
   nBar: ['五款特调', '般若拿铁 · 上岸冷萃 · 桂花拿铁'],
@@ -98,9 +106,14 @@ const NEWS_TEXT = {
   nHang: ['挂一盏灯', '写一句心愿，灯自己升到绳上'],
   nWish: ['七种心愿', '平安 · 上岸 · 健康 · 暴富 · 脱单'],
   nPersimmon: ['柿柿如意', '柿饼架前合十，得一句好彩头'],
-  nSutra: ['键盘抄经', '电脑上用输入法打字，打对一个落一个墨字'],
-  nNight: ['入夜', '灯廊和茶寮的灯，一盏盏亮起来'],
+  nSutra: ['抄经', '电脑上用输入法打字，打对一个落一个墨字'],
+  nNight: ['入夜', '殿里和灯廊的灯，一盏盏亮起来'],
+  nCafeRest: ['修行间隙', '东院茶寮喝杯咖啡，歇一歇再接着修'],
 };
+// 修行版里换时段的镜头：撞钟在黄昏逆光、钟正面一片黑，用白天的光
+const NEWS_TIME = { bell: 'day', rows: 'day', incense: 'day', rosary: 'day' };
+// 同一个镜头在修行版里换个字幕（咖啡馆外景当作「修行间隙」）
+const NEWS_ALIAS = { nCafe: 'nCafeRest' };
 // 功能介绍里换时段的镜头：黄昏撞钟的特写逆光，钟正面一片黑，改用白天的光（配乐仍按黄昏那一段走）
 const FEATURE_TIME = { bell: 'day' };
 // 功能介绍：每个镜头底部的字幕（功能名、一句玩法）
@@ -139,10 +152,10 @@ const LISTS = {
     ['fTitle', 6.0], ['gate', 8.0], ['incense', 8.0], ['quest', 8.0], ['uiPractice', 8.0], ['looks', 8.0], ['guanyin', 8.5], ['library', 8.0],
     ['copy', 8.5], ['uiReader', 8.0], ['tower', 9.0], ['rows', 8.0], ['rosary', 7.5], ['bell', 8.0], ['moktak', 8.5], ['night', 8.0], ['fEnd', 6.5],
   ],
-  // 每个镜头多 0.5 秒叠化，起点正好落在小节线上（每个 3 小节）；不要片头，直接从咖啡馆外景进（用户 2026-11-18）
+  // 每个镜头多 0.5 秒叠化，起点正好落在小节线上（每个 3 小节）。用户 2026-11-18：不要片头，直接进；主要是修行，不是咖啡
   news: [
-    ['nCafe', 7.7], ['nTerrace', 7.7], ['nBar', 7.7], ['nMenu', 7.7], ['nTreat', 7.7], ['nAlley', 7.7],
-    ['nHang', 7.7], ['nWish', 7.7], ['nPersimmon', 7.7], ['nSutra', 7.7], ['nNight', 7.7], ['nEnd', 5.5],
+    ['rows', 7.7], ['incense', 7.7], ['uiPractice', 7.7], ['nSutra', 7.7], ['uiReader', 7.7], ['rosary', 7.7],
+    ['nHang', 7.7], ['nCafe', 7.7], ['bell', 7.7], ['moktak', 7.7], ['nNight', 7.7], ['nEnd', 5.5],
   ],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
@@ -181,7 +194,7 @@ export const SHOTS = list.map(([id, dur]) => ({
   ...DEF[id],
   ...(CUT === 'explainer' ? { line: EXPLAIN_LINE[id] } : {}),
   ...(CUT === 'features' ? { line: undefined, feature: FEATURE_TEXT[id], ...(FEATURE_TIME[id] ? { time: FEATURE_TIME[id] } : {}) } : {}),
-  ...(NEWS ? { line: undefined, feature: NEWS_TEXT[id] } : {}),
+  ...(NEWS ? { line: undefined, feature: NEWS_TEXT[NEWS_ALIAS[id] ?? id], ...(NEWS_TIME[id] ? { time: NEWS_TIME[id] } : {}) } : {}),
 }));
 
 // 每个镜头在成片里的起点（秒）
@@ -209,14 +222,16 @@ const MOKTAK_DELAY = 0.07; // 木槌落下到碰到木鱼
 const STRIKER_DELAY = 1.05; // 撞木开始摆到碰到钟
 const DRUM_DELAY = 0.32; // 鼓槌抬起到打中
 const bellStart = startOf('bell');
-const bellHit = bellStart === undefined ? 1.3 : nextBeat(bellStart + 1.2) - bellStart;
+// 修行版的撞钟落在镜头第 3 秒左右，前面留出按住蓄力的那一段
+const bellHit = bellStart === undefined ? 1.3 : nextBeat(bellStart + (NEWS ? 2.9 : 1.2)) - bellStart;
 export const EVENTS = {
   titleType: { from: 0.35, perChar: 0.14 },
   titleReveal: DOWNBEAT,
   titleSeal: 2.9,
   bellStrike: bellHit - STRIKER_DELAY,
   bellHit,
-  moktak: beatsIn('moktak', 0.25, CUT === 'features' ? durOf('moktak') - 0.6 : Math.min(3.2, durOf('moktak') - 0.3), BEAT / 2, MOKTAK_DELAY),
+  // 修行版 100 拍/分钟：一拍敲一下（半拍太急）
+  moktak: beatsIn('moktak', 0.25, CUT === 'features' || NEWS ? durOf('moktak') - 0.6 : Math.min(3.2, durOf('moktak') - 0.3), NEWS ? BEAT : BEAT / 2, MOKTAK_DELAY),
   moktakDelay: MOKTAK_DELAY,
   drum: beatsIn('drum', 0.5, durOf('drum') - 0.4, BEAT, DRUM_DELAY),
   drumDelay: DRUM_DELAY,
