@@ -125,7 +125,34 @@ export const BENCH_SEATS: Seat[] = BENCH_DEFS.flatMap((b, bi) =>
   })
 );
 
-export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS];
+// 山寺咖啡：东边前院、鼓楼南边的一座小茶寮，前脸朝西（朝放生池和参道）。
+// 本地坐标：x 沿面阔，z 朝前（柜台外）为正；base 是台基高
+export const CAFE = { x: 33.8, z: 47, yaw: -Math.PI / 2, base: 0.14, inner: 0.2, hw: 2.4, hd: 1.7 };
+export function cafeWorld(lx: number, lz: number) {
+  const c = Math.cos(CAFE.yaw), s = Math.sin(CAFE.yaw);
+  return { x: CAFE.x + lx * c + lz * s, z: CAFE.z - lx * s + lz * c };
+}
+export const CAFE_STAND = cafeWorld(0, 1.8); // 点单、取咖啡时站的位置（柜台前）
+export const CAFE_BIN = cafeWorld(2.95, 1.35); // 空杯回收桶
+export const CAFE_BIN_STAND = cafeWorld(2.95, 2.05);
+export const CAFE_FLAG = cafeWorld(-2.75, 1.45); // 布幌子的竹竿
+export const CAFE_MENU = cafeWorld(1.75, 2.35); // 立在柜台前的菜单木牌
+// 两张小圆桌，各配两只圆凳（坐下面朝桌子；从靠咖啡摊的一侧走过去坐）
+export const CAFE_TABLES = [cafeWorld(-2.6, 5.0), cafeWorld(2.6, 5.0)];
+export const CAFE_SEATS: Seat[] = CAFE_TABLES.flatMap((tb, ti) =>
+  [-1, 1].map((sz, si) => ({
+    id: `k${ti * 2 + si}`,
+    kind: 'bench' as const,
+    x: tb.x,
+    z: tb.z + sz * 0.74,
+    y: 0.46,
+    yaw: sz < 0 ? 0 : Math.PI,
+    approachX: tb.x + 0.95,
+    approachZ: tb.z + sz * 0.74,
+  }))
+);
+
+export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS, ...CAFE_SEATS];
 export const SEAT_BY_ID = new Map(ALL_SEATS.map((s) => [s.id, s]));
 
 // 院中的树（大多是银杏，少数枫树），坐标 + 大小
@@ -141,7 +168,7 @@ export const PINES: [number, number, number][] = [
 ];
 
 export const ROCKS: [number, number, number][] = [
-  [-13, 44, 0.8], [13.5, 45, 0.7], [-30, 42, 0.8], [31, 44, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
+  [-13, 44, 0.8], [13.5, 45, 0.7], [-30, 42, 0.8], [38.6, 40.5, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
 ];
 
 
@@ -183,6 +210,13 @@ for (const [x, z] of SIDE_LAMPS) circles.push({ x, z, r: 0.38 });
 boxes.push({ x0: LANTERN_STAND.x - 0.5, x1: LANTERN_STAND.x + 0.5, z0: LANTERN_STAND.z - 0.33, z1: LANTERN_STAND.z + 0.33 });
 boxes.push({ x0: FORTUNE.x - 0.38, x1: FORTUNE.x + 0.38, z0: FORTUNE.z - 0.38, z1: FORTUNE.z + 0.38 });
 circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
+// 咖啡摊：整座台基（柜台以内进不去），竹竿、菜单牌、回收桶、桌子
+{
+  const a = cafeWorld(-CAFE.hw, -CAFE.hd), b = cafeWorld(CAFE.hw, 1.2);
+  boxes.push({ x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) });
+  circles.push({ ...CAFE_FLAG, r: 0.16 }, { ...CAFE_MENU, r: 0.42 }, { ...CAFE_BIN, r: 0.36 });
+  for (const tb of CAFE_TABLES) circles.push({ ...tb, r: 0.48 });
+}
 // 石拱桥两头的抱鼓石
 for (const x of [BRIDGE.x0 + 0.1, BRIDGE.x1 - 0.1]) for (const z of [BRIDGE.z0 - 0.42, BRIDGE.z1 + 0.42]) circles.push({ x, z, r: 0.38 });
 // 山门两扇大门往院里开着（门扇近似成一个窄长方形）
@@ -294,6 +328,12 @@ export function heightAt(x: number, z: number): number {
   if (x > BRIDGE.x0 && x < BRIDGE.x1 && z > BRIDGE.z0 && z < BRIDGE.z1) return BRIDGE.h * Math.sin(((z - BRIDGE.z0) / (BRIDGE.z1 - BRIDGE.z0)) * Math.PI);
   const sh = sideHallHeight(x, z);
   if (sh >= 0) return sh;
+  // 咖啡摊台基（只有柜台里的僧人站得上去）
+  if (Math.abs(x - CAFE.x) < CAFE.hd && Math.abs(z - CAFE.z) < CAFE.hw) {
+    // 柜台里面（本地 z < 0.45）垫着一层木踏板
+    const lz = (x - CAFE.x) * Math.sin(CAFE.yaw) + (z - CAFE.z) * Math.cos(CAFE.yaw);
+    return CAFE.base + (lz < 0.45 ? CAFE.inner : 0);
+  }
   return 0;
 }
 

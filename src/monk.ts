@@ -3,12 +3,15 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { REAL, R, buildRealGeo, loadHead } from './body-real';
 import { ROBES, type RobeLook, type BeadLook } from './looks';
+import { cupMesh, DRINK_BY_ID, type DrinkId } from './coffee';
 
 
 export type Action =
   | 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune' | 'sweep'
   // 常住僧人的日常：坐着读经、喝茶、讲经；站着浇水、擦拭、奉茶；跪着打水；提壶走、端茶走、拨念珠走
-  | 'read' | 'tea' | 'teach' | 'water' | 'wipe' | 'serve' | 'fill' | 'canwalk' | 'tray' | 'beadwalk';
+  | 'read' | 'tea' | 'teach' | 'water' | 'wipe' | 'serve' | 'fill' | 'canwalk' | 'tray' | 'beadwalk'
+  // 咖啡师父在柜台后做咖啡
+  | 'brew';
 // 会移动脚步的动作（走路的几种样子）
 export const GAITS: Action[] = ['walk', 'canwalk', 'tray', 'beadwalk'];
 
@@ -162,6 +165,13 @@ const FORTUNE_KEYS: Keys = [
   [3.0, mk({ ...HAP, torso: 0.1 }), [0, 0.12, 0.32]],
   [3.8, mk({}), [0, 0.12, 0.32]],
 ];
+
+// 拿着咖啡杯时，这些动作里杯子在手上（其余动作——礼拜、上香、敲木鱼——先把杯子放一边，不显示）
+const HOLD_CUP = new Set<Action>(['idle', 'walk', 'bench', 'hapjang']);
+export const SIP_DURATION = 2.5;
+export const OFFER_DURATION = 1.9;
+const QA = new THREE.Quaternion();
+const QB = new THREE.Quaternion();
 
 // 喝茶（坐着）：茶杯在膝上 → 举到嘴边抿一口 → 放回，8 秒一轮
 const TEA_CYCLE = 8;
@@ -628,6 +638,13 @@ export class Monk {
   private extra: Partial<Record<'book' | 'cup' | 'can' | 'tray' | 'cloth', THREE.Object3D>> = {};
   private page: THREE.Object3D | null = null;
   private stream: THREE.Object3D | null = null;
+  // 手里的咖啡：哪一杯、还剩几口；喝一口、递给别人的动作计时（-1 表示没在做）
+  private cupG: THREE.Group | null = null;
+  private cupSet: ((n: number) => void) | null = null;
+  cupKind: DrinkId | null = null;
+  cupSips = 0;
+  private sipT = -1;
+  private offerT = -1;
   constructor(style: MonkStyle = 'guest') {
     this.style = style;
     const M = { ...mats() };
@@ -994,6 +1011,84 @@ export class Monk {
     this.tap = 1;
   }
 
+  // —— 咖啡杯 ——
+  setCup(kind: DrinkId | null, sips = 3) {
+    if (kind !== this.cupKind) {
+      if (this.cupG) {
+        this.cupG.removeFromParent();
+        this.cupG = null;
+        this.cupSet = null;
+      }
+      this.cupKind = kind;
+      const d = kind && DRINK_BY_ID.get(kind);
+      if (d) {
+        const c = cupMesh(d);
+        this.cupG = c.group;
+        this.cupSet = c.setSips;
+        // 握在右手心里；Q 版手小头大，杯子放大一些才看得见
+        c.group.scale.setScalar(REAL ? 1.25 : 1.9);
+        c.group.position.set(...((REAL ? [0, -0.075, 0.035] : [0, -0.05, 0.03]) as [number, number, number]));
+        this.handR.add(c.group);
+      }
+    }
+    this.cupSips = sips;
+    this.cupSet?.(sips);
+  }
+  // 喝一口：举杯到嘴边、停一下、放下，共 SIP_DURATION 秒
+  sip() {
+    if (this.cupKind) this.sipT = 0;
+  }
+  get sipping() {
+    return this.sipT >= 0 || this.offerT >= 0;
+  }
+  // 双手把杯子递出去（请人喝）
+  offer() {
+    if (this.cupKind) this.offerT = 0;
+  }
+  // 拿着杯子时的手臂：站、走时端在胸前，坐时放在腿上；喝一口、递出去时叠加在上面
+  private cupPose(target: Pose, dt: number) {
+    if (!this.cupKind || !HOLD_CUP.has(this.action)) {
+      this.sipT = this.offerT = -1;
+      return;
+    }
+    const seated = this.action === 'bench' || this.action === 'sit';
+    Object.assign(target, seated ? { armRp: -0.95, armRy: 0.5, armRr: 0, wrist: -0.45 } : { armRp: -1.12, armRy: 0.42, armRr: 0, wrist: -0.25 });
+    if (this.sipT >= 0) {
+      this.sipT += dt;
+      const t = this.sipT;
+      const k = t < 0.6 ? ease(t / 0.6) : t < 1.7 ? 1 : t < SIP_DURATION ? 1 - ease((t - 1.7) / (SIP_DURATION - 1.7)) : 0;
+      target.armRp += (-1.95 - target.armRp) * k;
+      target.armRy += (0.62 - target.armRy) * k;
+      target.wrist += (-0.9 - target.wrist) * k;
+      target.head += (-0.16 - target.head) * k;
+      if (t >= SIP_DURATION) this.sipT = -1;
+    }
+    if (this.offerT >= 0) {
+      this.offerT += dt;
+      const t = this.offerT;
+      const k = t < 0.5 ? ease(t / 0.5) : t < 1.3 ? 1 : t < OFFER_DURATION ? 1 - ease((t - 1.3) / (OFFER_DURATION - 1.3)) : 0;
+      target.armRp += (-1.5 - target.armRp) * k;
+      target.armRy += (0.22 - target.armRy) * k;
+      target.wrist += (-0.12 - target.wrist) * k;
+      target.armLp += (-1.4 - target.armLp) * k;
+      target.armLy += (-0.3 - target.armLy) * k;
+      target.torso += (0.25 - target.torso) * k;
+      target.head += (0.15 - target.head) * k;
+      if (t >= OFFER_DURATION) this.offerT = -1;
+    }
+  }
+  // 杯子始终竖直、朝着身体前方（不跟着手腕歪）
+  private placeCup() {
+    if (!this.cupG) return;
+    const show = HOLD_CUP.has(this.action);
+    this.cupG.visible = show;
+    if (!show) return;
+    this.handR.updateWorldMatrix(true, false);
+    this.handR.getWorldQuaternion(QA);
+    this.root.getWorldQuaternion(QB);
+    this.cupG.quaternion.copy(QA.invert().multiply(QB));
+  }
+
   update(dt: number) {
     this.actionTime += dt;
     const t = this.actionTime;
@@ -1095,6 +1190,13 @@ export class Monk {
         const w = t * 4.2;
         target = mk({ armRp: -1.15 + Math.sin(w) * 0.12, armRy: 0.45 + Math.cos(w) * 0.25, wrist: -0.2, armLp: -1.05, armLy: -0.35, torso: 0.35, head: 0.3, bob: Math.abs(Math.sin(w)) * 0.004 });
         rate = 12;
+        break;
+      }
+      case 'brew': {
+        // 柜台后做咖啡：两手在台面上忙，时不时抬手去够机器、侧一侧身
+        const w = t * 1.6;
+        target = mk({ armLp: -1.15 + Math.sin(w) * 0.07, armLy: -0.32, armRp: -1.22 + Math.sin(w * 1.3 + 1) * 0.12, armRy: 0.32 + Math.sin(w * 0.5) * 0.14, wrist: -0.3, torso: 0.14, head: 0.32 + Math.sin(w * 0.4) * 0.06, bob: Math.sin(w) * 0.004 });
+        rate = 7;
         break;
       }
       case 'serve': {
@@ -1207,11 +1309,13 @@ export class Monk {
         target = mk({ bob: Math.sin(t * 1.6) * 0.008 });
     }
 
+    this.cupPose(target, dt);
     const k = 1 - Math.exp(-rate * dt);
     this.pose = lerpPose(this.pose, target, k);
     const p = this.pose;
     if (REAL) {
       this.applyReal(p);
+      this.placeCup();
       return;
     }
     const hipY = HIP + p.drop + p.bob;
@@ -1228,5 +1332,6 @@ export class Monk {
     this.armR.rotation.set(p.armRp, p.armRy, p.armRr);
     this.handL.rotation.x = p.wrist;
     this.handR.rotation.x = p.wrist;
+    this.placeCup();
   }
 }

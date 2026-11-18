@@ -8,16 +8,16 @@
 //   钟头、鼓头扫楼、擦鼓；两位僧人拨着念珠绕塔。
 import * as THREE from 'three';
 import { Monk, GAITS, type Action, BOW_DURATION } from './monk';
-import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat } from './layout';
+import { planRoute, heightAt, SIDE_HALLS, LIBRARY, SPAWN, HALL, ALTAR_SPOT, INCENSE, PAGODAS, LANTERN_STAND, NPC_BENCHES, benchSeat, CAFE, cafeWorld } from './layout';
 import type { StrikeBuild } from './world/buildings';
 import { REAL } from './body-real';
 import { cushionMesh } from './world/hall';
 
-export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian';
+export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian' | 'barista';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
 export type Activity =
   | 'sweep' | 'rest' | 'read' | 'water' | 'fill' | 'bring' | 'serve' | 'tea' | 'teach' | 'listen' | 'incense'
-  | 'wipe' | 'tidy' | 'patrol' | 'greet' | 'feed' | 'circle' | 'meditate' | 'stroll';
+  | 'wipe' | 'tidy' | 'patrol' | 'greet' | 'feed' | 'circle' | 'meditate' | 'stroll' | 'brew';
 
 // 一小时里的时刻（秒）
 export const SVC = { bell: [3, 11, 19], gather: 25, chant: 62, end: 300, gone: 348, drum: 1800 };
@@ -393,6 +393,17 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     { to: libSeat, v: 0.45, direct: true },
   ]);
 
+  // —— 咖啡师父：守在东院茶寮的柜台后面，做咖啡、擦台面、歇一会儿（不出柜台） ——
+  const barSpot = cafeWorld(-0.25, 0.1), barSide = cafeWorld(0.9, 0.05);
+  const barista = add('barista', 'resident', { ...barSpot, yaw: CAFE.yaw, action: 'brew' });
+  barista.prog = program(at(barista), [
+    { stay: 36, act: 'brew', yaw: CAFE.yaw, label: 'brew' },
+    { to: barSide, v: 0.4, direct: true, label: 'wipe' },
+    { stay: 9, act: 'wipe', yaw: CAFE.yaw, label: 'wipe' },
+    { to: barSpot, v: 0.4, direct: true, label: 'brew' },
+    { stay: 14, act: 'idle', yaw: CAFE.yaw, label: 'brew' },
+  ]);
+
   // —— 大众：四位，两位从观音殿、两位从地藏殿走来，在供桌两侧跪拜 ——
   const spots: P[] = [{ x: -6.3, z: -16.9 }, { x: -5.0, z: -16.9 }, { x: 5.0, z: -16.9 }, { x: 6.3, z: -16.9 }];
   const assembly: Resident[] = spots.map((spot, i) => {
@@ -441,7 +452,7 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
     interactives: list.filter((r) => r.role !== 'assembly').map((r) => r.monk.root),
     list,
     // 会请玩家帮忙的几位
-    ids: { sweeper: sweeper.id, waterNovice: noviceA.id, librarian: librarian.id },
+    ids: { sweeper: sweeper.id, waterNovice: noviceA.id, librarian: librarian.id, barista: barista.id },
     // 当前处在时刻表的哪一段（给界面用）
     phase(s: number): { kind: 'idle' | 'soon' | 'bell' | 'gather' | 'chant' | 'disperse'; toStart: number } {
       if (s < SVC.gather) return { kind: 'bell', toStart: SVC.chant - s };

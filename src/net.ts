@@ -11,6 +11,7 @@ export interface RemoteState {
   s: string | null; // 占用的座位
   n: number; // 今天的礼拜数
   k?: string; // 衣钵与等级：僧袍.念珠.等级（旧版客户端没有）
+  c?: string; // 手里的咖啡：饮品.还剩几口（空着手是空串）
 }
 
 export interface RoomInfo {
@@ -48,6 +49,8 @@ type Events = {
   claim: (seat: string, ok: boolean) => void;
   bell: (from: string, kind: 'bell' | 'drum') => void;
   lanterns: (list: LanternMsg[], serverNow: number) => void;
+  gift: (from: string, name: string, cup: string) => void; // 别人请我喝了一杯
+  gave: (to: string, ok: boolean, why: string) => void; // 我请别人喝：成没成
 };
 
 export class Net {
@@ -135,7 +138,7 @@ export class Net {
         case 'snap':
           this.emit(
             'snapshot',
-            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7], k: typeof p[8] === 'string' ? p[8] : undefined }))
+            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7], k: typeof p[8] === 'string' ? p[8] : undefined , c: typeof p[9] === 'string' ? p[9] : ''}))
           );
           break;
         case 'leave':
@@ -152,6 +155,12 @@ export class Net {
           break;
         case 'bell':
           this.emit('bell', msg.from, msg.kind === 'drum' ? 'drum' : 'bell');
+          break;
+        case 'gift':
+          this.emit('gift', String(msg.from), String(msg.name ?? ''), String(msg.c ?? ''));
+          break;
+        case 'gave':
+          this.emit('gave', String(msg.to), !!msg.ok, String(msg.why ?? ''));
           break;
       }
     };
@@ -196,16 +205,16 @@ export class Net {
     if (this.online) this.ws!.send(JSON.stringify(obj));
   }
 
-  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number; k: string }) {
+  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number; k: string; c: string }) {
     const now = performance.now();
     const r = (v: number) => Math.round(v * 100) / 100;
-    const key = `${r(s.x)},${r(s.z)},${r(s.yaw)},${s.a},${s.s},${s.n},${s.k}`;
+    const key = `${r(s.x)},${r(s.z)},${r(s.yaw)},${s.a},${s.s},${s.n},${s.k},${s.c}`;
     // 状态没变就不发；变了最多每秒 10 次
     if (key === this.lastSent && now - this.lastSentAt < 3000) return;
     if (now - this.lastSentAt < 100) return;
     this.lastSent = key;
     this.lastSentAt = now;
-    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n, k: s.k });
+    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n, k: s.k, c: s.c });
   }
 
   setName(name: string) {
@@ -219,6 +228,10 @@ export class Net {
 
   release() {
     this.send({ t: 'release' });
+  }
+
+  give(to: string) {
+    this.send({ t: 'give', to });
   }
 
   offerIncense(place: IncensePlace) {

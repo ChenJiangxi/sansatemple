@@ -281,6 +281,64 @@ export class AudioEngine {
     }
   }
 
+  // 一段滤过的噪声：起音 a 秒、持续 len 秒；f 是中心频率（可以滑动到 f2），q 越大越窄
+  private hiss(o: { at?: number; len: number; a?: number; f: number; f2?: number; q?: number; gain: number; rate?: number }) {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + (o.at ?? 0);
+    const n = this.noiseSource();
+    n.playbackRate.value = o.rate ?? 1;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(o.f, t);
+    if (o.f2) bp.frequency.exponentialRampToValueAtTime(o.f2, t + o.len);
+    bp.Q.value = o.q ?? 1;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(o.gain, t + (o.a ?? 0.01));
+    g.gain.setValueAtTime(o.gain, t + Math.max(o.a ?? 0.01, o.len - 0.08));
+    g.gain.exponentialRampToValueAtTime(0.0004, t + o.len);
+    n.connect(bp).connect(g).connect(this.buses.effects);
+    n.start(t, Math.random() * 3, o.len + 0.05);
+  }
+
+  // 毛笔落在纸上的一声「沙」
+  brush() {
+    this.hiss({ len: 0.16 + Math.random() * 0.06, a: 0.02, f: 2400 + Math.random() * 600, f2: 1500, q: 0.8, gain: 0.07 });
+  }
+
+  // 磨豆：一阵颗粒感的嗡嗡声；萃取：蒸汽和水流
+  coffeeGrind() {
+    if (!this.enabled || !this.ctx) return;
+    this.hiss({ len: 1.6, a: 0.08, f: 900, q: 1.6, gain: 0.16, rate: 0.6 });
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.value = 118;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.1);
+    g.gain.setValueAtTime(0.05, t + 1.4);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 1.6);
+    o.connect(lp).connect(g).connect(this.buses.effects);
+    o.start(t);
+    o.stop(t + 1.7);
+  }
+  coffeePour() {
+    this.hiss({ at: 0, len: 1.2, a: 0.15, f: 5200, f2: 3800, q: 0.7, gain: 0.05 });
+    this.hiss({ at: 0.9, len: 2.4, a: 0.3, f: 700, f2: 520, q: 2.2, gain: 0.06 });
+  }
+
+  // 抿一口
+  sip() {
+    this.hiss({ len: 0.34, a: 0.06, f: 1300, f2: 2100, q: 2.5, gain: 0.05 });
+    this.hiss({ at: 0.42, len: 0.12, a: 0.01, f: 480, q: 3, gain: 0.07 });
+  }
+
   // 磬 / 颂钵：礼拜额头触地、上香时的清亮余音
   bell(gain = 0.5) {
     if (!this.enabled || !this.ctx) return;

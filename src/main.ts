@@ -23,6 +23,8 @@ import { SutraCopy } from './sutra';
 import { Reader } from './reader';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
+import { buildCafe } from './world/cafe';
+import { CafeUI, parseCup, cupCode, SIPS, BREW_MS, DRINK_BY_ID, type DrinkId } from './coffee';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
 import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
@@ -30,6 +32,7 @@ import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
+import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND } from './layout';
 import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
@@ -161,6 +164,7 @@ async function start() {
   const pond = buildPond(scene, { isTouch, lanternFrom: { x: LANTERN_STAND.standX, z: LANTERN_STAND.standZ + 0.9 } });
   const life = buildLife(scene);
   const shrines = buildShrines(scene);
+  const cafe = buildCafe(scene);
   const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
   const residents = buildResidents(scene, {
     bell: buildings.bell,
@@ -172,6 +176,7 @@ async function start() {
   });
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
+  cafe.setLanternLevel(env.lanternLevel);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
   // 金身佛像用室内环境光反射
   hall.group.traverse((o) => {
@@ -186,7 +191,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, pond.water];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, pond.water];
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
   interactives.push(...sideHalls.interactives, ...sideHalls.doorHits, ...sideHalls.deskHits);
@@ -281,6 +286,7 @@ async function start() {
       localStorage.setItem('sansa.time', m);
       env.setMode(m as TimeMode);
       props.setLanternLevel(env.lanternLevel);
+      cafe.setLanternLevel(env.lanternLevel);
     },
     getTime: () => env.mode,
     setShadows: (on) => {
@@ -316,6 +322,7 @@ async function start() {
       else if (id === 'beads') openRosary();
       else if (id === 'read') ui.openPractice('sutras');
       else if (id === 'sutra') requestSutra(1);
+      else if (id === 'coffee') requestCafe();
     },
     getScript: () => (localStorage.getItem('sansa.script') as 't' | 's' | null) ?? (getLang() === 'zh' ? 's' : 't'),
     setLook: (l) => {
@@ -354,7 +361,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' | 'cafe' | 'bin' | 'gift' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -379,9 +386,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian', barista: 'roleBarista',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian', barista: 'npcBarista' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -754,6 +761,9 @@ async function start() {
     else if (tower) ui.setStatus('towerTop', 'towerDown');
     else if (intent === 'climb') ui.setStatus('statusClimb');
     else if (intent === 'desk') ui.setStatus('statusDesk');
+    else if (intent === 'cafe') ui.setStatus('statusCafe');
+    else if (intent === 'bin') ui.setStatus('statusBin');
+    else if (intent === 'gift') ui.setStatus('statusGift');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -960,11 +970,18 @@ async function start() {
       }, 650);
     });
   }
-  // —— 抄经：点经案，走过去坐下，铺开纸描《心经》 ——
+  // —— 抄经：点经案，走过去坐下，铺开纸抄《心经》（电脑上打字，手机上描） ——
+  // 调试：?debugview&sutramode=type|brush 指定抄经方式
+  {
+    const sp0 = new URL(location.href).searchParams;
+    const m0 = sp0.get('sutramode');
+    if (sp0.has('debugview') && (m0 === 'type' || m0 === 'brush')) localStorage.setItem('sansa.sutra.mode', m0);
+  }
   const sutra = new SutraCopy(ui.root, {
     onChar: (grade, at) => {
       progress.add('sutra');
-      gain(grade === 'perfect' ? 4 : grade === 'good' ? 3 : 2, at);
+      // 键盘打一个字 1 点；毛笔描一个字按描得好坏 2–4 点
+      gain(grade === 'typed' ? 1 : grade === 'perfect' ? 4 : grade === 'good' ? 3 : 2, at);
       if (grade === 'perfect') audio.bell(0.16);
     },
     onLine: () => {
@@ -987,6 +1004,7 @@ async function start() {
     },
     getName: () => name,
   });
+  sutra.onBrush = () => audio.brush();
   // —— 经藏：读经。一页读过今天第一次给 1 功德（每天前 40 页），读完一部 10，第一次读完 30 ——
   const reader = new Reader(
     ui.root,
@@ -1004,6 +1022,192 @@ async function start() {
     },
     getLang() === 'zh'
   );
+
+  // —— 山寺咖啡：东院茶寮点一杯；分三口喝；满杯可以请人喝（常住僧人或别的访客）；空杯放回收桶 ——
+  let cup: { d: DrinkId; sips: number; from?: string } | null = null;
+  let brewing = false;
+  let pendingGift: { id: string; d: DrinkId } | null = null;
+  const cafeUI = new CafeUI(ui.root, {
+    choose: (d) => brewCoffee(d),
+    sip: () => sipCup(),
+    recycle: () => requestBin(),
+    close: () => refreshStatus(),
+    getName: () => name,
+  });
+  function setCup(c: typeof cup) {
+    cup = c;
+    me.setCup(c?.d ?? null, c?.sips ?? 0);
+    cafeUI.setCup(c);
+  }
+  const drinkName = (d: DrinkId) => t(`drink_${d}` as Key);
+  // 先放下手上的事：起身、收起木鱼念珠
+  function freeHands() {
+    if (player.seat) standUp();
+    if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
+  }
+  function requestCafe() {
+    if (brewing || cafeUI.open) return;
+    if (cup) {
+      if (cup.sips > 0) ui.toast(t('cupHave'));
+      else requestBin();
+      return;
+    }
+    freeHands();
+    intent = 'cafe';
+    refreshStatus();
+    walkTo(CAFE_STAND.x, CAFE_STAND.z, () => {
+      intent = null;
+      player.yaw = CAFE.yaw + Math.PI;
+      refreshStatus();
+      say('barista');
+      cafeUI.openMenu();
+    });
+  }
+  function brewCoffee(d: DrinkId) {
+    if (brewing || cup) return;
+    brewing = true;
+    cafeUI.showBrewing(d, BREW_MS);
+    cafe.setBrewing(true);
+    audio.coffeeGrind();
+    setTimeout(() => audio.coffeePour(), 2200);
+    setTimeout(() => {
+      brewing = false;
+      cafe.setBrewing(false);
+      cafeUI.closeMenu();
+      setCup({ d, sips: SIPS });
+      audio.bell(0.18);
+      ui.toast(t('coffeeReady', { x: drinkName(d) }), 3600);
+      refreshStatus();
+    }, BREW_MS);
+  }
+  const CAN_SIP: Action[] = ['idle', 'walk', 'bench', 'hapjang'];
+  function sipCup() {
+    if (!cup || cup.sips <= 0 || me.sipping) return;
+    if (!CAN_SIP.includes(me.action)) {
+      ui.toast(t('cupNotNow'));
+      return;
+    }
+    me.sip();
+    cafeUI.setBusy(true);
+    setTimeout(() => audio.sip(), 700);
+    setTimeout(() => {
+      cafeUI.setBusy(false);
+      if (!cup || cup.sips <= 0) return;
+      cup.sips--;
+      const d = cup.d;
+      setCup(cup);
+      if (cup.sips === 0) {
+        progress.tick('coffee');
+        setTimeout(() => ui.toast(t(`drinkDone_${d}` as Key), 4200), 600);
+      }
+    }, 1300);
+  }
+  function requestBin() {
+    if (!cup) return;
+    if (cup.sips > 0) {
+      ui.toast(t('cupNotDone'));
+      return;
+    }
+    freeHands();
+    intent = 'bin';
+    refreshStatus();
+    walkTo(CAFE_BIN_STAND.x, CAFE_BIN_STAND.z, () => {
+      intent = null;
+      player.yaw = Math.atan2(CAFE_BIN.x - player.x, CAFE_BIN.z - player.z);
+      me.offer();
+      setTimeout(() => {
+        setCup(null);
+        audio.bead();
+        gain(1);
+        ui.toast(t('cupRecycled'));
+        refreshStatus();
+      }, 800);
+    });
+  }
+  // 请人喝：走到对方跟前一步远，双手递过去
+  function approach(x: number, z: number, done: () => void) {
+    const dx = player.x - x, dz = player.z - z, d = Math.hypot(dx, dz) || 1;
+    freeHands();
+    intent = 'gift';
+    refreshStatus();
+    walkTo(x + (dx / d) * 1.05, z + (dz / d) * 1.05, () => {
+      intent = null;
+      refreshStatus();
+      done();
+    });
+  }
+  function canGift() {
+    if (!cup) return false;
+    if (cup.sips < SIPS) {
+      ui.toast(t('giftNeedFull'));
+      return false;
+    }
+    return true;
+  }
+  function giftNpc(id: number) {
+    if (!canGift()) return;
+    const r = residents.list[id];
+    approach(r.monk.root.position.x, r.monk.root.position.z, () => {
+      const p = r.monk.root.position;
+      if (!cup || Math.hypot(p.x - player.x, p.z - player.z) > 2.6) {
+        ui.toast(t('giftFail'));
+        return;
+      }
+      player.yaw = Math.atan2(p.x - player.x, p.z - player.z);
+      me.offer();
+      const d = cup.d;
+      setTimeout(() => {
+        setCup(null);
+        const lines = t('npcThanks').split('|');
+        sayText(id, lines[Math.floor(Math.random() * lines.length)]);
+        gain(8);
+        audio.bell(0.22);
+        ui.toast(t('giftGave', { n: t(ROLE_KEY[r.role]), x: drinkName(d) }), 4200);
+      }, 1000);
+    });
+  }
+  function giftRemote(id: string) {
+    if (!canGift()) return;
+    const r = remotes.get(id);
+    if (!r) return;
+    if (r.c) {
+      ui.toast(t('giftTheyHave'));
+      return;
+    }
+    approach(r.x, r.z, () => {
+      const q = remotes.get(id);
+      if (!cup || !q) return;
+      player.yaw = Math.atan2(q.x - player.x, q.z - player.z);
+      me.offer();
+      pendingGift = { id, d: cup.d };
+      setTimeout(() => net.give(id), 800);
+      setTimeout(() => {
+        if (pendingGift?.id !== id) return;
+        pendingGift = null;
+        ui.toast(t('giftFail'));
+      }, 5000);
+    });
+  }
+  net.on('gave', (to, ok, why) => {
+    if (!pendingGift || pendingGift.id !== to) return;
+    const d = pendingGift.d;
+    pendingGift = null;
+    if (!ok) {
+      ui.toast(t(why === 'has' ? 'giftTheyHave' : 'giftFail'));
+      return;
+    }
+    setCup(null);
+    gain(8);
+    audio.bell(0.22);
+    ui.toast(t('giftGave', { n: remotes.get(to)?.name ?? '', x: drinkName(d) }), 4200);
+  });
+  net.on('gift', (_from, nm, code) => {
+    const c = parseCup(code);
+    if (!c) return;
+    setCup({ d: c.d, sips: c.sips, from: nm });
+    audio.bell(0.3);
+    ui.toast(t('giftGot', { n: nm, x: drinkName(c.d) }), 5200);
+  });
 
   // —— 今日功课：每秒看一次做满了没有；做满的给功德、放提示；左上角的进度条跟着刷新 ——
   let dailySig = '';
@@ -1510,6 +1714,7 @@ async function start() {
     id: string; name: string; monk: Monk; tag: HTMLDivElement;
     x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number; a: Action; s: string | null; n: number;
     k: string; lv: number; // 衣钵与等级（旧版客户端没有，lv 为 -1）
+    c: string; // 手里的咖啡
   }
   function renderRemoteTag(r: Remote) {
     r.tag.innerHTML = (r.lv >= 0 ? `<span class="title">${t(LEVELS[r.lv].key as Key)}</span>` : '') + escapeHtml(r.name);
@@ -1519,6 +1724,8 @@ async function start() {
     const r = remotes.get(id);
     if (!r) return;
     scene.remove(r.monk.root);
+    const k = interactives.indexOf(r.monk.root);
+    if (k >= 0) interactives.splice(k, 1);
     r.tag.remove();
     remotes.delete(id);
   }
@@ -1535,10 +1742,13 @@ async function start() {
       if (!r) {
         const monk = new Monk();
         scene.add(monk.root);
+        // 别的访客可以点：端着满杯时就是请 TA 喝
+        monk.root.userData.interact = { type: 'player', id: p.id };
+        interactives.push(monk.root);
         const tag = document.createElement('div');
         tag.className = 'tag other';
         ui.tags.appendChild(tag);
-        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n, k: '', lv: -1 };
+        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n, k: '', lv: -1, c: '' };
         remotes.set(p.id, r);
       }
       if (r.name !== p.name || r.k !== (p.k ?? '')) {
@@ -1555,6 +1765,14 @@ async function start() {
       r.a = p.a;
       r.s = p.s;
       r.n = p.n;
+      // 手里的咖啡：换了就换杯子；同一杯少了一口就做喝的动作
+      const pc = p.c ?? '';
+      if (pc !== r.c) {
+        const before = parseCup(r.c), now = parseCup(pc);
+        r.c = pc;
+        r.monk.setCup(now?.d ?? null, now?.sips ?? 0);
+        if (before && now && before.d === now.d && now.sips < before.sips) r.monk.sip();
+      }
     }
     for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
     roomCount = list.length;
@@ -1622,6 +1840,21 @@ async function start() {
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
     if (act === 'bell') setTimeout(() => strikeInstrument('bell'), 1200);
+    // 调试：&do=cafe 走去点咖啡；&coffee=饮品&sips=n 直接端上一杯；&sipnow / &offernow 过几秒做一次喝、递的动作
+    if (act === 'cafe') setTimeout(requestCafe, 1200);
+    const dbgCup = sp.get('coffee');
+    if (dbgCup && DRINK_BY_ID.has(dbgCup as DrinkId)) setTimeout(() => setCup({ d: dbgCup as DrinkId, sips: Number(sp.get('sips') ?? SIPS) }), 1000);
+    if (sp.has('sipnow')) setTimeout(() => me.sip(), Number(sp.get('sipnow')) || 3000);
+    if (sp.has('offernow')) setTimeout(() => me.offer(), Number(sp.get('offernow')) || 3000);
+    const dbgBrew = sp.get('brew');
+    if (dbgBrew && DRINK_BY_ID.has(dbgBrew as DrinkId)) {
+      setTimeout(requestCafe, 1200);
+      const iv = setInterval(() => {
+        if (!cafeUI.open) return;
+        clearInterval(iv);
+        setTimeout(() => brewCoffee(dbgBrew as DrinkId), 800);
+      }, 300);
+    }
     // 调试：?debugview&moktak=n 打开木鱼并按拍子敲 n 下（前几下准，后面偏一点）
     const mk = Number(sp.get('moktak'));
     if (mk > 0)
@@ -1692,6 +1925,15 @@ async function start() {
     // 调试：&desk=0|1|2 走到藏经阁的经案坐下抄经
     const dbgDesk = Number(sp.get('desk'));
     if (sp.has('desk') && dbgDesk >= 0 && dbgDesk < 3) setTimeout(() => requestSutra(dbgDesk), 1500);
+    // 调试：再加 &sutratype=文字 模拟用键盘打一段（看简体、错字的反应）
+    const dbgType = sp.get('sutratype');
+    if (dbgType) {
+      const iv = setInterval(() => {
+        if (!sutra.open) return;
+        clearInterval(iv);
+        setTimeout(() => sutra.debugType(dbgType), 600);
+      }, 400);
+    }
     // 调试：再加 &sutraauto=n 自动描 n 个字
     const dbgAuto = Number(sp.get('sutraauto'));
     if (dbgAuto > 0) {
@@ -1840,9 +2082,21 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay || fortuneOpen || intro || tower || sutra.open || reader.open) return;
+    if (overlay || fortuneOpen || intro || tower || sutra.open || reader.open || cafeUI.open) return;
     const p = pick(cx, cy);
     if (!p) return;
+    if (p.interact?.type === 'cafe') {
+      requestCafe();
+      return;
+    }
+    if (p.interact?.type === 'cafeBin' && cup) {
+      requestBin();
+      return;
+    }
+    if (p.interact?.type === 'player' && cup && cup.sips === SIPS) {
+      giftRemote(p.interact.id as string);
+      return;
+    }
     if (p.interact?.type === 'pagoda') {
       requestClimb(p.interact.i as number);
       return;
@@ -1873,6 +2127,15 @@ async function start() {
       return;
     }
     if (p.interact?.type === 'npc') {
+      // 端着满杯：请这位师父喝；咖啡师父那里没杯子就是去点单
+      if (typeof p.interact.id === 'number' && cup && cup.sips === SIPS) {
+        giftNpc(p.interact.id);
+        return;
+      }
+      if (p.interact.role === 'barista' && !cup) {
+        requestCafe();
+        return;
+      }
       if (typeof p.interact.id === 'number' && questNpc(p.interact.id)) return;
       say(typeof p.interact.id === 'number' ? p.interact.id : (p.interact.role as Role));
       return;
@@ -1959,7 +2222,10 @@ async function start() {
     else if (it?.type === 'sutraDesk') label = t('tipDesk');
     else if (it?.type === 'sutraShelf') label = t('tipShelf');
     else if (it?.type === 'pond') label = t('tipPond');
-    else if (it?.type === 'npc') label = t(ROLE_KEY[it.role as Role]);
+    else if (it?.type === 'npc') label = cup && cup.sips === SIPS ? t('tipGift', { n: t(ROLE_KEY[it.role as Role]) }) : t(ROLE_KEY[it.role as Role]);
+    else if (it?.type === 'cafe') label = t('tipCafe');
+    else if (it?.type === 'cafeBin') label = t('tipBin');
+    else if (it?.type === 'player') label = cup && cup.sips === SIPS ? t('tipGift', { n: remotes.get(it.id)?.name ?? '' }) : null;
     else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
     else if (it?.type === 'hallLamp') label = t('lampLabel');
     canvas.classList.toggle('point', !!label);
@@ -1998,6 +2264,8 @@ async function start() {
       else if (overlay === 'rosary') closeRosary();
       return;
     }
+    // 抄经、读经、点咖啡的面板开着时，空格、数字键不去触发礼佛、念珠这些
+    if (sutra.open || reader.open || cafeUI.open) return;
     if (overlay === 'rosary' && ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(e.code)) {
       e.preventDefault();
       if (!e.repeat || true) rosaryView.nudge(e.code === 'ArrowDown' || e.code === 'ArrowRight' ? 1 : -1);
@@ -2058,7 +2326,7 @@ async function start() {
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
-    if (keys.size && !overlay && !tower && !sutra.open && !reader.open) {
+    if (keys.size && !overlay && !tower && !sutra.open && !reader.open && !cafeUI.open) {
       const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       if (f || s) {
@@ -2274,6 +2542,7 @@ async function start() {
     pond.update(dt, elapsed, env.lanternLevel, sunDir, sunCol);
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
+    cafe.update(dt, elapsed);
     buildings.bell.update(dt);
     buildings.drum.update(dt);
     env.follow(player.x, player.z);
@@ -2289,12 +2558,13 @@ async function start() {
       goldDone = true;
       env.update();
       props.setLanternLevel(env.lanternLevel);
+      cafe.setLanternLevel(env.lanternLevel);
     }
     env.tick(dt, camera.position);
     post.render(dt / slowmo);
     stage.render(dt);
     updateTags();
-    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())) });
+    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())), c: cupCode(cup) });
     if (!booted) {
       booted = true;
       bootEl.classList.add('gone');

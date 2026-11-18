@@ -19,7 +19,9 @@ const INCENSE_MS = 3 * 60 * 1000;
 const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune']);
 const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
 const LANTERN_MAX = 30;
-const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d)$/;
+const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d)$/;
+// 手里的咖啡：饮品.还剩几口
+const CUP_RE = /^(latte|americano|coldbrew|osmanthus|decaf)\.[0-3]$/;
 const LOOK_RE = /^[a-z]{2,10}\.[a-z]{2,10}\.[0-6]$/;
 const PLACES = new Set(['yard', 'altar']);
 
@@ -242,7 +244,7 @@ wss.on('connection', (ws) => {
         return;
       }
       room = r;
-      me = { id: crypto.randomBytes(6).toString('hex'), ws, name: cleanName(msg.name), x: 0, z: 22, yaw: Math.PI, a: 'idle', s: null, n: 0, k: '' };
+      me = { id: crypto.randomBytes(6).toString('hex'), ws, name: cleanName(msg.name), x: 0, z: 22, yaw: Math.PI, a: 'idle', s: null, n: 0, k: '', c: '' };
       room.players.set(me.id, me);
       send(ws, { t: 'welcome', id: me.id, room: id, capacity: CAPACITY });
       send(ws, incenseMsg(room));
@@ -260,6 +262,7 @@ wss.on('connection', (ws) => {
         me.n = Math.floor(num(msg.n, 0, 100000));
         // 衣钵与等级：只收「小写字母.小写字母.0-6」这种格式
         if (typeof msg.k === 'string' && LOOK_RE.test(msg.k)) me.k = msg.k;
+        if (msg.c === '' || (typeof msg.c === 'string' && CUP_RE.test(msg.c))) me.c = msg.c;
         if (msg.s === null || (typeof msg.s === 'string' && me.s === msg.s)) me.s = msg.s ?? null;
         break;
       case 'name':
@@ -296,6 +299,18 @@ wss.on('connection', (ws) => {
         broadcast(room, lanternMsg(room));
         break;
       }
+      case 'give': {
+        // 请人喝咖啡：自己手上是满杯、对方空着手、两人离得够近，杯子就换到对方手上
+        const to = room.players.get(String(msg.to || ''));
+        const ok = !!to && to !== me && /\.3$/.test(me.c) && !to.c && Math.hypot(to.x - me.x, to.z - me.z) < 3.5;
+        if (ok) {
+          to.c = me.c;
+          me.c = '';
+          send(to.ws, { t: 'gift', from: me.id, name: me.name, c: to.c });
+        }
+        send(ws, { t: 'gave', to: String(msg.to || ''), ok, why: !to ? 'gone' : to.c && !ok ? 'has' : ok ? '' : 'far' });
+        break;
+      }
       case 'bell': {
         // 撞钟 / 击鼓：转告房间里其他人（钟 15 秒一次，鼓 3.5 秒一次）
         const t = Date.now();
@@ -328,7 +343,7 @@ setInterval(() => {
     room.lanterns = room.lanterns.filter((l) => l.until > now);
     if (room.lanterns.length !== lb) broadcast(room, lanternMsg(room));
     if (!room.players.size) continue;
-    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n, q.k]);
+    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n, q.k, q.c]);
     broadcast(room, { t: 'snap', p });
   }
 }, TICK_MS);

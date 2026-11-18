@@ -365,8 +365,59 @@ canvas.main.point { cursor: pointer; }
 .sutra-grade { position: absolute; left: 50%; top: 12%; transform: translate(-50%, 0) scale(0.6); font-family: SansaSeal, serif; font-size: 30px; color: #fff3e0; background: #b3261e; padding: 2px 12px 4px; border-radius: 4px; letter-spacing: 2px; opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.35s cubic-bezier(0.2, 1.4, 0.4, 1); }
 .sutra-grade.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
 .sutra-grade.ok { background: #8a6e58; }
-.sutra-sheet footer { display: flex; align-items: center; gap: 8px; }
-.sutra-sheet footer small { flex: 1; font-size: 12px; color: #8a6e58; }
+.sutra-sheet footer { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.sutra-sheet footer small { flex: 1; font-size: 12px; line-height: 1.5; color: #8a6e58; transition: color 0.2s ease; }
+.sutra-sheet footer small.warn { color: #b3261e; }
+/* 键盘 / 毛笔 */
+.sutra-mode { display: flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgba(120, 60, 30, 0.08); }
+.sutra-mode button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 999px; font: inherit; font-size: 12.5px; color: #8a6e58; background: none; cursor: pointer; }
+.sutra-mode button.on { background: #fffaf0; color: #3a2a1e; box-shadow: 0 1px 3px rgba(80, 40, 10, 0.16); }
+.sutra-sheet[data-mode='type'] { width: min(96vw, 1000px); height: min(92vh, 720px); max-height: none; padding: 16px 22px 14px; }
+.sutra-sheet[data-mode='type'] .sutra-line, .sutra-sheet[data-mode='type'] .sutra-cell, .sutra-sheet[data-mode='type'] .brush-only { display: none; }
+.sutra-sheet[data-mode='brush'] .sutra-page { display: none; }
+/* 经纸：朱丝栏，右起一列经题，十三字一列；没写的字是淡灰的范字，写上的是墨字 */
+.sutra-page { position: relative; flex: 1; min-height: 0; cursor: text; }
+.sutra-grid {
+  position: absolute; --s: 40px;
+  background-color: #f6eedb; background-image: linear-gradient(90deg, rgba(176, 58, 40, 0.38) 1px, transparent 1px), var(--paper);
+  background-size: var(--s) 100%, 256px 256px; background-position: 0 0, 0 0;
+  box-shadow: 0 0 0 1.5px rgba(176, 58, 40, 0.72), 0 0 0 6px #f6eedb, 0 0 0 7px rgba(176, 58, 40, 0.42);
+}
+.sutra-grid.flip { animation: sutra-flip 0.55s ease; }
+@keyframes sutra-flip { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+.sutra-grid .c {
+  position: absolute; width: var(--s); height: var(--s); display: grid; place-items: center; padding-top: calc(var(--s) * 0.04);
+  font-family: SansaSutra, 'Kaiti TC', 'Kaiti SC', STKaiti, KaiTi, serif; font-size: calc(var(--s) * 0.76); line-height: 1; color: rgba(110, 92, 72, 0.26);
+  user-select: none; -webkit-user-select: none; background-size: 100% 100%;
+}
+.sutra-grid .c.title { color: #1d1612; font-size: calc(var(--s) * 0.8); }
+.sutra-grid .c.now { color: rgba(110, 72, 52, 0.55); background-color: rgba(214, 120, 70, 0.1); box-shadow: inset 0 0 0 1px rgba(179, 38, 30, 0.35); animation: sutra-now 2.4s ease-in-out infinite; }
+@keyframes sutra-now { 50% { background-color: rgba(214, 120, 70, 0.04); } }
+.sutra-grid .c.done { color: #17110d; opacity: var(--op, 1); transform: var(--tf, none); text-shadow: 0 0 1px rgba(26, 18, 12, 0.45); }
+.sutra-grid .c.done.img { color: transparent; text-shadow: none; }
+.sutra-grid .c.fresh { animation: sutra-ink 0.6s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+@keyframes sutra-ink {
+  0% { opacity: 0; filter: blur(5px); transform: var(--tf, none) scale(1.22); }
+  55% { opacity: 1; filter: blur(0.6px); }
+  100% { opacity: var(--op, 1); filter: blur(0); transform: var(--tf, none); }
+}
+.sutra-grid .c.nope { animation: sutra-nope 0.38s ease; background-color: rgba(179, 38, 30, 0.12); }
+@keyframes sutra-nope { 20% { transform: translateX(-3px); } 45% { transform: translateX(3px); } 70% { transform: translateX(-2px); } }
+/* 输入框盖在当前格上：看不见，但输入法的候选框会跟着它出现在格子旁边 */
+.sutra-input { position: absolute; z-index: 1; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; color: transparent; caret-color: transparent; font-size: 16px; line-height: 1; opacity: 0.01; }
+.sutra-compose { position: absolute; z-index: 2; padding: 3px 8px; border-radius: 6px; background: rgba(40, 30, 22, 0.86); color: #fff3e0; font-size: 14px; letter-spacing: 0.5px; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2); }
+.sutra-compose.bad { background: #b3261e; text-decoration: line-through; text-decoration-color: rgba(255, 243, 224, 0.7); }
+.sutra-compose[hidden] { display: none; }
+@media (max-width: 560px) {
+  .sutra-sheet[data-mode='type'] { padding: 12px 12px 12px; height: min(88vh, 720px); }
+  /* 窄屏：第一行经题和两个按钮，第二行进度和键盘 / 毛笔 */
+  .sutra-sheet header { flex-wrap: wrap; row-gap: 6px; column-gap: 4px; }
+  .sutra-sheet header h2 { order: 1; flex: 1 1 calc(100% - 110px); font-size: 17px; letter-spacing: 2px; }
+  .sutra-sheet header .icon-btn { order: 2; }
+  .sutra-sheet header span { order: 4; flex: 1 1 auto; font-size: 11.5px; }
+  .sutra-mode { order: 5; }
+  .sutra-mode button { padding: 0 9px; gap: 4px; }
+}
 .pill-btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid rgba(120, 60, 30, 0.3); background: transparent; color: #5a3a24; font: inherit; font-size: 13.5px; letter-spacing: 1px; cursor: pointer; }
 .pill-btn.primary { background: #b3261e; border-color: #b3261e; color: #fff3e0; }
 .pill-btn:disabled { opacity: 0.4; cursor: default; }
@@ -434,3 +485,77 @@ canvas.main.point { cursor: pointer; }
 @media (max-width: 560px) { .reader-body { font-size: 17px; line-height: 1.9; padding: 6px 20px 10px; } }
 /* 面板要压在左上角的称号条、寺务条上面 */
 .panel { z-index: 5; }
+
+/* —— 山寺咖啡：点单的纸菜单、做咖啡、手边的杯子条、分享卡 —— */
+.cafe { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 10, 8, 0.4); }
+.cafe[hidden] { display: none; }
+.cafe-sheet {
+  width: min(92vw, 430px); max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 18px 16px 16px 20px; border-radius: 8px; color: #33261b;
+  background: #f5eedd linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(0, 0, 0, 0.03)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+.cafe-sheet header { display: flex; align-items: flex-start; gap: 8px; }
+.cafe-title { flex: 1; }
+.cafe-title h2 { margin: 0; font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 21px; font-weight: 600; letter-spacing: 4px; }
+.cafe-title small { display: block; margin-top: 3px; font-size: 12px; color: #8a6e58; }
+.cafe-sheet header .icon-btn { color: #6a5340; }
+.cafe-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cafe-list[hidden] { display: none; }
+.cafe-list button { width: 100%; display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 12px; background: rgba(120, 80, 40, 0.06); text-align: left; font: inherit; color: inherit; cursor: pointer; transition: background 0.15s ease; }
+.cafe-list button:hover { background: rgba(120, 80, 40, 0.11); }
+.cafe-item { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cafe-item b { font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 16px; font-weight: 600; letter-spacing: 1px; }
+.cafe-item small { font-size: 12px; line-height: 1.45; color: #8a6e58; }
+.cafe-list em { flex: none; font-style: normal; font-size: 12px; padding: 5px 11px; border-radius: 999px; background: #b3261e; color: #fff3e0; letter-spacing: 1px; }
+.cafe-foot { margin: 2px 2px 0; font-size: 11.5px; line-height: 1.6; color: #8a6e58; }
+.cafe-brew { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 8px; }
+.cafe-brew[hidden] { display: none; }
+.cafe-brew p { margin: 0; font-size: 14px; letter-spacing: 1px; }
+.cafe-brew-cup { position: relative; height: 128px; display: flex; align-items: flex-end; }
+.cafe-bar { width: 70%; height: 4px; border-radius: 2px; background: rgba(120, 60, 30, 0.14); overflow: hidden; }
+.cafe-bar i { display: block; height: 100%; width: 0; background: #b3261e; }
+.steam { position: absolute; left: 50%; bottom: 96px; width: 8px; height: 30px; margin-left: -12px; border-radius: 50%; border-left: 2.5px solid rgba(140, 115, 90, 0.4); opacity: 0; animation: cafe-steam 2.2s ease-in-out infinite; }
+.steam.b { margin-left: 2px; animation-delay: 0.7s; }
+.steam.c { margin-left: -4px; animation-delay: 1.4s; }
+@keyframes cafe-steam { 0% { opacity: 0; transform: translateY(8px) scaleY(0.7); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-22px) scaleY(1.1) skewX(-12deg); } }
+
+/* 小杯子图标：杯盖、杯身、杯套；冷萃是透明杯，看得到咖啡还剩多少 */
+.cup-icon { position: relative; display: inline-block; flex: none; width: 22px; height: 28px; --level: 1; }
+.cup-icon .lid { position: absolute; left: -2px; right: -2px; top: 0; height: 5px; border-radius: 3px 3px 1px 1px; background: var(--lid); box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18), 0 0 0 0.5px rgba(0, 0, 0, 0.12); z-index: 1; }
+.cup-icon .body { position: absolute; left: 0; right: 0; top: 4px; bottom: 0; background: linear-gradient(90deg, #e6e1d6, #fbf9f4 40%, #dcd5c8); clip-path: polygon(0 0, 100% 0, 84% 100%, 16% 100%); overflow: hidden; }
+.cup-icon .sleeve { position: absolute; left: 0; right: 0; top: 30%; height: 40%; background: var(--sleeve); }
+.cup-icon .liquid { position: absolute; left: 0; right: 0; bottom: 0; height: calc(88% * var(--level)); background: var(--liquid); display: none; }
+.cup-icon.cold .body { background: rgba(225, 240, 246, 0.55); box-shadow: inset 0 0 0 1px rgba(160, 185, 195, 0.6); }
+.cup-icon.cold .sleeve { display: none; }
+.cup-icon.cold .liquid { display: block; }
+.cup-icon.big { width: 76px; height: 96px; }
+.cup-icon.big .lid { height: 13px; left: -6px; right: -6px; border-radius: 7px 7px 3px 3px; }
+.cup-icon.big .body { top: 11px; }
+/* 做咖啡时：杯身看得见里面，咖啡一点点满上来，最后套上杯套 */
+.cup-icon.filling .body { background: rgba(240, 236, 228, 0.7); box-shadow: inset 0 0 0 1px rgba(150, 130, 110, 0.4); }
+.cup-icon.filling .liquid { display: block; animation: cup-fill var(--ms, 6s) cubic-bezier(0.4, 0, 0.6, 1) forwards; }
+.cup-icon.filling .sleeve { opacity: 0; animation: cup-sleeve 0.5s ease forwards; animation-delay: calc(var(--ms, 6s) - 0.6s); }
+.cup-icon.filling .lid { opacity: 0; transform: translateY(-8px); animation: cup-lid 0.4s ease forwards; animation-delay: calc(var(--ms, 6s) - 0.4s); }
+@keyframes cup-fill { from { height: 0; } to { height: 88%; } }
+@keyframes cup-sleeve { to { opacity: 1; } }
+@keyframes cup-lid { to { opacity: 1; transform: none; } }
+
+.cup-chip { position: absolute; right: 16px; bottom: calc(14px + var(--safe-b)); z-index: 2; height: 52px; padding: 0 6px 0 14px; gap: 10px; }
+.cup-chip[hidden] { display: none; }
+.cup-chip-icon { display: flex; align-items: center; }
+.cup-chip-text { display: flex; flex-direction: column; gap: 1px; min-width: 64px; }
+.cup-chip-text b { font-size: 13px; font-weight: 600; letter-spacing: 0.5px; white-space: nowrap; }
+.cup-chip-text small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.cup-chip-btn { height: 34px; padding: 0 14px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.cup-chip-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.cup-chip-btn.empty { background: rgba(234, 213, 138, 0.28); }
+.cup-chip-btn:disabled { opacity: 0.5; cursor: default; }
+.cup-chip .icon-btn[hidden] { display: none; }
+@media (max-width: 560px) { .cup-chip { right: 10px; bottom: calc(140px + var(--safe-b)); height: 48px; } }
+
+.cafe-share { display: flex; flex-direction: column; align-items: center; gap: 10px; width: min(92vw, 400px); }
+.cafe-share img { width: 100%; max-height: calc(92vh - 110px); object-fit: contain; border-radius: 6px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); background: #f2e9d6; }
+.cafe-share-row { width: 100%; }
+.cafe-share input { width: 100%; height: 38px; padding: 0 14px; border-radius: 999px; border: 0; background: rgba(250, 245, 235, 0.95); color: #33261b; font: inherit; font-size: 14px; }
+.cafe-share-btns { display: flex; gap: 10px; }
+.cafe-share .pill-btn { display: inline-flex; align-items: center; text-decoration: none; background: rgba(244, 236, 218, 0.92); }
+.cafe-share .pill-btn.primary { background: #b3261e; }
