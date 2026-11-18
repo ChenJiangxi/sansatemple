@@ -246,6 +246,8 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 
 `tools/promo/` 用游戏本身的场景逐帧录一支竖屏宣传片（1080×1920，30 帧/秒，约 2 分钟）：分镜、诗句字幕和配乐时间轴都写在 `timeline.mjs` 里。配乐全部用代码合成（`audio.mjs`：拨弦、梵钟、木鱼、磬、风声），不调用任何视频或音乐生成模型。
 
+**下一支宣传片的配乐不要太舒缓**（用户 2026-11-18 的要求）：要有鼓点和节拍、往前推的旋律，寺院音色（木鱼、钟）只当节奏点用，不铺慢长音；镜头仍然不要切太快。
+
 ```bash
 mkdir -p /tmp/sansa-promo/fonts   # 字体：Google Fonts 的 Zhi Mang Xing、Ma Shan Zheng（OFL）
 curl -L -o /tmp/sansa-promo/fonts/ZhiMangXing-Regular.ttf https://raw.githubusercontent.com/google/fonts/main/ofl/zhimangxing/ZhiMangXing-Regular.ttf
