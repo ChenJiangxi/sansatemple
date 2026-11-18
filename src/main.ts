@@ -24,15 +24,17 @@ import { Reader } from './reader';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
 import { buildCafe } from './world/cafe';
+import { buildGarden } from './world/garden';
+import { WishUI, wishStore, assignHooks, newWishId, type Wish } from './wishes';
 import { CafeUI, parseCup, cupCode, SIPS, BREW_MS, DRINK_BY_ID, type DrinkId } from './coffee';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
-import { Monk, type Action, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
+import { Monk, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
 import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND } from './layout';
+import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY } from './layout';
 import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
@@ -165,6 +167,7 @@ async function start() {
   const life = buildLife(scene);
   const shrines = buildShrines(scene);
   const cafe = buildCafe(scene);
+  const garden = buildGarden(scene, { lite: isTouch });
   const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
   const residents = buildResidents(scene, {
     bell: buildings.bell,
@@ -177,6 +180,7 @@ async function start() {
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
   cafe.setLanternLevel(env.lanternLevel);
+  garden.setLanternLevel(env.lanternLevel);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
   // 金身佛像用室内环境光反射
   hall.group.traverse((o) => {
@@ -191,7 +195,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, pond.water];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, ...garden.interactives, pond.water];
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
   interactives.push(...sideHalls.interactives, ...sideHalls.doorHits, ...sideHalls.deskHits);
@@ -287,6 +291,7 @@ async function start() {
       env.setMode(m as TimeMode);
       props.setLanternLevel(env.lanternLevel);
       cafe.setLanternLevel(env.lanternLevel);
+      garden.setLanternLevel(env.lanternLevel);
     },
     getTime: () => env.mode,
     setShadows: (on) => {
@@ -361,7 +366,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' | 'cafe' | 'bin' | 'gift' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' | 'cafe' | 'bin' | 'gift' | 'wish' | 'hang' | 'persimmon' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -764,6 +769,9 @@ async function start() {
     else if (intent === 'cafe') ui.setStatus('statusCafe');
     else if (intent === 'bin') ui.setStatus('statusBin');
     else if (intent === 'gift') ui.setStatus('statusGift');
+    else if (intent === 'wish') ui.setStatus('statusWish');
+    else if (intent === 'hang') ui.setStatus('statusHang');
+    else if (intent === 'persimmon') ui.setStatus('statusPersimmon');
     else ui.setStatus(null);
     ui.setDockActive(overlay ?? (me.action === 'bow' || intent === 'bow' ? 'bow' : null));
   }
@@ -1208,6 +1216,140 @@ async function start() {
     audio.bell(0.3);
     ui.toast(t('giftGot', { n: nm, x: drinkName(c.d) }), 5200);
   });
+
+  // —— 祈福灯廊：每天挂一盏灯、写一句心愿；点别人的灯看心愿，可以随喜、举报 ——
+  const wishMap = new Map<string, Wish>();
+  for (const w of wishStore.mine()) wishMap.set(w.id, { ...w, mine: true });
+  let hookWish = new Map<number, Wish>();
+  const wishOrder = (list: Wish[]) => {
+    const hidden = new Set(wishStore.hidden());
+    return list.filter((w) => !hidden.has(w.id)).sort((a, b) => (b.mine ? 1 : 0) - (a.mine ? 1 : 0) || b.at - a.at);
+  };
+  function refreshLanterns() {
+    hookWish = assignHooks(wishOrder([...wishMap.values()]), garden.hooks.length).used;
+    garden.setLanterns([...hookWish].map(([hook, w]) => ({ hook, color: w.c, tag: w.mine ? 2 : 1 })));
+  }
+  refreshLanterns();
+  const mineIds = () => new Set(wishStore.mine().map((w) => w.id));
+  net.on('wishes', (list) => {
+    const mine = mineIds();
+    for (const [id, w] of wishMap) if (!w.mine) wishMap.delete(id);
+    for (const m of list) wishMap.set(m.id, { ...m, mine: mine.has(m.id) });
+    refreshLanterns();
+    // 服务器上没有的自己的心愿（服务器重启过）补交回去
+    const missing = wishStore.mine().filter((w) => !list.some((m) => m.id === w.id));
+    if (missing.length) net.wishBack(missing.slice(0, 3).map(({ id, text, c, k, at }) => ({ id, text, c, k, at })));
+  });
+  net.on('wishAdd', (m) => {
+    const old = wishMap.get(m.id);
+    wishMap.set(m.id, { ...m, mine: mineIds().has(m.id), likes: Math.max(m.likes, old?.likes ?? 0) });
+    refreshLanterns();
+  });
+  net.on('wishDel', (id) => {
+    const w = wishMap.get(id);
+    if (!w || w.mine) return;
+    wishMap.delete(id);
+    refreshLanterns();
+  });
+  net.on('wishLike', (id, n) => {
+    const w = wishMap.get(id);
+    if (w) w.likes = n;
+  });
+  const wishUI = new WishUI(ui.root, {
+    hang: (k, c, text) => hangWish(k, c, text),
+    like: (w) => {
+      net.like(w.id);
+      wishStore.like(w.id);
+      gain(1);
+      ui.toast(t('wishLikedToast'));
+    },
+    report: (w) => {
+      net.report(w.id);
+      wishStore.hide(w.id);
+      refreshLanterns();
+      ui.toast(t('wishReported'));
+    },
+  });
+  function requestWish() {
+    if (wishUI.open) return;
+    if (wishStore.hungToday(localToday())) {
+      ui.toast(t('wishDoneToday'));
+      return;
+    }
+    freeHands();
+    intent = 'wish';
+    refreshStatus();
+    walkTo(WISH_DESK_STAND.x, WISH_DESK_STAND.z, () => {
+      intent = null;
+      player.yaw = -Math.PI / 2;
+      refreshStatus();
+      wishUI.compose();
+    });
+  }
+  // 挂灯：先算好挂在哪个位置，走到那盏灯底下，举起来，灯自己升上去
+  function hangWish(k: number, c: number, text: string) {
+    wishUI.close();
+    const w: Wish = { id: newWishId(), by: name, text, c, k, at: Date.now(), likes: 0, mine: true };
+    const hook = assignHooks(wishOrder([w, ...wishMap.values()]), garden.hooks.length).hookOf.get(w.id) ?? 0;
+    const hk = garden.hooks[hook];
+    freeHands();
+    intent = 'hang';
+    refreshStatus();
+    walkTo(hk.stand.x, hk.stand.z, () => {
+      intent = null;
+      player.yaw = Math.atan2(hk.x - player.x, hk.z - player.z);
+      me.onHangRelease = () => {
+        wishMap.set(w.id, w);
+        wishStore.addMine(w);
+        wishStore.markToday(localToday());
+        refreshLanterns();
+        garden.rise(hook, new THREE.Vector3(player.x + Math.sin(player.yaw) * 0.25, player.y + 1.45, player.z + Math.cos(player.yaw) * 0.25));
+        net.wish({ id: w.id, text: w.text, c: w.c, k: w.k });
+        audio.bell(0.25);
+      };
+      me.setAction('hang', true);
+      refreshStatus();
+      setTimeout(() => {
+        if (me.action === 'hang') me.setAction(baseAction());
+        ui.toast(t('wishHung'), 4200);
+        gain(5);
+      }, HANG_DURATION * 1000 + 100);
+    });
+  }
+  function readLantern(hook: number) {
+    const w = hookWish.get(hook);
+    if (!w) {
+      ui.toast(t('wishTemple'), 4200);
+      return;
+    }
+    wishUI.show(w, wishStore.liked().includes(w.id));
+  }
+  // 柿饼架：合十，得一句「柿柿如意」；每天第一次有功德
+  function requestPersimmon() {
+    freeHands();
+    intent = 'persimmon';
+    refreshStatus();
+    walkTo(PERSIMMON_STAND.x, PERSIMMON_STAND.z, () => {
+      intent = null;
+      player.yaw = Math.PI;
+      refreshStatus();
+      me.setAction('hapjang', true);
+      setTimeout(() => {
+        if (me.action === 'hapjang') me.setAction(baseAction());
+      }, HAPJANG_DURATION * 1000);
+      const lines = t('persimmonLines').split('|');
+      const line = lines[Math.floor(Math.random() * lines.length)];
+      setTimeout(() => {
+        floatText(ui.root, innerWidth / 2, innerHeight * 0.36, line, 'levelup');
+        ui.toast(t('persimmonSub'), 4200);
+        audio.bell(0.2);
+        if (localStorage.getItem('sansa.persimmon') !== localToday()) {
+          localStorage.setItem('sansa.persimmon', localToday());
+          gain(3);
+        }
+      }, 900);
+    });
+  }
 
   // —— 今日功课：每秒看一次做满了没有；做满的给功德、放提示；左上角的进度条跟着刷新 ——
   let dailySig = '';
@@ -1842,6 +1984,22 @@ async function start() {
     if (act === 'bell') setTimeout(() => strikeInstrument('bell'), 1200);
     // 调试：&do=cafe 走去点咖啡；&coffee=饮品&sips=n 直接端上一杯；&sipnow / &offernow 过几秒做一次喝、递的动作
     if (act === 'cafe') setTimeout(requestCafe, 1200);
+    // 调试：&do=wish 走去祈福台写心愿，&do=persimmon 去柿饼架；&wishdemo=n 在灯廊里挂 n 盏假心愿（只在本机）
+    if (act === 'wish') setTimeout(requestWish, 1200);
+    if (act === 'persimmon') setTimeout(requestPersimmon, 1200);
+    const demo = Number(sp.get('wishdemo'));
+    // 等服务器发来心愿列表之后再挂（不然会被那份列表冲掉）
+    if (demo > 0) setTimeout(() => {
+      const texts = ['愿一战上岸', '愿家人安康', '愿钱包鼓鼓', '愿遇见对的人', '愿岁岁平安', '愿诸事顺遂', '愿少加班多睡觉', '愿毕业顺利'];
+      for (let i = 0; i < demo; i++) {
+        const id = newWishId();
+        wishMap.set(id, { id, by: `访客${i + 1}`, text: texts[i % texts.length], c: i % 6, k: i % 7, at: Date.now() - i * 60000, likes: i % 4 });
+      }
+      refreshLanterns();
+    }, 2500);
+    if (sp.has('readwish')) setTimeout(() => readLantern([...hookWish.keys()][0] ?? 0), 4000);
+    const dbgHang = sp.get('hang');
+    if (dbgHang) setTimeout(() => hangWish(0, Number(sp.get('hangc') ?? 0), dbgHang), 1200);
     const dbgCup = sp.get('coffee');
     if (dbgCup && DRINK_BY_ID.has(dbgCup as DrinkId)) setTimeout(() => setCup({ d: dbgCup as DrinkId, sips: Number(sp.get('sips') ?? SIPS) }), 1000);
     if (sp.has('sipnow')) setTimeout(() => me.sip(), Number(sp.get('sipnow')) || 3000);
@@ -2011,6 +2169,11 @@ async function start() {
     // 在殿内时镜头不要穿过天花板
     const inside = pos.x > -HALL.wallX && pos.x < HALL.wallX && pos.z > HALL.backZ && pos.z < HALL.colZFront;
     if (inside) pos.y = Math.min(pos.y, HALL.baseH + HALL.colH + 0.6);
+    // 祈福灯廊里：镜头压在灯笼底下，不钻进灯里
+    {
+      const A = WISH_ALLEY;
+      if (pos.x > A.xW - 0.8 && pos.x < A.xE + 0.8 && pos.z > A.zs[0] - 0.8 && pos.z < A.zs[A.zs.length - 1] + 0.8) pos.y = Math.min(pos.y, 2.25);
+    }
     pos.y = Math.max(pos.y, heightAt(pos.x, pos.z) + 0.3);
     if (cine.on && !cineValid()) endIncenseScene();
     if (cineMode === 'intro') {
@@ -2082,11 +2245,23 @@ async function start() {
   }
 
   function handleClick(cx: number, cy: number) {
-    if (overlay || fortuneOpen || intro || tower || sutra.open || reader.open || cafeUI.open) return;
+    if (overlay || fortuneOpen || intro || tower || sutra.open || reader.open || cafeUI.open || wishUI.open) return;
     const p = pick(cx, cy);
     if (!p) return;
     if (p.interact?.type === 'cafe') {
       requestCafe();
+      return;
+    }
+    if (p.interact?.type === 'wishDesk') {
+      requestWish();
+      return;
+    }
+    if (p.interact?.type === 'wishLantern') {
+      readLantern(p.interact.id as number);
+      return;
+    }
+    if (p.interact?.type === 'persimmon') {
+      requestPersimmon();
       return;
     }
     if (p.interact?.type === 'cafeBin' && cup) {
@@ -2224,6 +2399,9 @@ async function start() {
     else if (it?.type === 'pond') label = t('tipPond');
     else if (it?.type === 'npc') label = cup && cup.sips === SIPS ? t('tipGift', { n: t(ROLE_KEY[it.role as Role]) }) : t(ROLE_KEY[it.role as Role]);
     else if (it?.type === 'cafe') label = t('tipCafe');
+    else if (it?.type === 'wishDesk') label = t('tipWish');
+    else if (it?.type === 'wishLantern') label = hookWish.has(it.id) ? t('tipWishRead') : t('tipWish');
+    else if (it?.type === 'persimmon') label = t('tipPersimmon');
     else if (it?.type === 'cafeBin') label = t('tipBin');
     else if (it?.type === 'player') label = cup && cup.sips === SIPS ? t('tipGift', { n: remotes.get(it.id)?.name ?? '' }) : null;
     else if (it?.type === 'hallDoor' || it?.type === 'hallStatue') label = t(HALL_NAME[it.hall as number]);
@@ -2265,7 +2443,7 @@ async function start() {
       return;
     }
     // 抄经、读经、点咖啡的面板开着时，空格、数字键不去触发礼佛、念珠这些
-    if (sutra.open || reader.open || cafeUI.open) return;
+    if (sutra.open || reader.open || cafeUI.open || wishUI.open) return;
     if (overlay === 'rosary' && ['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(e.code)) {
       e.preventDefault();
       if (!e.repeat || true) rosaryView.nudge(e.code === 'ArrowDown' || e.code === 'ArrowRight' ? 1 : -1);
@@ -2326,7 +2504,7 @@ async function start() {
   function updatePlayer(dt: number) {
     let dx = 0;
     let dz = 0;
-    if (keys.size && !overlay && !tower && !sutra.open && !reader.open && !cafeUI.open) {
+    if (keys.size && !overlay && !tower && !sutra.open && !reader.open && !cafeUI.open && !wishUI.open) {
       const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
       const s = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
       if (f || s) {
@@ -2543,6 +2721,7 @@ async function start() {
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     cafe.update(dt, elapsed);
+    garden.update(dt, elapsed);
     buildings.bell.update(dt);
     buildings.drum.update(dt);
     env.follow(player.x, player.z);
@@ -2559,6 +2738,7 @@ async function start() {
       env.update();
       props.setLanternLevel(env.lanternLevel);
       cafe.setLanternLevel(env.lanternLevel);
+      garden.setLanternLevel(env.lanternLevel);
     }
     env.tick(dt, camera.position);
     post.render(dt / slowmo);

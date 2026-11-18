@@ -10,8 +10,8 @@ export type Action =
   | 'idle' | 'walk' | 'bow' | 'hapjang' | 'sit' | 'bench' | 'moktak' | 'rosary' | 'incense' | 'lantern' | 'feed' | 'fortune' | 'sweep'
   // 常住僧人的日常：坐着读经、喝茶、讲经；站着浇水、擦拭、奉茶；跪着打水；提壶走、端茶走、拨念珠走
   | 'read' | 'tea' | 'teach' | 'water' | 'wipe' | 'serve' | 'fill' | 'canwalk' | 'tray' | 'beadwalk'
-  // 咖啡师父在柜台后做咖啡
-  | 'brew';
+  // 咖啡师父在柜台后做咖啡；祈福灯廊里举灯挂上去
+  | 'brew' | 'hang';
 // 会移动脚步的动作（走路的几种样子）
 export const GAITS: Action[] = ['walk', 'canwalk', 'tray', 'beadwalk'];
 
@@ -172,6 +172,18 @@ export const SIP_DURATION = 2.5;
 export const OFFER_DURATION = 1.9;
 const QA = new THREE.Quaternion();
 const QB = new THREE.Quaternion();
+
+// 挂祈福灯：双手捧灯举过头顶，灯自己往上升到绳上，再放下手合十
+export const HANG_DURATION = 3.2;
+export const HANG_RELEASE_TIME = 1.0;
+const HANG_KEYS: Keys = [
+  [0, mk({}), [0, 0.1, 0.25]],
+  [0.5, mk({ ...INC_HOLD, wrist: -0.5 }), [0, 0.15, 0.28]],
+  [1.0, mk({ armLp: -2.55, armRp: -2.55, armLy: -0.35, armRy: 0.35, wrist: -0.2, head: -0.35 }), [0, 0.6, 0.12]],
+  [1.9, mk({ armLp: -2.55, armRp: -2.55, armLy: -0.35, armRy: 0.35, wrist: -0.2, head: -0.4 }), [0, 0.6, 0.12]],
+  [2.5, mk({ ...HAP, head: -0.2 }), [0, 0.6, 0.12]],
+  [HANG_DURATION, mk({}), [0, 0.6, 0.12]],
+];
 
 // 喝茶（坐着）：茶杯在膝上 → 举到嘴边抿一口 → 放回，8 秒一轮
 const TEA_CYCLE = 8;
@@ -616,6 +628,7 @@ export class Monk {
   private planted = false;
   onIncensePlant?: () => void;
   onLanternRelease?: () => void;
+  onHangRelease?: () => void; // 挂祈福灯：灯离手往上升的那一刻
   onFeedToss?: () => void;
   onFortuneDrop?: () => void;
   private lanternProp: THREE.Group;
@@ -1189,6 +1202,15 @@ export class Monk {
         // 俯身用布画圈擦
         const w = t * 4.2;
         target = mk({ armRp: -1.15 + Math.sin(w) * 0.12, armRy: 0.45 + Math.cos(w) * 0.25, wrist: -0.2, armLp: -1.05, armLy: -0.35, torso: 0.35, head: 0.3, bob: Math.abs(Math.sin(w)) * 0.004 });
+        rate = 12;
+        break;
+      }
+      case 'hang': {
+        target = keyed(HANG_KEYS, Math.min(t, HANG_DURATION)).pose;
+        if (!this.planted && t >= HANG_RELEASE_TIME) {
+          this.planted = true;
+          this.onHangRelease?.();
+        }
         rate = 12;
         break;
       }

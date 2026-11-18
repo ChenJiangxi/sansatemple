@@ -16,7 +16,7 @@ const ROOMS = 5;
 const CAPACITY = 50;
 const TICK_MS = 120;
 const INCENSE_MS = 3 * 60 * 1000;
-const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune']);
+const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune', 'hang']);
 const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
 const LANTERN_MAX = 30;
 const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d)$/;
@@ -200,6 +200,37 @@ function broadcast(room, obj, except) {
   for (const p of room.players.values()) if (p.ws !== except && p.ws.readyState === 1) p.ws.send(data);
 }
 
+// —— 祈福灯廊的心愿：所有房间共用一份，挂七天，最多留 WISH_MAX 条（存在内存里；
+// 服务器重启后，作者再进来时客户端会把自己七天内挂的补交回来）——
+const WISH_MAX = 240;
+const WISH_MS = 7 * 24 * 3600 * 1000;
+const WISH_ID = /^[0-9a-f]{8}$/;
+let wishes = [];
+function cleanWish(s) {
+  if (typeof s !== 'string') return '';
+  const t = [...s.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]/g, '').replace(/\s+/g, ' ').trim()].slice(0, 24).join('');
+  // 不收网址和像电话号码的长串数字
+  if (/(https?:|www\.|\.(com|cn|net|org|io|cc)\b)/i.test(t) || /\d{7,}/.test(t.replace(/[\s-]/g, ''))) return '';
+  return t;
+}
+const wishOut = (w) => ({ id: w.id, by: w.by, text: w.text, c: w.c, k: w.k, at: w.at, likes: w.likes });
+function broadcastAll(obj) {
+  for (const room of rooms.values()) broadcast(room, obj);
+}
+function addWish(me, m, at) {
+  const id = String(m.id || '');
+  const text = cleanWish(m.text);
+  if (!WISH_ID.test(id) || !text || wishes.some((w) => w.id === id)) return false;
+  const w = { id, by: me.name, owner: me.id, text, c: Math.floor(num(m.c, 0, 5)), k: Math.floor(num(m.k, 0, 6)), at, likes: 0, likedBy: new Set(), reports: new Set() };
+  wishes.push(w);
+  if (wishes.length > WISH_MAX) {
+    const old = wishes.shift();
+    broadcastAll({ t: 'wishDel', id: old.id });
+  }
+  broadcastAll({ t: 'wishAdd', w: wishOut(w) });
+  return true;
+}
+
 function lanternMsg(room) {
   return { t: 'lanterns', now: Date.now(), list: room.lanterns.map((l) => ({ id: l.id, by: l.by, owner: l.owner, seed: l.seed, start: l.start, until: l.until })) };
 }
@@ -249,6 +280,7 @@ wss.on('connection', (ws) => {
       send(ws, { t: 'welcome', id: me.id, room: id, capacity: CAPACITY });
       send(ws, incenseMsg(room));
       send(ws, lanternMsg(room));
+      send(ws, { t: 'wishes', list: wishes.map(wishOut) });
       return;
     }
     if (!me) return;
@@ -299,6 +331,43 @@ wss.on('connection', (ws) => {
         broadcast(room, lanternMsg(room));
         break;
       }
+      case 'wish': {
+        // 挂一盏：每个连接十分钟内只能挂一盏
+        const t = Date.now();
+        if (t - (me.wishAt || 0) < 10 * 60 * 1000) return;
+        if (addWish(me, msg, t)) me.wishAt = t;
+        break;
+      }
+      case 'wishBack': {
+        // 重连后补交自己七天内挂过的（每个连接一次、最多三条）
+        if (me.wishBack || !Array.isArray(msg.list)) return;
+        me.wishBack = true;
+        const t = Date.now();
+        for (const m of msg.list.slice(0, 3)) {
+          const at = Number(m && m.at);
+          if (Number.isFinite(at) && at <= t && t - at < WISH_MS) addWish(me, m, at);
+        }
+        break;
+      }
+      case 'like': {
+        const w = wishes.find((x) => x.id === msg.id);
+        if (!w || w.owner === me.id || w.likedBy.has(me.id)) return;
+        w.likedBy.add(me.id);
+        w.likes++;
+        broadcastAll({ t: 'wishLike', id: w.id, n: w.likes });
+        break;
+      }
+      case 'report': {
+        // 两个人举报就撤下
+        const w = wishes.find((x) => x.id === msg.id);
+        if (!w || w.owner === me.id) return;
+        w.reports.add(me.id);
+        if (w.reports.size >= 2) {
+          wishes = wishes.filter((x) => x !== w);
+          broadcastAll({ t: 'wishDel', id: w.id });
+        }
+        break;
+      }
       case 'give': {
         // 请人喝咖啡：自己手上是满杯、对方空着手、两人离得够近，杯子就换到对方手上
         const to = room.players.get(String(msg.to || ''));
@@ -335,6 +404,11 @@ wss.on('connection', (ws) => {
 // 定时广播房间快照
 setInterval(() => {
   const now = Date.now();
+  wishes = wishes.filter((w) => {
+    if (now - w.at < WISH_MS) return true;
+    broadcastAll({ t: 'wishDel', id: w.id });
+    return false;
+  });
   for (const room of rooms.values()) {
     const before = room.incense.length;
     room.incense = room.incense.filter((i) => i.until > now);

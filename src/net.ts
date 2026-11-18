@@ -51,7 +51,20 @@ type Events = {
   lanterns: (list: LanternMsg[], serverNow: number) => void;
   gift: (from: string, name: string, cup: string) => void; // 别人请我喝了一杯
   gave: (to: string, ok: boolean, why: string) => void; // 我请别人喝：成没成
+  wishes: (list: WishMsg[]) => void; // 祈福灯廊：进房间时的全部心愿
+  wishAdd: (w: WishMsg) => void;
+  wishDel: (id: string) => void;
+  wishLike: (id: string, n: number) => void;
 };
+export interface WishMsg {
+  id: string;
+  by: string;
+  text: string;
+  c: number;
+  k: number;
+  at: number;
+  likes: number;
+}
 
 export class Net {
   id = '';
@@ -162,6 +175,18 @@ export class Net {
         case 'gave':
           this.emit('gave', String(msg.to), !!msg.ok, String(msg.why ?? ''));
           break;
+        case 'wishes':
+          if (Array.isArray(msg.list)) this.emit('wishes', msg.list);
+          break;
+        case 'wishAdd':
+          if (msg.w) this.emit('wishAdd', msg.w);
+          break;
+        case 'wishDel':
+          this.emit('wishDel', String(msg.id));
+          break;
+        case 'wishLike':
+          this.emit('wishLike', String(msg.id), Number(msg.n) || 0);
+          break;
       }
     };
     ws.onclose = () => {
@@ -232,6 +257,19 @@ export class Net {
 
   give(to: string) {
     this.send({ t: 'give', to });
+  }
+
+  wish(w: { id: string; text: string; c: number; k: number }) {
+    this.send({ t: 'wish', ...w });
+  }
+  wishBack(list: { id: string; text: string; c: number; k: number; at: number }[]) {
+    this.send({ t: 'wishBack', list });
+  }
+  like(id: string) {
+    this.send({ t: 'like', id });
+  }
+  report(id: string) {
+    this.send({ t: 'report', id });
   }
 
   offerIncense(place: IncensePlace) {

@@ -559,3 +559,46 @@ canvas.main.point { cursor: pointer; }
 .cafe-share-btns { display: flex; gap: 10px; }
 .cafe-share .pill-btn { display: inline-flex; align-items: center; text-decoration: none; background: rgba(244, 236, 218, 0.92); }
 .cafe-share .pill-btn.primary { background: #b3261e; }
+
+/* —— 祈福灯廊：写心愿的纸、读心愿的签 —— */
+.wish { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 10, 8, 0.4); }
+.wish[hidden], .wish-sheet[hidden], .wish-card[hidden] { display: none; }
+.wish-sheet {
+  --lamp: #c8402e;
+  width: min(92vw, 420px); display: flex; flex-direction: column; gap: 12px; padding: 18px 16px 16px 20px; border-radius: 8px; color: #33261b;
+  background: #f5eedd linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(0, 0, 0, 0.03)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+.wish-sheet header { display: flex; align-items: flex-start; gap: 8px; }
+.wish-title { flex: 1; }
+.wish-title h2 { margin: 0; font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 21px; font-weight: 600; letter-spacing: 4px; }
+.wish-title small { display: block; margin-top: 3px; font-size: 12px; color: #8a6e58; }
+.wish-sheet header .icon-btn, .wish-card > .icon-btn { color: #6a5340; }
+.wish-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.wish-kinds button { height: 30px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(120, 60, 30, 0.22); background: transparent; color: #5a3a24; font: inherit; font-size: 13px; cursor: pointer; }
+.wish-kinds button.on { background: #b3261e; border-color: #b3261e; color: #fff3e0; }
+.wish-colors { display: flex; gap: 10px; padding: 2px 0; }
+.wish-colors button { width: 28px; height: 28px; border-radius: 50%; border: 0; background: var(--c); box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.12); cursor: pointer; transition: transform 0.15s ease; }
+.wish-colors button.on { transform: scale(1.12); box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.14), 0 0 0 2px #f5eedd, 0 0 0 4px var(--c); }
+.wish-input { position: relative; }
+.wish-input textarea { width: 100%; box-sizing: border-box; resize: none; padding: 12px 14px 22px; border-radius: 10px; border: 1px solid rgba(120, 60, 30, 0.2); border-left: 5px solid var(--lamp); background: #fffaf0; color: #2a1f17; font-family: 'Kaiti SC', 'STKaiti', 'KaiTi', serif; font-size: 19px; line-height: 1.5; outline: none; }
+.wish-input textarea:focus { border-color: rgba(179, 38, 30, 0.45); border-left-color: var(--lamp); }
+.wish-input small { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: #a08a74; font-variant-numeric: tabular-nums; }
+.wish-sheet footer { display: flex; align-items: center; gap: 12px; }
+.wish-sheet footer small { flex: 1; font-size: 11.5px; line-height: 1.55; color: #8a6e58; }
+/* 读心愿：一张竖着的纸签，顶上一盏小灯 */
+.wish-card {
+  --lamp: #c8402e;
+  position: relative; width: min(78vw, 290px); min-height: 330px; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 64px 26px 22px; border-radius: 6px; color: #2a1f17; text-align: center;
+  background: #fbf6ea linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(0, 0, 0, 0.03)); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 0 0 6px #fbf6ea, inset 0 0 0 7px rgba(176, 58, 40, 0.35);
+}
+.wish-card > .icon-btn { position: absolute; top: 8px; right: 8px; }
+.wish-lamp { position: absolute; top: -26px; left: 50%; width: 54px; height: 66px; margin-left: -27px; border-radius: 48%; background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.5), transparent 55%), var(--lamp); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), inset 0 -8px 0 rgba(0, 0, 0, 0.12); }
+.wish-lamp::before, .wish-lamp::after { content: ''; position: absolute; left: 50%; width: 22px; height: 6px; margin-left: -11px; border-radius: 2px; background: #3b2a1f; }
+.wish-lamp::before { top: -3px; }
+.wish-lamp::after { bottom: -3px; }
+.wish-card-kind { font-size: 12px; letter-spacing: 2px; padding: 3px 12px; border-radius: 999px; background: rgba(179, 38, 30, 0.1); color: #a8261c; }
+.wish-card p { flex: 1; display: flex; align-items: center; margin: 0; font-family: 'Kaiti SC', 'STKaiti', 'KaiTi', serif; font-size: 24px; line-height: 1.55; letter-spacing: 1px; word-break: break-all; }
+.wish-card small { font-size: 12px; color: #8a6e58; }
+.wish-card-acts { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wish-report { border: 0; background: none; color: #a08a74; font: inherit; font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.wish-report[hidden] { display: none; }

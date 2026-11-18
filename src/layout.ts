@@ -134,7 +134,7 @@ export function cafeWorld(lx: number, lz: number) {
 }
 export const CAFE_STAND = cafeWorld(0, 1.8); // 点单、取咖啡时站的位置（柜台前）
 export const CAFE_BIN = cafeWorld(2.95, 1.35); // 空杯回收桶
-export const CAFE_BIN_STAND = cafeWorld(2.95, 2.05);
+export const CAFE_BIN_STAND = cafeWorld(2.95, 2.2);
 export const CAFE_FLAG = cafeWorld(-2.75, 1.45); // 布幌子的竹竿
 export const CAFE_MENU = cafeWorld(1.75, 2.35); // 立在柜台前的菜单木牌
 // 两张小圆桌，各配两只圆凳（坐下面朝桌子；从靠咖啡摊的一侧走过去坐）
@@ -152,6 +152,20 @@ export const CAFE_SEATS: Seat[] = CAFE_TABLES.flatMap((tb, ti) =>
   }))
 );
 
+// 祈福灯廊：西院（和东边的咖啡摊对称），南北向一条廊，两排高木杆，杆间拉绳挂灯笼。
+// 玩家在灯廊东边的祈福台写心愿，挂到绳上的空位。杆的 x 和一排排的 z：
+export const WISH_ALLEY = { xE: -24.8, xW: -29.2, zs: [43, 46.6, 50.2, 53.8, 57.4, 61], h: 4.4 };
+export const WISH_DESK = { x: -22.7, z: 52, yaw: Math.PI / 2 }; // 祈福台，台面朝东（朝参道）
+export const WISH_DESK_STAND = { x: -21.6, z: 52 };
+// 柿饼架：灯廊北头，东西向一排木架挂着一串串柿子
+export const PERSIMMON = { x: -27, z: 39.4, len: 3.2 };
+export const PERSIMMON_STAND = { x: -27, z: 40.7 };
+// 从参道分出去的两条石板小路：东边到咖啡摊，西边到灯廊（只是铺地，不挡路）
+export const STONE_PATHS: { x: number; z: number }[][] = [
+  [{ x: 3.4, z: 43.2 }, { x: 9, z: 42.9 }, { x: 13.5, z: 42.7 }, { x: 19, z: 43.4 }, { x: 25, z: 45 }, { x: 31.2, z: 46.9 }],
+  [{ x: -3.4, z: 43.2 }, { x: -9, z: 42.9 }, { x: -13.5, z: 42.6 }, { x: -18.6, z: 43.6 }, { x: -21, z: 47.5 }, { x: -21.4, z: 51.6 }],
+];
+
 export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS, ...CAFE_SEATS];
 export const SEAT_BY_ID = new Map(ALL_SEATS.map((s) => [s.id, s]));
 
@@ -168,7 +182,7 @@ export const PINES: [number, number, number][] = [
 ];
 
 export const ROCKS: [number, number, number][] = [
-  [-13, 44, 0.8], [13.5, 45, 0.7], [-30, 42, 0.8], [38.6, 40.5, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
+  [-13, 44, 0.8], [13.5, 45, 0.7], [-38.4, 44.5, 0.8], [38.6, 40.5, 0.75], [-14.5, 12, 0.6], [14.5, 11, 0.6],
 ];
 
 
@@ -214,9 +228,13 @@ circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
 {
   const a = cafeWorld(-CAFE.hw, -CAFE.hd), b = cafeWorld(CAFE.hw, 1.2);
   boxes.push({ x0: Math.min(a.x, b.x), x1: Math.max(a.x, b.x), z0: Math.min(a.z, b.z), z1: Math.max(a.z, b.z) });
-  circles.push({ ...CAFE_FLAG, r: 0.16 }, { ...CAFE_MENU, r: 0.42 }, { ...CAFE_BIN, r: 0.36 });
+  circles.push({ ...CAFE_FLAG, r: 0.16 }, { ...CAFE_MENU, r: 0.42 }, { ...CAFE_BIN, r: 0.44 });
   for (const tb of CAFE_TABLES) circles.push({ ...tb, r: 0.48 });
 }
+// 灯廊的木杆、祈福台、柿饼架
+for (const x of [WISH_ALLEY.xE, WISH_ALLEY.xW]) for (const z of WISH_ALLEY.zs) circles.push({ x, z, r: 0.16 });
+boxes.push({ x0: WISH_DESK.x - 0.36, x1: WISH_DESK.x + 0.36, z0: WISH_DESK.z - 0.8, z1: WISH_DESK.z + 0.8 });
+boxes.push({ x0: PERSIMMON.x - PERSIMMON.len / 2 - 0.15, x1: PERSIMMON.x + PERSIMMON.len / 2 + 0.15, z0: PERSIMMON.z - 0.45, z1: PERSIMMON.z + 0.45 });
 // 石拱桥两头的抱鼓石
 for (const x of [BRIDGE.x0 + 0.1, BRIDGE.x1 - 0.1]) for (const z of [BRIDGE.z0 - 0.42, BRIDGE.z1 + 0.42]) circles.push({ x, z, r: 0.38 });
 // 山门两扇大门往院里开着（门扇近似成一个窄长方形）

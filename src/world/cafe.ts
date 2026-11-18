@@ -96,23 +96,31 @@ function flagTexture() {
   });
 }
 
-// 回收桶上插的小木牌
-function binSignTexture() {
-  return canvasTex(256, 128, (g) => {
-    g.fillStyle = '#d9c7a3';
-    g.fillRect(0, 0, 256, 128);
-    g.strokeStyle = 'rgba(80,50,30,0.5)';
-    g.lineWidth = 4;
-    g.strokeRect(6, 6, 244, 116);
-    g.fillStyle = '#3a2618';
+
+// 大纸杯回收桶的杯套：牛皮纸色，一圈印「山寺咖啡」和「空杯回收 · 惜福」，中间一方小红印
+function binSleeveTexture() {
+  const tx = canvasTex(1024, 256, (g) => {
+    g.fillStyle = '#b98a5a';
+    g.fillRect(0, 0, 1024, 256);
+    for (let k = 0; k < 1600; k++) {
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.05)' : 'rgba(255,255,255,0.12)';
+      g.fillRect(Math.random() * 1024, Math.random() * 256, 1 + Math.random() * 5, 1);
+    }
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.font = `600 46px ${KAI}`;
-    g.fillText('空杯回收', 128, 52);
-    g.fillStyle = '#9e2a1e';
-    g.font = `28px ${KAI}`;
-    g.fillText('惜 福', 128, 98);
+    for (const x of [256, 768]) {
+      g.fillStyle = '#2e2018';
+      g.font = `700 78px ${KAI}`;
+      g.fillText('山寺咖啡', x, 100);
+      g.font = `40px ${KAI}`;
+      g.fillStyle = '#3d2a1f';
+      g.fillText('空杯回收 · 惜福', x, 180);
+    }
+    g.fillStyle = '#a8261c';
+    for (const x of [512, 0, 1024]) g.fillRect(x - 22, 106, 44, 44);
   });
+  tx.wrapS = THREE.RepeatWrapping;
+  return tx;
 }
 
 // 热气：一团柔和的白
@@ -390,30 +398,24 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   flagG.add(pole, bar, cloth);
   scene.add(flagG);
 
-  // 空杯回收桶：箍着两道铜箍的木桶，桶盖开一道口，插一块小木牌
+  // 空杯回收桶：一只半人高的大纸杯（院子里一眼就认得出），牛皮纸杯套上印「山寺咖啡 · 空杯回收」，黑杯盖上开一道投杯口
   const bw = cafeWorld(2.95, 1.35);
   const bin = new THREE.Group();
   bin.position.set(bw.x, 0, bw.z);
   bin.rotation.y = CAFE.yaw;
-  const staves = mesh(new THREE.CylinderGeometry(0.26, 0.22, 0.66, 18), std({ color: '#7a5636', roughness: 0.8 }));
-  staves.position.y = 0.33;
-  for (const y of [0.14, 0.52]) {
-    const hoop = mesh(new THREE.TorusGeometry(y < 0.3 ? 0.23 : 0.252, 0.012, 6, 24), brass);
-    hoop.rotation.x = Math.PI / 2;
-    hoop.position.y = y;
-    bin.add(hoop);
-  }
-  const lid = mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.035, 18), darkWood);
-  lid.position.y = 0.675;
-  const slot = mesh(new THREE.BoxGeometry(0.2, 0.01, 0.08), black);
-  slot.position.y = 0.695;
-  const sign = mesh(new THREE.BoxGeometry(0.4, 0.2, 0.02), [darkWood, darkWood, darkWood, darkWood, std({ map: binSignTexture(), roughness: 0.85 }), darkWood]);
-  sign.position.set(0, 0.98, 0.12);
-  const stick = mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.4, 6), darkWood);
-  stick.position.set(0, 0.8, 0.11);
-  bin.add(staves, lid, slot, stick, sign);
-  const binHit = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1.15, 10), hitMat);
-  binHit.position.y = 0.57;
+  const cupH = 1.0;
+  const cupBody = mesh(new THREE.CylinderGeometry(0.4, 0.3, cupH, 28), std({ color: '#f3f0e8', roughness: 0.7 }));
+  cupBody.position.y = cupH / 2;
+  const sleeve = mesh(new THREE.CylinderGeometry(0.39, 0.345, 0.4, 28, 1, true), std({ map: binSleeveTexture(), roughness: 0.85 }));
+  sleeve.position.y = cupH * 0.52;
+  sleeve.scale.setScalar(1.012);
+  const cupLid = mesh(lathe([[0, 0.07], [0.3, 0.07], [0.34, 0.04], [0.42, 0.03], [0.42, 0], [0.4, -0.02]], 28), std({ color: '#2b2521', roughness: 0.4 }));
+  cupLid.position.y = cupH;
+  const slot = mesh(new THREE.BoxGeometry(0.22, 0.02, 0.09), std({ color: '#0e0c0b' }));
+  slot.position.set(0, cupH + 0.072, 0.12);
+  bin.add(cupBody, sleeve, cupLid, slot);
+  const binHit = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 1.2, 10), hitMat);
+  binHit.position.y = 0.6;
   binHit.userData.interact = { type: 'cafeBin' };
   bin.add(binHit);
   interactives.push(binHit);
