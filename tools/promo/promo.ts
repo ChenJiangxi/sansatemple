@@ -21,11 +21,15 @@ import { PostFX } from '../../src/world/post';
 import { buildCloudSea } from '../../src/world/clouds';
 import { leafPile } from '../../src/play';
 import { ROBES, BEADS } from '../../src/looks';
+import { buildCafe } from '../../src/world/cafe';
+import { buildGarden } from '../../src/world/garden';
+import { CAFE, CAFE_SEATS, cafeWorld } from '../../src/layout';
 // @ts-ignore 共用的分镜表
 import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS } from './timeline.mjs';
 
 type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string; feature?: [string, string] };
-const FEATURES = CUT === 'features';
+// 功能介绍和山寺上新：用游戏同一套后期，底部一块功能字幕
+const FEATURES = CUT === 'features' || CUT === 'news';
 type V3 = [number, number, number];
 
 const statusEl = document.getElementById('status')!;
@@ -85,6 +89,9 @@ async function main() {
   const hall = buildHall(scene);
   const nature = buildNature(scene, { renderer, heightAt: terrain.heightAt, size: terrain.size, lite: false });
   buildShrines(scene);
+  // 东院的咖啡馆、西院的祈福灯廊和柿饼架、石板小路和草花
+  const cafe = buildCafe(scene);
+  const garden = buildGarden(scene, { lite: false });
   // 功能介绍：和游戏同一套后期（环境光遮蔽、泛光、调色）；别的版本照旧直接渲染
   const post = FEATURES ? new PostFX(renderer, scene, camera, false) : null;
   if (post) {
@@ -234,6 +241,8 @@ async function main() {
     if (me.root.visible) me.update(dt);
     for (const m of extras) if (m.root.visible) m.update(dt);
     sideHalls.update(dt, elapsed);
+    cafe.update(dt, elapsed);
+    garden.update(dt, elapsed);
     clouds.update(dt, elapsed, showClouds, camera.position.y);
     pile?.update(dt);
   }
@@ -455,8 +464,9 @@ async function main() {
   }
   // 线上实拍截图：慢慢推近到要讲的地方
   const uiImg: Record<string, HTMLImageElement> = {};
-  for (const id of ['uiRooms', 'uiBow', 'uiPractice', 'uiReader']) {
-    if (!SHOTS.some((x: Shot) => x.id === id)) continue;
+  for (const id of ['uiRooms', 'uiBow', 'uiPractice', 'uiReader', 'uiCafeMenu', 'uiWishWrite']) {
+    const need = SHOTS.some((x: Shot) => x.id === id) || (CUT === 'news' && (id === 'uiCafeMenu' || id === 'uiWishWrite'));
+    if (!need) continue;
     const im = new Image();
     im.src = `/__promo/ui/${id}.jpg`;
     await im.decode();
@@ -467,6 +477,8 @@ async function main() {
     uiBow: { cx: 0.36, cy: 0.62, z0: 1.0, z1: 1.3 },
     uiPractice: { cx: 0.6, cy: 0.4, z0: 1.02, z1: 1.14 },
     uiReader: { cx: 0.5, cy: 0.34, z0: 1.02, z1: 1.14 },
+    uiCafeMenu: { cx: 0.5, cy: 0.5, z0: 1.0, z1: 1.12 },
+    uiWishWrite: { cx: 0.5, cy: 0.5, z0: 1.0, z1: 1.12 },
   };
   function uiCard(id: string, u: number) {
     const im = uiImg[id], f = UI_FOCUS[id];
@@ -475,6 +487,254 @@ async function main() {
     const sx = Math.min(im.width - sw, Math.max(0, f.cx * im.width - sw / 2));
     const sy = Math.min(im.height - sh, Math.max(0, f.cy * im.height - sh / 2));
     ctx.drawImage(im, sx, sy, sw, sh, 0, 0, W, H);
+  }
+
+  // —— 山寺上新用到的：咖啡馆的人、灯廊的心愿、画面上的小字 ——
+  // 吧台后两位咖啡师父，跑堂小沙弥；露台上坐着四位喝咖啡的客人（手里的杯子各不一样）
+  const baristas = [new Monk('resident'), new Monk('resident')];
+  const waiter = new Monk('novice');
+  for (const m of [...baristas, waiter]) {
+    scene.add(m.root);
+    m.root.visible = false;
+    extras.push(m);
+  }
+  let sipAt: [number, Monk][] = [];
+  let offered = false, gave = false, hangDone = false;
+  function cafeCrowd() {
+    const bz = CAFE.bar - 0.6 - 0.55;
+    [[-2.1, bz], [0.4, bz]].forEach(([lx, lz], i) => {
+      const m = baristas[i], p = cafeWorld(lx, lz);
+      m.root.visible = true;
+      place(m, p.x, p.z, CAFE.yaw);
+      m.setAction('brew');
+      m.actionTime = i * 1.7;
+    });
+    const seats = [0, 3, 4, 7].map((i) => CAFE_SEATS[i]);
+    const cups: [string, number][] = [['latte', 2], ['coldbrew', 3], ['osmanthus', 2], ['americano', 1]];
+    const ms = cast(seats.length);
+    ms.forEach((m, i) => {
+      const s = seats[i];
+      place(m, s.x, s.z, s.yaw);
+      m.seatKind = 'bench';
+      m.setAction('bench');
+      m.setCup(cups[i][0] as never, cups[i][1]);
+    });
+    offered = gave = false;
+    return ms;
+  }
+  // 灯廊：一百五十盏里七成挂着访客的心愿签
+  const demoLanterns = garden.hooks.map((_, i) => ({ hook: i, color: (i * 5) % 6, tag: ((i * 7) % 10 < 7 ? 1 : 0) as 0 | 1 | 2 }));
+  garden.setLanterns(demoLanterns);
+  const HANG_HOOK = 27;
+
+  function draw3d(frame: number) {
+    camera.aspect = W / H;
+    camera.updateProjectionMatrix();
+    render3d();
+    ctx.drawImage(renderer.domElement, 0, 0);
+    grade(frame);
+  }
+  const sv = new THREE.Vector3();
+  function worldToScreen(x: number, y: number, z: number) {
+    sv.set(x, y, z).project(camera);
+    return { x: (sv.x * 0.5 + 0.5) * W, y: (-sv.y * 0.5 + 0.5) * H };
+  }
+  // 一行带底色的小字（「做好了」之类）
+  function pill(text: string, x: number, y: number, a: number, color = '#fbf3e2') {
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = '50px "Songti SC"';
+    const w = ctx.measureText(text).width + 70;
+    roundRect(ctx, x - w / 2, y - 44, w, 88, 44);
+    ctx.fillStyle = 'rgba(20,15,10,0.62)';
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y + 2);
+    ctx.restore();
+  }
+  // 僧人头上的说话气泡
+  function bubble(text: string, p: { x: number; y: number }, a: number) {
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = '46px "Songti SC"';
+    const w = ctx.measureText(text).width + 60, h = 84, x = p.x - w / 2, y = p.y - h - 30 - (1 - a) * 16;
+    roundRect(ctx, x, y, w, h, 22);
+    ctx.fillStyle = 'rgba(251,246,234,0.95)';
+    ctx.shadowColor = 'rgba(0,0,0,0.3)';
+    ctx.shadowBlur = 18;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.moveTo(p.x - 16, y + h - 1);
+    ctx.lineTo(p.x, y + h + 20);
+    ctx.lineTo(p.x + 16, y + h - 1);
+    ctx.fill();
+    ctx.fillStyle = '#2a2320';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, p.x, y + h / 2 + 2);
+    ctx.restore();
+  }
+  // 往上飘的金字（功德、柿柿如意）
+  function floatWord(text: string, x: number, y: number, a: number, size: number, font = 'MSZ', color = '#f3d38a') {
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.font = `${size}px ${font}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.65)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+  // 灯下的心愿签：一条竖着的米色纸签，楷字，底下署名
+  function wishTag(text: string, by: string, x: number, y: number, a: number) {
+    ctx.save();
+    ctx.globalAlpha = a;
+    const chars = [...text], cw = 96, ch = chars.length * 62 + 150;
+    ctx.translate(x, y + (1 - a) * 20);
+    ctx.shadowColor = 'rgba(0,0,0,0.35)';
+    ctx.shadowBlur = 20;
+    roundRect(ctx, -cw / 2, 0, cw, ch, 6);
+    ctx.fillStyle = '#f8f1e2';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = 'rgba(176,58,40,0.55)';
+    ctx.lineWidth = 2;
+    roundRect(ctx, -cw / 2 + 7, 7, cw - 14, ch - 14, 4);
+    ctx.stroke();
+    ctx.fillStyle = '#1d1612';
+    ctx.font = '54px "Kaiti SC", "STKaiti", serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    chars.forEach((c, i) => ctx.fillText(c, 0, 50 + i * 62));
+    ctx.fillStyle = '#8a6e58';
+    ctx.font = '24px "Songti SC"';
+    ctx.fillText(by, 0, ch - 52);
+    ctx.fillStyle = '#b3261e';
+    ctx.fillRect(-12, ch - 30, 24, 16);
+    ctx.restore();
+  }
+  // 键盘抄经的经纸：右起一列经题，十三字一列；每一拍上屏一组字，一个接一个落墨；上屏前半拍在当前格旁边显出拼音
+  const SUTRA_TEXT = '觀自在菩薩行深般若波羅蜜多時照見五蘊皆空度一切苦厄舍利子色不異空空不異色色即是空空即是色受想行識亦復如是舍利子是諸法空相不生不滅不垢不淨不增不減是故空中無色無受想行識無眼耳鼻舌身意無色聲香味觸法';
+  const GROUPS: [string, string][] = [
+    ['觀自在', 'guanzizai'], ['菩薩', 'pusa'], ['行深', 'xingshen'], ['般若', 'bore'], ['波羅蜜多', 'boluomiduo'],
+    ['時', 'shi'], ['照見', 'zhaojian'], ['五蘊', 'wuyun'], ['皆空', 'jiekong'], ['度一切苦厄', "duyiqieku'e"],
+  ];
+  const sheetCols = 8, sheetRows = 13, cell = 90;
+  const sheet = (() => {
+    const c = document.createElement('canvas');
+    c.width = (sheetCols + 1) * cell + 60;
+    c.height = sheetRows * cell + 60;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#f5eddb';
+    g.fillRect(0, 0, c.width, c.height);
+    for (let i = 0; i < 2200; i++) {
+      g.fillStyle = Math.random() < 0.55 ? 'rgba(255,255,255,0.25)' : 'rgba(120,92,52,0.07)';
+      g.fillRect(Math.random() * c.width, Math.random() * c.height, 1 + Math.random() * 8, 1);
+    }
+    g.strokeStyle = 'rgba(176,58,40,0.75)';
+    g.lineWidth = 3;
+    g.strokeRect(30, 30, c.width - 60, c.height - 60);
+    g.strokeStyle = 'rgba(176,58,40,0.4)';
+    g.lineWidth = 1.5;
+    for (let k = 1; k <= sheetCols; k++) {
+      g.beginPath();
+      g.moveTo(30 + k * cell, 30);
+      g.lineTo(30 + k * cell, c.height - 30);
+      g.stroke();
+    }
+    return c;
+  })();
+  function handOf(i: number) {
+    const r = (k: number) => {
+      const x = Math.sin(i * 127.1 + k * 311.7) * 43758.5453;
+      return x - Math.floor(x);
+    };
+    return { rot: (r(1) - 0.5) * 0.09, sc: 0.93 + r(2) * 0.1, op: 0.84 + r(5) * 0.16 };
+  }
+  function drawSutraSheet(t: number) {
+    const sw = sheet.width, sh = sheet.height, sx = (W - sw) / 2, sy = 190;
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 40;
+    ctx.drawImage(sheet, sx, sy);
+    ctx.restore();
+    const colX = (k: number) => sx + 30 + (sheetCols - k + 0.5) * cell; // 第 k 列（右起，0 是经题）
+    const rowY = (r: number) => sy + 30 + (r + 0.5) * cell;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${cell * 0.8}px SansaSutra`;
+    ctx.fillStyle = '#1d1612';
+    [...'般若波羅蜜多心經'].forEach((c, r) => ctx.fillText(c, colX(0), rowY(r) + 4));
+    // 每一组上屏的时刻和这一组从第几个字开始
+    const ink = EVENTS.nInk as number[];
+    let start = 0;
+    const startOf: number[] = [];
+    for (const [s] of GROUPS) {
+      startOf.push(start);
+      start += [...s].length;
+    }
+    const written = (i: number) => {
+      const gi = startOf.findIndex((s0, k) => i >= s0 && i < s0 + [...GROUPS[k][0]].length);
+      if (gi < 0 || gi >= ink.length) return -1;
+      return ink[gi] + (i - startOf[gi]) * 0.09;
+    };
+    const chars = [...SUTRA_TEXT].slice(0, sheetCols * sheetRows);
+    let cur = 0;
+    chars.forEach((c, i) => {
+      const x = colX(1 + Math.floor(i / sheetRows)), y = rowY(i % sheetRows) + 4;
+      const tw = written(i);
+      if (tw >= 0 && t >= tw) {
+        cur = i + 1;
+        const k = clamp01((t - tw) / 0.35), h = handOf(i);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(h.rot);
+        const s = h.sc * (1 + 0.22 * (1 - k));
+        ctx.scale(s, s);
+        ctx.globalAlpha = h.op * k;
+        if (k < 1) ctx.filter = `blur(${((1 - k) * 4).toFixed(1)}px)`;
+        ctx.shadowColor = 'rgba(26,18,12,0.5)';
+        ctx.shadowBlur = 2;
+        ctx.fillText(c, 0, 0);
+        ctx.restore();
+      } else {
+        ctx.fillStyle = 'rgba(110,92,72,0.26)';
+        ctx.fillText(c, x, y);
+        ctx.fillStyle = '#1d1612';
+      }
+    });
+    // 当前格：淡淡的朱红框；旁边是正在拼的拼音（上屏前半拍出现）
+    const cx = colX(1 + Math.floor(cur / sheetRows)), cy = rowY(cur % sheetRows);
+    ctx.strokeStyle = 'rgba(179,38,30,0.55)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cx - cell / 2 + 4, cy - cell / 2 + 4, cell - 8, cell - 8);
+    const next = ink.findIndex((b) => b > t);
+    if (next >= 0 && next < GROUPS.length && ink[next] - t < 0.45) {
+      const py = GROUPS[next][1];
+      const typed = py.slice(0, Math.ceil(py.length * clamp01(1 - (ink[next] - t) / 0.45)));
+      ctx.font = '40px "SF Mono", Menlo, monospace';
+      const bw = ctx.measureText(typed).width + 40;
+      roundRect(ctx, cx - cell / 2 - bw - 14, cy - 30, bw, 60, 12);
+      ctx.fillStyle = 'rgba(40,30,22,0.88)';
+      ctx.fill();
+      ctx.fillStyle = '#fff3e0';
+      ctx.textAlign = 'left';
+      ctx.fillText(typed, cx - cell / 2 - bw + 6, cy + 2);
+    }
+    // 每组落墨后飘一个「功德 +1」
+    ink.forEach((b, k) => {
+      const d = t - b;
+      if (d < 0 || d > 1.0 || k >= GROUPS.length) return;
+      const i0 = startOf[k];
+      floatWord(`功德 +${[...GROUPS[k][0]].length}`, colX(1 + Math.floor(i0 / sheetRows)) - 120, rowY(i0 % sheetRows) - d * 50, clamp01(1 - d), 34, '"Songti SC"');
+    });
+    ctx.restore();
   }
 
   // —— 各个镜头 ——
@@ -1421,6 +1681,346 @@ async function main() {
         camera.lookAt(camera.position.x + fx * 10, eyeY - Math.tan(0.17) * 10, camera.position.z + fz * 10);
       },
     },
+    // ———— 山寺上新 ————
+    nTitle: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        ctx.save();
+        portrait();
+        inkTitle(ctx, '山寺', 540, 640, 340, t - 0.05, 0.7);
+        // 「上新」一枚红签，落在第二拍
+        const a = clamp01((t - 1.2) / 0.18);
+        if (a > 0) {
+          ctx.save();
+          ctx.globalAlpha = a;
+          ctx.translate(540, 900);
+          ctx.scale(1.3 - 0.3 * ease(a), 1.3 - 0.3 * ease(a));
+          roundRect(ctx, -170, -70, 340, 140, 18);
+          ctx.fillStyle = '#b3261e';
+          ctx.fill();
+          ctx.fillStyle = '#fbefd8';
+          ctx.font = '104px ZMX';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('上 新', 0, 6);
+          ctx.restore();
+        }
+        // 三样新东西，一拍一个
+        ['山寺咖啡', '祈福灯廊', '键盘抄经'].forEach((s, i) => {
+          const b = clamp01((t - 2.4 - i * 0.6) / 0.3);
+          if (b <= 0) return;
+          ctx.globalAlpha = b;
+          ctx.textAlign = 'center';
+          ctx.font = '74px MSZ';
+          ctx.fillStyle = '#2a2320';
+          ctx.fillText(s, 540, 1130 + i * 110 + (1 - b) * 20);
+        });
+        ctx.restore();
+      },
+    },
+    nCafe: {
+      // 外景：从石板小路那头慢慢推近东院的茶寮，露台上有人坐着喝咖啡，小沙弥端着托盘走过
+      setup() {
+        cafeCrowd();
+        waiter.root.visible = true;
+        waiter.setAction('tray');
+        waiter.speed = 1;
+        env.follow(32, 48);
+      },
+      update(t, u) {
+        setFov(52);
+        const a = cafeWorld(0.3, 2.9), b = cafeWorld(2.6, 4.5);
+        const k = clamp01((t - 0.6) / 4.2);
+        place(waiter, a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, Math.atan2(b.x - a.x, b.z - a.z));
+        if (k >= 1 && waiter.action !== 'serve') waiter.setAction('serve');
+        // 从西南方的高处斜着推近：厅、露台、油纸伞、大纸杯一起入画
+        camPath([
+          { p: [23.6, 5.4, 61.8], l: [35.2, 1.6, 48.8] },
+          { p: [26.4, 3.6, 58.2], l: [35.0, 1.7, 48.8] },
+        ])(u, camera);
+      },
+    },
+    nTerrace: {
+      // 露台：贴着平台前沿横移，油纸伞下的人端着杯子，一口一口喝
+      setup() {
+        const guests = cafeCrowd();
+        sipAt = [[2.4, guests[0]], [4.2, guests[2]], [6.0, guests[1]]];
+        env.follow(32, 48);
+      },
+      update(t, u) {
+        setFov(62);
+        for (const [tt, m] of sipAt) if (t >= tt && t - 1 / FPS < tt) m.sip();
+        // 贴着平台前沿低机位横移，抬一点头，伞面在画面上半
+        camPath([
+          { p: [29.2, 1.15, 42.8], l: [32.4, 1.6, 45.6] },
+          { p: [29.2, 1.15, 54.2], l: [32.4, 1.6, 51.4] },
+        ])(u, camera);
+      },
+    },
+    nBar: {
+      // 吧台：顺着吧台横移，两位咖啡师父在忙，机器冒热气；第七拍咖啡做好，端到小和尚手上
+      setup() {
+        cafeCrowd();
+        cafe.setBrewing(true);
+        me.root.visible = true;
+        const s = cafeWorld(0, -0.15);
+        place(me, s.x, s.z, Math.PI / 2);
+        me.setAction('idle');
+        env.follow(38, 48);
+      },
+      update(t, u) {
+        setFov(56);
+        if (t >= EVENTS.nCupReady && !me.cupKind) {
+          me.setCup('latte', 3);
+          cafe.setBrewing(false);
+        }
+        camPath([
+          { p: [36.3, 1.55, 45.3], l: [40.5, 1.45, 47.0] },
+          { p: [36.3, 1.55, 51.7], l: [40.5, 1.45, 50.0] },
+        ])(u, camera);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        const a = clamp01((t - EVENTS.nCupReady) / 0.25) * clamp01((curDur - 0.4 - t) / 0.4);
+        if (a > 0) pill(`般若拿铁 · 做好了`, W / 2, H * 0.3, a, '#f3d38a');
+        featureCaption(curShot!, t);
+      },
+    },
+    nMenu: {
+      setup() {},
+      update() {},
+      draw(t) {
+        uiCard('uiCafeMenu', t / curDur);
+        featureCaption(curShot!, t);
+      },
+    },
+    nTreat: {
+      // 请人喝：小和尚端着满杯从厅里走出来，走到跑堂小沙弥跟前，双手递过去；小沙弥接过、合十道谢
+      setup() {
+        cafeCrowd();
+        me.root.visible = true;
+        me.setCup('latte', 3);
+        me.setAction('walk');
+        me.speed = 1.1;
+        waiter.root.visible = true;
+        waiter.setAction('idle');
+        const w = cafeWorld(0.4, 4.25);
+        place(waiter, w.x, w.z, Math.PI / 2);
+        env.follow(33, 49);
+      },
+      update(t, u) {
+        setFov(50);
+        const x0 = 36.7, x1 = 35.25, z = cafeWorld(0.4, 0).z;
+        const k = clamp01(t / 2.6);
+        place(me, x0 + (x1 - x0) * k, z, -Math.PI / 2);
+        if (k >= 1 && me.action === 'walk') me.setAction('idle');
+        if (t >= EVENTS.nGive - 1.0 && !gave && me.action === 'idle' && !offered) {
+          offered = true;
+          me.offer();
+        }
+        if (t >= EVENTS.nGive && !gave) {
+          gave = true;
+          me.setCup(null);
+          waiter.setCup('latte', 3);
+        }
+        if (t >= EVENTS.nGive + 0.4 && waiter.action === 'idle') waiter.setAction('hapjang');
+        camPath([
+          { p: [30.5, 1.4, 46.3], l: [35.4, 1.05, 48.9] },
+          { p: [30.9, 1.35, 47.1], l: [35.3, 1.05, 48.9] },
+        ])(u, camera);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        const ba = clamp01((t - EVENTS.nGive - 0.4) / 0.25);
+        if (ba > 0) bubble('多谢施主，阿弥陀佛', worldToScreen(waiter.root.position.x, waiter.root.position.y + 1.75, waiter.root.position.z), ba);
+        const ma = clamp01((t - EVENTS.nGive - 0.1) / 0.2) * clamp01((EVENTS.nGive + 2.2 - t) / 0.4);
+        if (ma > 0) {
+          const p = worldToScreen(me.root.position.x, me.root.position.y + 1.7, me.root.position.z);
+          floatWord('功德 +8', p.x, p.y - (t - EVENTS.nGive) * 40, ma, 48);
+        }
+        featureCaption(curShot!, t);
+      },
+    },
+    nAlley: {
+      // 灯廊：跟在小和尚身后、比灯低一点，抬头是一片灯和心愿纸签；前面两位在灯下合十
+      setup() {
+        cast(2);
+        me.root.visible = true;
+        me.setAction('walk');
+        me.speed = 1;
+        const ms = cast(2);
+        place(ms[0], -26.2, 50.6, Math.PI * 0.95);
+        place(ms[1], -28.0, 48.4, Math.PI * 1.1);
+        ms.forEach((m, i) => {
+          m.setAction('hapjang');
+          m.actionTime = i * 0.8;
+        });
+        env.follow(-27, 52);
+      },
+      update(t) {
+        setFov(64);
+        const z = 59.6 - t * 0.78;
+        place(me, -27.0, z, Math.PI);
+        for (const m of pool) if (m.root.visible && m.actionTime > 2.3) m.setAction('hapjang', true);
+        camera.position.set(-26.55, 1.42, z + 3.3);
+        camera.lookAt(-27.15, 2.75, z - 6.5);
+      },
+    },
+    nHang: {
+      // 挂一盏灯：站在灯底下双手举起，灯从手里慢慢升到绳上；挂好后旁边显出这盏的心愿签
+      setup() {
+        cast(0);
+        me.root.visible = true;
+        const hk = garden.hooks[HANG_HOOK];
+        place(me, hk.stand.x, hk.stand.z, Math.atan2(hk.x - hk.stand.x, hk.z - hk.stand.z));
+        me.setAction('idle');
+        // 这一盏先空着，挂上去以后才出现
+        garden.setLanterns(demoLanterns.filter((v) => v.hook !== HANG_HOOK));
+        hangDone = false;
+        env.follow(-27, 54);
+      },
+      update(t, u) {
+        setFov(56);
+        if (t >= EVENTS.nHangStart && me.action === 'idle' && !hangDone) me.setAction('hang', true);
+        if (t >= EVENTS.nHangRelease && !hangDone) {
+          hangDone = true;
+          garden.setLanterns([...demoLanterns.filter((v) => v.hook !== HANG_HOOK), { hook: HANG_HOOK, color: 0, tag: 2 }]);
+          const a = me.root.rotation.y;
+          garden.rise(HANG_HOOK, new THREE.Vector3(me.root.position.x + Math.sin(a) * 0.25, me.root.position.y + 1.45, me.root.position.z + Math.cos(a) * 0.25));
+        }
+        const hk = garden.hooks[HANG_HOOK];
+        camPath([
+          { p: [hk.x + 1.9, 1.0, hk.z + 2.6], l: [hk.x - 0.1, 2.1, hk.z] },
+          { p: [hk.x + 1.6, 1.05, hk.z + 2.9], l: [hk.x - 0.1, 2.6, hk.z] },
+        ])(u, camera);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        const a = clamp01((t - EVENTS.nHangRelease - 1.9) / 0.4);
+        if (a > 0) {
+          const hk = garden.hooks[HANG_HOOK];
+          const p = worldToScreen(hk.x, hk.y - 0.55, hk.z);
+          wishTag('愿一战上岸', '暖暖的山雀', p.x + 150, p.y - 60, a);
+        }
+        featureCaption(curShot!, t);
+      },
+    },
+    nWish: {
+      setup() {
+        garden.setLanterns(demoLanterns);
+      },
+      update() {},
+      draw(t) {
+        uiCard('uiWishWrite', t / curDur);
+        featureCaption(curShot!, t);
+      },
+    },
+    nPersimmon: {
+      // 柿饼架：黄昏，小和尚走到架前合十，架子上方飘出「柿柿如意」
+      setup() {
+        cast(0);
+        me.root.visible = true;
+        me.setAction('walk');
+        me.speed = 1;
+        env.follow(-27, 41);
+      },
+      update(t, u) {
+        setFov(52);
+        const a = { x: -25.4, z: 43.6 }, b = { x: -27, z: 40.75 };
+        const k = clamp01(t / 2.0);
+        if (k < 1) place(me, a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, Math.atan2(b.x - a.x, b.z - a.z));
+        else {
+          place(me, b.x, b.z, Math.PI);
+          if (me.action === 'walk') me.setAction('hapjang', true);
+        }
+        camPath([
+          { p: [-24.3, 1.45, 44.6], l: [-27.0, 1.35, 39.6] },
+          { p: [-25.0, 1.35, 43.7], l: [-27.0, 1.5, 39.5] },
+        ])(u, camera);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        const a = clamp01((t - EVENTS.nPersimmon) / 0.3);
+        if (a > 0) {
+          const p = worldToScreen(-27, 2.55, 39.4);
+          floatWord('柿柿如意', p.x, p.y - (t - EVENTS.nPersimmon) * 26, a, 128, 'MSZ');
+          const b = clamp01((t - EVENTS.nPersimmon - 0.6) / 0.3);
+          if (b > 0) floatWord('好柿成双 · 心想柿成', p.x, p.y + 110 - (t - EVENTS.nPersimmon) * 26, b, 48, '"Songti SC"', '#fbf3e2');
+        }
+        featureCaption(curShot!, t);
+      },
+    },
+    nSutra: {
+      // 键盘抄经：藏经阁虚化作底，铺一张朱丝栏经纸；每一拍输入法上屏一组字，纸上一个接一个落墨
+      setup() {
+        cast(0);
+        env.follow(0, -40);
+        camera.position.set(1.4, 1.5, -38.0);
+        camera.lookAt(0, 0.9, -41.5);
+      },
+      update() {
+        setFov(50);
+      },
+      draw(t, frame) {
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        render3d();
+        ctx.save();
+        ctx.filter = 'blur(14px) brightness(0.55)';
+        ctx.drawImage(renderer.domElement, -40, -60, W + 80, H + 120);
+        ctx.restore();
+        drawSutraSheet(t);
+        featureCaption(curShot!, t);
+      },
+    },
+    nNight: {
+      // 入夜：从灯廊外的高处慢慢降下来，一廊灯亮着，几个人在灯下走（灯笼比游戏里再亮一些，泛出光晕）
+      setup() {
+        garden.setLanterns(demoLanterns);
+        garden.setLanternLevel(env.lanternLevel * 1.9);
+        const ms = cast(3);
+        ms.forEach((m, i) => {
+          m.setAction('walk');
+          m.speed = 0.8;
+        });
+        env.follow(-27, 52);
+      },
+      update(t, u) {
+        setFov(56);
+        pool.slice(0, 3).forEach((m, i) => place(m, -27 + (i - 1) * 0.9, 58 - i * 2.2 - t * 0.55, Math.PI));
+        camPath([
+          { p: [-19.3, 4.6, 60.6], l: [-27.0, 2.6, 51.5] },
+          { p: [-20.4, 2.5, 56.2], l: [-27.2, 2.85, 50.5] },
+        ])(u, camera);
+      },
+    },
+    nEnd: {
+      setup() {},
+      update() {},
+      draw(t) {
+        ctx.drawImage(paper, 0, 0);
+        ctx.save();
+        portrait();
+        inkTitle(ctx, '山寺', 540, 760, 360, t - 0.2, 0.9);
+        const sa = clamp01((t - EVENTS.endSeal) / 0.18);
+        if (sa > 0) seal(ctx, 948, 870, 96, '静山', sa, 1.25 - 0.25 * ease(sa));
+        const a = clamp01((t - 0.9) / 0.5);
+        ctx.globalAlpha = a;
+        ctx.textAlign = 'center';
+        ctx.font = '70px MSZ';
+        ctx.fillStyle = '#2a2320';
+        ctx.fillText('浏览器打开就能逛', 540, 1060);
+        const b = clamp01((t - 1.8) / 0.6);
+        ctx.globalAlpha = b;
+        ctx.font = '42px "Songti SC"';
+        ctx.fillStyle = '#6b5f50';
+        ctx.fillText('山寺咖啡 · 祈福灯廊', 540, 1180);
+        ctx.fillText('柿柿如意 · 键盘抄经', 540, 1250);
+        ctx.restore();
+      },
+    },
     fEnd: {
       setup() {},
       update() {},
@@ -1492,6 +2092,8 @@ async function main() {
     camera.updateProjectionMatrix();
     env.setMode('dusk');
     props.setLanternLevel(env.lanternLevel);
+    cafe.setLanternLevel(env.lanternLevel);
+    garden.setLanternLevel(env.lanternLevel);
     renderer.toneMappingExposure *= 1.12;
     const fill = new THREE.PointLight('#ffd7a8', 14, 7, 2);
     fill.position.set(0.9, 2.4, 13.8);
@@ -1628,6 +2230,8 @@ async function main() {
     if (shot.time) {
       env.setMode(shot.time);
       props.setLanternLevel(env.lanternLevel);
+      cafe.setLanternLevel(env.lanternLevel);
+      garden.setLanternLevel(env.lanternLevel);
       // 夜景提亮一些，手机上看得清
       if (shot.time === 'night') renderer.toneMappingExposure *= 1.45;
     }
@@ -1635,6 +2239,8 @@ async function main() {
     curShot = shot;
     showClouds = false;
     for (const m of extras) m.root.visible = false;
+    for (const m of [me, ...pool, ...extras]) m.setCup(null);
+    cafe.setBrewing(false);
     if (pile) pile.group.visible = false;
     S.setup();
     // 先空跑一秒：让香烟、落叶、动作进入状态
