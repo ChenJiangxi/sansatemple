@@ -260,7 +260,7 @@ node tools/promo/assemble.mjs /tmp/sansa-promo/shots /tmp/sansa-promo/score.wav 
 
 五个版本用 `cut` 参数切换（页面 `?cut=`，Node 脚本用环境变量 `CUT=`）：`vertical`（9:16，2 分钟，默认）、`short34`（3:4，约 1 分钟）、`explainer`（16:9 讲解视频）、`features`（9:16 功能介绍，约 2 分钟）、`news`（9:16「山寺上新」，约 1 分半）。
 
-**山寺上新（`news`）**：咖啡馆（外景、露台、吧台、点单、请人喝）、祈福灯廊（走廊、挂灯、写心愿）、柿柿如意、键盘抄经、入夜，13 个镜头。
+**山寺上新（`news`）**：没有片头，直接从咖啡馆外景进（用户要求）；咖啡馆（外景、露台、吧台、点单、请人喝）、祈福灯廊（走廊、挂灯、写心愿）、柿柿如意、键盘抄经、入夜、片尾，12 个镜头，约 85 秒。
 - 配乐用 `tools/promo/audio-news.mjs` 单独合成（`CUT=news node tools/promo/audio-news.mjs 配乐.wav`）：100 拍/分钟，底鼓、拍手、踩镲、沙锤、贝斯，古筝式拨弦奏主题，后半段加笛子；木鱼只当节奏点，梵钟只在片头片尾。
 - 镜头每个 3 小节（7.2 秒，另加 0.5 秒叠化），起点都在小节线上；端出咖啡、递杯、灯离手、柿柿如意、每一组落墨都卡在拍子上（`timeline.mjs` 的 `EVENTS.n*`），配乐在同一拍发声。
 - 界面截图 `uiCafeMenu.jpg`（点单菜单）、`uiWishWrite.jpg`（写心愿，选「上岸」、写「愿一战上岸，四月见分晓」）放进 `PROMO_UI`（默认 `/tmp/sansa-promo/ui`），浏览器 540×960、两倍像素。

@@ -1,8 +1,8 @@
 // 「山寺上新」的配乐：100 拍/分钟，明快、有鼓点（用户要求宣传片配乐不要太舒缓）。全部用代码合成，不调用任何音乐生成模型。
 //   鼓：底鼓、拍手军鼓、八分踩镲、十六分沙锤；贝斯：跟和弦的切分低音；古筝式拨弦奏主题；笛子式长音在后半段接旋律；
-//   寺院的音色只当节奏点用：木鱼在小节尾、抄经时每次落墨敲一下；梵钟只在片头片尾各一声。
+//   寺院的音色只当节奏点用：木鱼在小节尾、抄经时每次落墨敲一下；梵钟只在开头、片尾各一声。
 //   和弦每小节一换：D – A – Bm – G（D 大调五声）。段落按镜头：
-//     片头（2 小节）→ 咖啡馆一段（15 小节，全鼓组）→ 灯廊、柿饼一段（12 小节，加笛子）→ 抄经（3 小节，半拍子、只留底鼓和踩镲）
+//     开头一小节引子（成片没有片头，直接是咖啡馆外景）→ 咖啡馆一段（全鼓组）→ 灯廊、柿饼一段（12 小节，加笛子）→ 抄经（3 小节，半拍子、只留底鼓和踩镲）
 //     → 入夜（3 小节，全鼓组加镲）→ 片尾（收在主和弦上，梵钟余音）
 // 用法：CUT=news node tools/promo/audio-news.mjs 输出.wav
 import fs from 'node:fs';
@@ -224,7 +224,9 @@ for (let k = 0; k < bars; k++) {
   const t0 = barT(k);
   if (t0 > TOTAL) break;
   const ch = CH[k % 4];
-  const intro = k < S.cafe, A = k >= S.cafe && k < S.alley, B = k >= S.alley && k < S.sutra, C = k >= S.sutra && k < S.night;
+  // 引子：成片开头的头一小节（前面有片头时是片头那几小节）
+  const introEnd = Math.max(1, S.cafe);
+  const intro = k < introEnd, A = !intro && k < S.alley, B = k >= S.alley && k < S.sutra, C = k >= S.sutra && k < S.night;
   const D = k >= S.night && k < S.end, END = k >= S.end;
   // 鼓
   if (END) {
@@ -238,8 +240,9 @@ for (let k = 0; k < bars; k++) {
     add(kick(), t0 + 2 * BEAT, 0.6);
     for (let e = 0; e < 8; e++) add(hat(), t0 + e * (BEAT / 2) + swing(e), e % 2 ? 0.16 : 0.24, 0.25);
   } else if (intro) {
-    if (k === 0) for (let s = 0; s < 16; s++) add(shaker(), t0 + s * (BEAT / 4), s % 4 === 0 ? 0.2 : 0.1, -0.3);
-    if (k === 1) {
+    if (k < introEnd - 1) for (let s = 0; s < 16; s++) add(shaker(), t0 + s * (BEAT / 4), s % 4 === 0 ? 0.2 : 0.1, -0.3);
+    if (k === introEnd - 1) {
+      for (let s = 0; s < 16; s++) add(shaker(), t0 + s * (BEAT / 4), s % 4 === 0 ? 0.16 : 0.08, -0.3);
       add(kick(), t0, 0.85);
       add(kick(), t0 + 2 * BEAT, 0.8);
       for (let e = 0; e < 8; e++) add(hat(), t0 + e * (BEAT / 2) + swing(e), 0.2, 0.25);
@@ -256,7 +259,7 @@ for (let k = 0; k < bars; k++) {
     if (k % 4 === 3) for (let s = 0; s < 4; s++) add(clap(), t0 + 3 * BEAT + s * (BEAT / 4), 0.18 + s * 0.06, 0, 0.06);
     // 木鱼在小节尾的反拍上「笃」一声（两小节一次）
     if (k % 2 === 1) add(woodblock(), t0 + 3.5 * BEAT, 0.42, -0.4, 0.15);
-    if ((A && k === Math.ceil(S.cafe)) || (D && k === Math.ceil(S.night)) || (B && k === Math.ceil(S.alley))) add(crash(), t0, 0.3, 0.2, 0.2);
+    if ((A && k === introEnd) || (D && k === Math.ceil(S.night)) || (B && k === Math.ceil(S.alley))) add(crash(), t0, 0.3, 0.2, 0.2);
   }
   // 贝斯
   if (!intro && !END) {
@@ -267,9 +270,9 @@ for (let k = 0; k < bars; k++) {
     }
   }
   if (k === S.end) add(bass(N.D2, BAR * 1.5), t0, 0.65);
-  // 铺底和弦（片头和抄经段落小一些）
+  // 铺底和弦（引子和抄经段落小一些）
   if (!END || k === S.end) add(pad(ch.pad, BAR * (k === S.end ? 2.2 : 1.02)), t0, intro ? 0.18 : C ? 0.2 : 0.26, 0, 0.35);
-  // 古筝主题：片头第二小节起、咖啡馆一段、入夜一段；灯廊一段轻一点做伴奏
+  // 古筝主题：引子、咖啡馆一段、入夜一段；灯廊一段轻一点做伴奏
   const hookOn = (intro && k >= 0) || A || D || B;
   if (hookOn) {
     const ph = HOOK[Math.floor(k / 2) % HOOK.length];
@@ -298,7 +301,7 @@ if (S.end) {
   [N.D4, N.Fs4, N.A4, N.D5].forEach((f, i) => add(pluck(f, 3.2, 0.55), t + i * 0.06, 0.32, 0.3, 0.35));
   add(templeBell(), t + 0.05, 0.42, 0, 0.5);
 }
-// 片头：一声梵钟，接一串拨弦上行
+// 开头：一声梵钟，接一串拨弦上行
 add(templeBell(), 0.02, 0.4, 0, 0.5);
 ['D4', 'E4', 'Fs4', 'A4', 'B4', 'D5'].forEach((n, i) => add(pluck(N[n], 1.2, 0.6), 0.6 + i * 0.12, 0.2, 0.3, 0.3));
 

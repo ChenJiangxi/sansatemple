@@ -139,9 +139,9 @@ const LISTS = {
     ['fTitle', 6.0], ['gate', 8.0], ['incense', 8.0], ['quest', 8.0], ['uiPractice', 8.0], ['looks', 8.0], ['guanyin', 8.5], ['library', 8.0],
     ['copy', 8.5], ['uiReader', 8.0], ['tower', 9.0], ['rows', 8.0], ['rosary', 7.5], ['bell', 8.0], ['moktak', 8.5], ['night', 8.0], ['fEnd', 6.5],
   ],
-  // 每个镜头多 0.5 秒叠化，起点正好落在小节线上（片头 2 小节、其余 3 小节）
+  // 每个镜头多 0.5 秒叠化，起点正好落在小节线上（每个 3 小节）；不要片头，直接从咖啡馆外景进（用户 2026-11-18）
   news: [
-    ['nTitle', 5.3], ['nCafe', 7.7], ['nTerrace', 7.7], ['nBar', 7.7], ['nMenu', 7.7], ['nTreat', 7.7], ['nAlley', 7.7],
+    ['nCafe', 7.7], ['nTerrace', 7.7], ['nBar', 7.7], ['nMenu', 7.7], ['nTreat', 7.7], ['nAlley', 7.7],
     ['nHang', 7.7], ['nWish', 7.7], ['nPersimmon', 7.7], ['nSutra', 7.7], ['nNight', 7.7], ['nEnd', 5.5],
   ],
   short34: [
