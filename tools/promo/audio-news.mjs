@@ -5,7 +5,9 @@
 //   抄经、敲木鱼的镜头收成半拍子，从祈福灯廊起加笛子，片尾收在主和弦上；撞钟、木鱼、念珠、落墨都在画面动作的同一拍发声
 // 用法：CUT=news node tools/promo/audio-news.mjs 输出.wav
 import fs from 'node:fs';
-import { SHOTS, EVENTS, TOTAL, BEAT, BAR, CUT, WALK, MUSIC } from './timeline.mjs';
+import { SHOTS, EVENTS, TOTAL, BEAT, BAR, CUT, WALK, COFFEE, MUSIC } from './timeline.mjs';
+// 小红书咖啡版不用梵钟（不带寺院、宗教的声音），开头结尾换成一串清亮的拨弦
+const SECULAR = CUT === 'coffee';
 
 const SR = 48000;
 const LEN = Math.ceil((TOTAL + 0.3) * SR);
@@ -297,10 +299,11 @@ for (let k = 0; k < bars; k++) {
 if (END0 < bars) {
   const t = barT(END0);
   [N.D4, N.Fs4, N.A4, N.D5].forEach((f, i) => add(pluck(f, 3.2, 0.55), t + i * 0.06, 0.32, 0.3, 0.35));
-  add(templeBell(), t + 0.05, 0.42, 0, 0.5);
+  if (SECULAR) [1760, 2349, 2637].forEach((f, i) => add(ding(f), t + 0.3 + i * 0.12, 0.16, (i - 1) * 0.3, 0.5));
+  else add(templeBell(), t + 0.05, 0.42, 0, 0.5);
 }
 // 开头：一声梵钟，接一串拨弦上行
-add(templeBell(), 0.02, 0.4, 0, 0.5);
+if (!SECULAR) add(templeBell(), 0.02, 0.4, 0, 0.5);
 ['D4', 'E4', 'Fs4', 'A4', 'B4', 'D5'].forEach((n, i) => add(pluck(N[n], 1.2, 0.6), 0.6 + i * 0.12, 0.2, 0.3, 0.3));
 
 // —— 画面里的动作：同一拍上发声（镜头不在这一版里就不出声）——
@@ -353,6 +356,27 @@ if (CUT === 'walk') {
     add(b, t, 0.18, 0, 0.4);
     [1760, 2093, 2637].forEach((f, i) => add(ding(f), t + 0.4 + (i * BEAT) / 2, 0.16, (i - 1) * 0.3, 0.45));
   }
+}
+
+// 小红书咖啡版：咖啡做好、递杯、每一口、空杯落桶、分享卡弹出、夜里那一口
+if (CUT === 'coffee') {
+  add(ding(1568), COFFEE.cupReady, 0.3, 0.3, 0.4);
+  add(ding(1760), COFFEE.give, 0.3, -0.2, 0.4);
+  add(ding(2093), COFFEE.give + 0.3, 0.18, 0.2, 0.4);
+  for (const t of COFFEE.sips) add(ding(2093), t + 0.7, 0.14, -0.2, 0.4);
+  for (const t of COFFEE.friendSips) add(ding(1760), t + 0.7, 0.09, 0.3, 0.4);
+  add(woodblock(1150), COFFEE.binDrop, 0.34, 0.2, 0.2);
+  add(ding(2349), COFFEE.binDrop + 0.15, 0.12, 0.2, 0.4);
+  {
+    // 分享卡从下面滑上来：一阵气声，落定时两颗小铃
+    const t = COFFEE.card[0] + 0.1;
+    const n = Math.floor(0.9 * SR), b = new Float32Array(n);
+    for (let i = 0; i < n; i++) b[i] = (rnd() * 2 - 1) * Math.sin((Math.PI * i) / n) * 0.5;
+    bp(b, 2600, 0.8);
+    add(b, t, 0.16, 0, 0.4);
+    [2093, 2637].forEach((f, i) => add(ding(f), t + 0.6 + i * 0.15, 0.15, (i - 0.5) * 0.4, 0.45));
+  }
+  add(ding(1760), COFFEE.nightSip + 0.7, 0.12, -0.2, 0.45);
 }
 
 // —— 混响（Schroeder：四个梳状 + 两个全通），左右声道错开一点 ——

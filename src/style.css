@@ -486,7 +486,7 @@ canvas.main.point { cursor: pointer; }
 /* 面板要压在左上角的称号条、寺务条上面 */
 .panel { z-index: 5; }
 
-/* —— 山寺咖啡：点单的纸菜单、做咖啡、手边的杯子条、分享卡 —— */
+/* —— 半山咖啡：点单的纸菜单、做咖啡、手边的杯子条、分享卡 —— */
 .cafe { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 10, 8, 0.4); }
 .cafe[hidden] { display: none; }
 .cafe-sheet {

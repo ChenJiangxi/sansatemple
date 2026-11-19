@@ -44,7 +44,7 @@ export const DAILY: { id: string; need: number; reward: number; lv?: number }[] 
   { id: 'moktak', need: 30, reward: 6 },
   { id: 'beads', need: 108, reward: 8 },
   { id: 'read', need: 3, reward: 6 },
-  { id: 'coffee', need: 1, reward: 4 }, // 山寺咖啡喝完一杯（别人请的也算）
+  { id: 'coffee', need: 1, reward: 4 }, // 半山咖啡喝完一杯（别人请的也算）
   { id: 'sutra', need: 5, reward: 6, lv: 3 }, // 藏经阁开放（比丘）以后才有
 ];
 export const DAILY_BONUS = 20;

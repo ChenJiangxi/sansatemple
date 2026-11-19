@@ -125,7 +125,7 @@ export const BENCH_SEATS: Seat[] = BENCH_DEFS.flatMap((b, bi) =>
   })
 );
 
-// 山寺咖啡：东院一座三开间的茶寮，前脸朝西（朝放生池和参道），厅前一片木平台（露台）。
+// 半山咖啡：东院一座三开间的茶寮，前脸朝西（朝放生池和参道），厅前一片木平台（露台）。
 // 本地坐标：x 沿面阔（世界 +z 方向），z 朝前为正（世界 -x 方向）。
 // 厅：x ±hw、z ±hd；露台：z 从 hd 到 deck；地面都垫高 base。吧台在后墙前（z 从 bar-0.6 到 bar），吧台里再垫高 inner。
 export const CAFE = { x: 38.4, z: 48.5, yaw: -Math.PI / 2, base: 0.15, inner: 0.2, hw: 5.5, hd: 3.2, deck: 8.4, bar: -1.0, colH: 3.2 };

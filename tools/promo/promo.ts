@@ -23,9 +23,10 @@ import { leafPile } from '../../src/play';
 import { ROBES, BEADS } from '../../src/looks';
 import { buildCafe } from '../../src/world/cafe';
 import { buildGarden } from '../../src/world/garden';
-import { CAFE, CAFE_SEATS, cafeWorld, cafeLocal, planRoute, setSideHallOpen, WISH_ALLEY, PERSIMMON } from '../../src/layout';
+import { CAFE, CAFE_SEATS, CAFE_BIN, cafeWorld, cafeLocal, planRoute, setSideHallOpen, WISH_ALLEY, PERSIMMON } from '../../src/layout';
+import { shareCard } from '../../src/coffee';
 // @ts-ignore 共用的分镜表
-import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS, WALK } from './timeline.mjs';
+import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS, WALK, COFFEE } from './timeline.mjs';
 
 type Shot = { id: string; dur: number; start: number; time?: TimeMode; line?: string; feature?: [string, string] };
 // 功能介绍和山寺上新：用游戏同一套后期，底部一块功能字幕
@@ -465,7 +466,7 @@ async function main() {
   // 线上实拍截图：慢慢推近到要讲的地方
   const uiImg: Record<string, HTMLImageElement> = {};
   for (const id of ['uiRooms', 'uiBow', 'uiPractice', 'uiReader', 'uiCafeMenu', 'uiWishWrite']) {
-    const need = SHOTS.some((x: Shot) => x.id === id || (x.id === 'nMenu' && id === 'uiCafeMenu') || (x.id === 'nWish' && id === 'uiWishWrite'));
+    const need = SHOTS.some((x: Shot) => x.id === id || (x.id === 'nMenu' && id === 'uiCafeMenu') || (x.id === 'nWish' && id === 'uiWishWrite') || (x.id === 'coffee' && id === 'uiCafeMenu'));
     if (!need) continue;
     const im = new Image();
     im.src = `/__promo/ui/${id}.jpg`;
@@ -783,8 +784,34 @@ async function main() {
   const LIB_DOOR_X = LIBRARY.x + 2.275;
   const INC_AT: [number, number] = [0, INCENSE.z + 1.9];
   const ALLEY_IN: [number, number] = [-23.0, 46.6];
-  function hourAt(t: number) {
-    const H = W_.hours;
+
+  // —— 小红书咖啡版（coffee）：只拍咖啡，不拍宗教 ——
+  const C_ = COFFEE as {
+    cuts: number[]; approach: number[]; menu: number[]; brew: number[]; cupReady: number; toFriend: number[]; offer: number; give: number;
+    sit: number[]; sips: number[]; friendSips: number[]; toBin: number[]; binOffer: number; binDrop: number; card: number[]; aerial: number[];
+    night: number[]; nightSip: number; end: number; fadeOut: number[]; hours: number[][]; caps: [number, number, string, string][];
+  };
+  // 两人坐露台最外侧那张伞桌（k6、k7），从露台外侧看过去，背景是厅里的吧台和灯
+  const cofHeroSeat = CAFE_SEATS[6];
+  const friendSeat = CAFE_SEATS[7];
+  const FRIEND_SIDE: [number, number] = [friendSeat.approachX, friendSeat.approachZ]; // 递杯时站在朋友身边（露台外沿一侧）
+  const BIN_AT: [number, number] = [CAFE_BIN.x + 0.8, CAFE_BIN.z]; // 回收桶东边，面朝西把空杯放进去
+  let friend: Monk | null = null;
+  const cofFill = new THREE.PointLight('#ffcf96', 0, 7, 1.5);
+  cofFill.position.set(29.6, 2.1, 51.4);
+  scene.add(cofFill);
+  let cofMoves: Move[] = [];
+  let cofCurve: THREE.CatmullRomCurve3[] | null = null, cofNight: THREE.CatmullRomCurve3[] | null = null;
+  let cofSat = '', cofOffered = false, cofDropOffered = false, cofSeg = -1;
+  // 分享卡：用游戏里同一个函数画，最底下不写网址
+  let cardImg: HTMLImageElement | null = null;
+  if (CUT === 'coffee') {
+    document.fonts.add(await new FontFace('SansaSeal', 'url(/fonts/seal.woff2)').load());
+    cardImg = new Image();
+    cardImg.src = await shareCard('latte', '静静的云', undefined, '', '');
+    await cardImg.decode();
+  }
+  function hourAt(t: number, H: number[][] = W_.hours) {
     for (let i = 0; i < H.length - 1; i++) if (t <= H[i + 1][0]) return H[i][1] + ((H[i + 1][1] - H[i][1]) * (t - H[i][0])) / (H[i + 1][0] - H[i][0]);
     return H[H.length - 1][1];
   }
@@ -796,8 +823,8 @@ async function main() {
   }
   // 时间段内沿一串关键位置走（位置、看点各一条曲线）
   const keyCurves = (keys: [V3, V3][]) => [new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k[0]))), new THREE.CatmullRomCurve3(keys.map((k) => new THREE.Vector3(...k[1])))];
-  function walkCaption(t: number) {
-    for (const [t0, t1, title, sub] of W_.caps) {
+  function walkCaption(t: number, caps: [number, number, string, string][] = W_.caps) {
+    for (const [t0, t1, title, sub] of caps) {
       const a = ease(clamp01((t - t0) / 0.6)) * clamp01((t1 - t) / 0.6);
       if (a <= 0) continue;
       ctx.save();
@@ -2436,6 +2463,319 @@ async function main() {
         }
         // 片尾渐暗到黑
         const fo = clamp01((t - W_.fadeOut[0]) / (W_.fadeOut[1] - W_.fadeOut[0]));
+        if (fo > 0) {
+          ctx.save();
+          ctx.globalAlpha = fo * fo * (3 - 2 * fo);
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, W, H);
+          ctx.restore();
+        }
+        lastCtx.drawImage(out, 0, 0);
+      },
+    },
+    coffee: {
+      setup() {
+        // 露台上四位客人；朋友坐在主角那张伞桌对面，手里空着
+        const seats = [0, 4, 9, 10].map((i) => CAFE_SEATS[i]);
+        const cups: [string, number][] = [['latte', 2], ['coldbrew', 3], ['osmanthus', 2], ['americano', 1]];
+        const ms = cast(seats.length + 1);
+        seats.forEach((st, i) => {
+          place(ms[i], st.x, st.z, st.yaw);
+          ms[i].seatKind = 'bench';
+          ms[i].setAction('bench');
+          ms[i].setCup(cups[i][0] as never, cups[i][1]);
+        });
+        friend = ms[seats.length];
+        friend.setLook(ROBES[3], BEADS[1]);
+        place(friend, friendSeat.x, friendSeat.z, friendSeat.yaw);
+        friend.seatKind = 'bench';
+        friend.setAction('bench');
+        friend.setCup(null);
+        [[-2.1, CAFE.bar - 1.15], [0.4, CAFE.bar - 1.15]].forEach(([lx, lz], i) => {
+          const m = baristas[i], p = cafeWorld(lx, lz);
+          m.root.visible = true;
+          place(m, p.x, p.z, CAFE.yaw);
+          m.setAction('brew');
+          m.actionTime = i * 1.7;
+        });
+        waiter.root.visible = true;
+        const stand = cafeWorld(0, -0.15);
+        cofMoves = [
+          // 从石板小路走上露台，从中间一间进厅，到吧台前
+          { t: C_.approach, pts: [[22.0, 44.4], [24.0, 45.4], [29.0, 47.8], [30.4, 48.7], [35.6, 48.7], [stand.x, stand.z]] },
+          // 端着满杯走出厅，到朋友身边
+          { t: C_.toFriend, pts: [[stand.x, stand.z], [36.2, 48.9], [32.2, 48.7], [30.4, 50.0], FRIEND_SIDE] },
+          // 喝完起身，从两张伞桌中间穿过去，到回收桶旁边
+          { t: C_.toBin, pts: [[cofHeroSeat.x, cofHeroSeat.z], [32.0, 50.9], [32.25, 52.3], [32.0, 53.2], BIN_AT] },
+        ].map((m) => {
+          const c = curveOf(m.pts as [number, number][], true);
+          return { t: m.t as [number, number], c, len: c.getLength() };
+        });
+        me.root.visible = true;
+        me.setAction('idle');
+        place(me, 22.0, 44.4, Math.atan2(2.0, 1.0));
+        walkYaw = Math.atan2(2.0, 1.0);
+        lastWalkT = -1;
+        cofSat = '';
+        cofOffered = cofDropOffered = false;
+        cofCurve = cofNight = null;
+        cofSeg = -1;
+        cutAt = -1;
+        followCam();
+        camP.copy(wantP);
+        camL.copy(wantL);
+      },
+      update(t) {
+        const dt = lastWalkT < 0 ? 1 / FPS : Math.max(0, t - lastWalkT);
+        // 第一帧也当作切换：镜头直接到位，不从别处飞过来
+        const cutNow = lastWalkT < 0 || C_.cuts.some((c) => lastWalkT < c && t >= c);
+        lastWalkT = t;
+        const hr = hourAt(t, C_.hours);
+        env.setHour(hr);
+        const lv = env.lanternLevel;
+        props.setLanternLevel(lv);
+        cafe.setLanternLevel(lv);
+        garden.setLanternLevel(lv);
+        renderer.toneMappingExposure *= 1 + 0.38 * THREE.MathUtils.smoothstep(hr, 17.6, 19.8);
+        // 夜里从露台外侧给两人补一点暖光，不然背着厅里的灯只剩剪影
+        cofFill.intensity = Math.min(lv, 1) * 7;
+        const fr = friend!;
+        // 跑堂：主角在吧台前等咖啡时，端着托盘穿过厅堂送到露台左边那桌
+        {
+          const a = cafeWorld(4.2, CAFE.bar + 0.45), b = cafeWorld(-2.4, 4.4);
+          const k = clamp01((t - 25.6) / 5.2);
+          place(waiter, a.x + (b.x - a.x) * k, a.z + (b.z - a.z) * k, Math.atan2(b.x - a.x, b.z - a.z));
+          const want = k >= 1 ? 'serve' : 'tray';
+          if (waiter.action !== want) waiter.setAction(want);
+          waiter.speed = 1;
+        }
+        cafe.setBrewing(t >= C_.brew[0] - 0.6 && t < C_.brew[1]);
+        // —— 人 ——
+        const stand = cafeWorld(0, -0.15);
+        const stay = (x: number, z: number, yaw: number) => {
+          place(me, x, z, yaw);
+          walkYaw = yaw;
+        };
+        const sitDown = (seat: typeof cofHeroSeat, tag: string) => {
+          stay(seat.x, seat.z, seat.yaw);
+          if (cofSat !== tag) {
+            cofSat = tag;
+            me.seatKind = 'bench';
+            me.setAction('bench', true);
+          }
+        };
+        const mv = cofMoves.find((m) => t >= m.t[0] && t <= m.t[1]);
+        if (mv) {
+          const u = (t - mv.t[0]) / (mv.t[1] - mv.t[0]);
+          const s = clamp01(plateau(clamp01(u)));
+          const p = mv.c.getPointAt(s);
+          const tg = mv.c.getTangentAt(Math.min(0.999, Math.max(0.001, s)));
+          const want = Math.atan2(tg.x, tg.z);
+          if (cutNow || u < 0.02) walkYaw = want;
+          walkYaw += Math.atan2(Math.sin(want - walkYaw), Math.cos(want - walkYaw)) * (1 - Math.exp(-dt * 6));
+          place(me, p.x, p.z, walkYaw);
+          const s2 = clamp01(plateau(clamp01(u + 0.01)));
+          me.speed = Math.max(0.6, ((s2 - s) * mv.len) / ((mv.t[1] - mv.t[0]) * 0.01));
+          if (me.action !== 'walk') me.setAction('walk');
+          cofSat = '';
+        } else if (t < C_.approach[0]) stay(22.0, 44.4, Math.atan2(2.0, 1.0));
+        else if (t < C_.toFriend[0]) {
+          // 吧台前：点单、等咖啡；做好的那一拍端到手上
+          stay(stand.x, stand.z, Math.PI / 2);
+          if (me.action !== 'idle') me.setAction('idle');
+          if (t >= C_.cupReady && !me.cupKind) me.setCup('latte', 3);
+        } else if (t < C_.sit[0]) {
+          // 朋友身边：递过去，朋友接住，马上喝一口
+          stay(FRIEND_SIDE[0], FRIEND_SIDE[1], Math.atan2(friendSeat.x - FRIEND_SIDE[0], friendSeat.z - FRIEND_SIDE[1]));
+          if (me.action !== 'idle') me.setAction('idle');
+          if (t >= C_.offer && !cofOffered) {
+            cofOffered = true;
+            me.offer();
+          }
+          if (t >= C_.give && me.cupKind) {
+            me.setCup(null);
+            fr.setCup('latte', 3);
+          }
+          if (t >= C_.give + 1.0 && t - dt < C_.give + 1.0) fr.sip();
+        } else if (t < C_.toBin[0]) {
+          // 过了一会儿：主角也端着一杯冷萃坐下了，两人对坐着一口一口喝
+          sitDown(cofHeroSeat, 'sit');
+          if (cutNow || !me.cupKind) {
+            me.setCup('coldbrew', 3);
+            fr.setCup('latte', 3);
+          }
+          C_.sips.forEach((st, i) => {
+            if (t >= st && t - dt < st) me.sip();
+            if (t >= st + 1.3 && me.cupSips > 2 - i) me.setCup('coldbrew', 2 - i);
+          });
+          C_.friendSips.forEach((st, i) => {
+            if (t >= st && t - dt < st) fr.sip();
+            if (t >= st + 1.3 && fr.cupSips > 2 - i) fr.setCup('latte', 2 - i);
+          });
+        } else if (t < C_.aerial[0]) {
+          // 回收桶旁：把空杯放进去
+          stay(BIN_AT[0], BIN_AT[1], -Math.PI / 2);
+          if (me.action !== 'idle') me.setAction('idle');
+          if (t >= C_.binOffer && !cofDropOffered) {
+            cofDropOffered = true;
+            me.offer();
+          }
+          if (t >= C_.binDrop && me.cupKind) me.setCup(null);
+        } else {
+          // 傍晚到入夜：又坐回伞下，换了一杯低因
+          sitDown(cofHeroSeat, 'evening');
+          if (cutNow || me.cupKind !== 'decaf') {
+            me.setCup('decaf', 3);
+            fr.setCup('osmanthus', 2);
+          }
+          if (t >= C_.nightSip && t - dt < C_.nightSip) me.sip();
+          if (t >= C_.nightSip + 1.3 && me.cupSips > 2) me.setCup('decaf', 2);
+        }
+        env.follow(me.root.position.x, me.root.position.z);
+
+        // —— 镜头 ——
+        let k = 2.2;
+        const fixed = (p: V3, l: V3, kk = 1.6) => {
+          wantP.set(...p);
+          wantL.set(...l);
+          k = kk;
+        };
+        const seg = C_.cuts.filter((c) => t >= c).length;
+        if (seg !== cofSeg) {
+          cofSeg = seg;
+          cofCurve = null;
+        }
+        if (t < 6.0) {
+          // 开场：从西北高处看整座咖啡馆，落到小和尚身后
+          if (!cofCurve) cofCurve = keyCurves([
+            [[22.5, 6.8, 57.0], [33.5, 1.4, 48.5]],
+            [[21.0, 4.0, 50.5], [31.0, 1.3, 47.8]],
+            [[23.0, 2.1, 44.4], [28.9, 1.15, 47.8]],
+          ]);
+          const v = glide(clamp01(t / 6.0));
+          wantP.copy(cofCurve[0].getPoint(v));
+          wantL.copy(cofCurve[1].getPoint(v));
+          k = 6;
+        } else if (t < C_.approach[1] - 1.0) followCam(5.0, 2.0, 0.5);
+        // 吧台：从厅外斜着看进去，小和尚和两位咖啡师都在画面里
+        else if (t < C_.toFriend[0] + 0.5) fixed([34.6, 1.75, 45.0], [40.0, 1.35, 48.6]);
+        // 端着杯子走出来：镜头站在露台外，转着头跟住他
+        else if (t < C_.toFriend[1] - 0.8) fixed([28.6, 1.7, 46.4], [me.root.position.x, me.root.position.y + 1.0, me.root.position.z], 1.8);
+        else if (t < C_.sit[0]) fixed([28.2, 1.55, 49.6], [30.8, 1.0, 52.3], 1.4);
+        else if (t < C_.cuts[3]) {
+          // 两人对坐：从露台外侧平视，背景是厅里的吧台
+          const u = clamp01((t - C_.sit[0]) / (C_.cuts[3] - C_.sit[0]));
+          fixed([27.6 + u * 0.35, 1.5, 51.2], [31.1, 0.95, 51.5], 1.4);
+        } else if (t < C_.aerial[0]) fixed([30.2, 1.7, 56.6], [31.0, 0.85, 53.2], 1.4);
+        else if (t < C_.night[0]) {
+          // 从露台外侧升起来，高处俯看整座咖啡馆和露台，再落回门前；天色慢慢暗下来
+          if (!cofCurve) cofCurve = keyCurves([
+            [[27.6, 1.5, 51.2], [31.1, 0.95, 51.5]],
+            [[26.4, 6.5, 52.4], [32.0, 2.4, 50.0]],
+            [[27.0, 14.0, 60.0], [36.0, 0.5, 48.0]],
+            [[24.0, 9.0, 52.0], [34.0, 1.5, 48.5]],
+            [[25.5, 3.2, 53.5], [33.5, 1.6, 50.0]],
+          ]);
+          const v = glide(clamp01((t - C_.aerial[0]) / (C_.aerial[1] - C_.aerial[0])));
+          wantP.copy(cofCurve[0].getPoint(v));
+          wantL.copy(cofCurve[1].getPoint(v));
+          k = 5;
+        } else {
+          // 入夜：慢慢推近到伞下那一桌
+          if (!cofNight) cofNight = keyCurves([
+            [[25.5, 3.2, 53.5], [33.5, 1.6, 50.0]],
+            [[26.6, 2.1, 52.0], [32.2, 1.2, 51.2]],
+            [[27.3, 1.6, 51.1], [31.3, 1.05, 51.5]],
+          ]);
+          const v = glide(clamp01((t - C_.night[0]) / 9.0));
+          wantP.copy(cofNight[0].getPoint(v));
+          wantL.copy(cofNight[1].getPoint(v));
+          k = 4;
+        }
+        if (cutNow) {
+          camP.copy(wantP);
+          camL.copy(wantL);
+        } else {
+          const f = 1 - Math.exp(-dt * k);
+          camP.lerp(wantP, f);
+          camL.lerp(wantL, f);
+        }
+        const cl = cafeLocal(camP.x, camP.z);
+        if (Math.abs(cl.lx) < CAFE.hw + 0.3 && cl.lz > -CAFE.hd && cl.lz < CAFE.hd + 0.6) camP.y = Math.min(camP.y, CAFE.base + CAFE.colH - 0.3);
+        camP.y = Math.max(camP.y, heightAt(camP.x, camP.z) + 0.6);
+        setFov(56);
+        camera.position.copy(camP);
+        camera.lookAt(camL);
+      },
+      draw(t, frame) {
+        draw3d(frame);
+        const fr = friend!;
+        // 点单界面：只截实拍截图中间那块菜单（四周的游戏按钮上有「礼佛」「木鱼」等字，不入画），背景是虚化的吧台
+        if (t >= C_.menu[0] && t < C_.menu[1]) {
+          const im = uiImg.uiCafeMenu;
+          ctx.save();
+          ctx.filter = 'blur(16px) brightness(0.6)';
+          ctx.drawImage(renderer.domElement, -40, -60, W + 80, H + 120);
+          ctx.restore();
+          const sx = im.width * 0.096, sy = im.height * 0.248, sw = im.width * 0.808, sh = im.height * 0.504;
+          const z = 1 + 0.05 * ease(clamp01((t - C_.menu[0]) / (C_.menu[1] - C_.menu[0])));
+          const dw = W * 0.88 * z, dh = (dw * sh) / sw;
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.45)';
+          ctx.shadowBlur = 40;
+          ctx.drawImage(im, sx, sy, sw, sh, (W - dw) / 2, H * 0.42 - dh / 2, dw, dh);
+          ctx.restore();
+        }
+        // 咖啡做好
+        const ca = clamp01((t - C_.cupReady) / 0.25) * clamp01((C_.toFriend[0] + 0.3 - t) / 0.4);
+        if (ca > 0) pill('山雾拿铁 · 做好了', W / 2, H * 0.3, ca, '#f3d38a');
+        // 朋友接过杯子
+        const ba = clamp01((t - C_.give - 0.3) / 0.25) * clamp01((C_.sit[0] - 0.1 - t) / 0.3);
+        if (ba > 0) bubble('谢啦，下次我请！', worldToScreen(fr.root.position.x, fr.root.position.y + 1.6, fr.root.position.z), ba);
+        // 每喝一口，头顶显示还剩几口
+        C_.sips.forEach((st, i) => {
+          const a = clamp01((t - st - 1.3) / 0.2) * clamp01((st + 3.0 - t) / 0.4);
+          if (a <= 0) return;
+          const p = worldToScreen(me.root.position.x, me.root.position.y + 1.45, me.root.position.z);
+          pill(i < 2 ? `还剩 ${2 - i} 口` : '喝完了', p.x, p.y, a, '#f3d38a');
+        });
+        // 空杯落桶
+        const da = clamp01((t - C_.binDrop) / 0.25) * clamp01((C_.binDrop + 1.8 - t) / 0.4);
+        if (da > 0) pill('空杯回收 · 下次再来', W / 2, H * 0.3, da, '#f3d38a');
+        // 分享卡：背景压暗虚化，卡片从下面滑上来
+        const A0 = C_.card[0], A1 = C_.card[1];
+        const sa = clamp01((t - A0) / 0.5) * clamp01((A1 - t) / 0.5);
+        if (sa > 0 && cardImg) {
+          ctx.save();
+          ctx.globalAlpha = sa;
+          ctx.filter = 'blur(14px) brightness(0.55)';
+          ctx.drawImage(renderer.domElement, -40, -60, W + 80, H + 120);
+          ctx.restore();
+          const cw = W * 0.8, ch = (cw * cardImg.height) / cardImg.width;
+          const k2 = ease(clamp01((t - A0) / 0.7));
+          const y = H * 0.42 - ch / 2 + (1 - k2) * H * 0.6;
+          ctx.save();
+          ctx.globalAlpha = sa;
+          ctx.shadowColor = 'rgba(0,0,0,0.5)';
+          ctx.shadowBlur = 40;
+          ctx.drawImage(cardImg, (W - cw) / 2, y, cw, ch);
+          ctx.restore();
+        }
+        walkCaption(t, C_.caps);
+        // 叠化：切换后的半秒里，上一段的最后一帧慢慢淡掉
+        const c = C_.cuts.find((x) => t >= x && t < x + 0.5);
+        if (c !== undefined) {
+          if (cutAt !== c) {
+            cutAt = c;
+            cutCtx.drawImage(lastFrame, 0, 0);
+          }
+          ctx.save();
+          ctx.globalAlpha = 1 - (t - c) / 0.5;
+          ctx.drawImage(cutFrame, 0, 0);
+          ctx.restore();
+        }
+        // 片尾渐暗到黑
+        const fo = clamp01((t - C_.fadeOut[0]) / (C_.fadeOut[1] - C_.fadeOut[0]));
         if (fo > 0) {
           ctx.save();
           ctx.globalAlpha = fo * fo * (3 - 2 * fo);

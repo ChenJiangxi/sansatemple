@@ -8,6 +8,8 @@
 //             没有片头，直接进；配乐 100 拍/分钟、有鼓点（不要太舒缓），
 //   walk      竖屏 9:16 走动长镜头版，约 3 分钟：每段都是跟着小和尚走的连贯镜头，段与段之间叠化——山门、过桥、晨钟 ‖ 上香、礼佛、
 //             升过殿顶到藏经阁抄经 ‖ 午后茶寮喝咖啡、升高看日落、柿柿如意、祈福灯廊挂灯、入夜；天色连续变化；配乐同 news（WALK、MUSIC）
+//   coffee    竖屏 9:16 小红书版，约 1 分 40 秒：只拍「半山咖啡」，不拍任何宗教内容（不跪拜、不上香、不诵经，字幕不用宗教词）——
+//             走进咖啡馆、点单、咖啡师现做、请朋友喝一杯、伞下一口一口喝、空杯扔进大纸杯、分享卡、傍晚升高俯看、入夜；配乐同 news（COFFEE、MUSIC）
 //
 //             镜头仍然慢（每个 3 小节 = 7.2 秒），每个镜头的起点都落在小节线上，画面里的动作卡在拍子上
 // 画面里不出现任何网址
@@ -16,14 +18,15 @@ import { VOICE_TIMING } from './explainer-voice.mjs';
 
 export const CUT =
   (typeof location !== 'undefined' ? new URLSearchParams(location.search).get('cut') : globalThis.process?.env?.CUT) || 'vertical';
-const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080], features: [1080, 1920], news: [1080, 1920], walk: [1080, 1920] };
+const SIZES = { vertical: [1080, 1920], short34: [1080, 1440], explainer: [1920, 1080], features: [1080, 1920], news: [1080, 1920], walk: [1080, 1920], coffee: [1080, 1920] };
 export const [W, H] = SIZES[CUT] ?? SIZES.vertical;
 export const FPS = 30;
 export const XF = 0.5;
 const NEWS = CUT === 'news';
 const WALKCUT = CUT === 'walk';
-// 两版都用明快的 100 拍配乐，成片从第一拍开始
-const BEATY = NEWS || WALKCUT;
+const COFFEECUT = CUT === 'coffee';
+// 这几版都用明快的 100 拍配乐，成片从第一拍开始
+const BEATY = NEWS || WALKCUT || COFFEECUT;
 export const BPM = BEATY ? 100 : 72;
 export const BEAT = 60 / BPM;
 export const BAR = BEAT * 4;
@@ -166,6 +169,8 @@ const LISTS = {
   // 走动长镜头：只有这一个镜头，不要片头也不要片尾落款（用户 2026-11-19：「最后一页的山寺画面也不要」）；
   // 收尾停在入夜的灯廊，镜头慢慢升高、渐暗，配乐的收尾和弦与钟声在这里放完
   walk: [['walk', 183.1]],
+  // 小红书版：只拍咖啡，一个镜头，段与段之间叠化（COFFEE.cuts）
+  coffee: [['coffee', 100.0]],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
     ['buddha', 4.0], ['triad', 3.6], ['bowClose', 4.0], ['bell', 3.6], ['drum', 3.6], ['moktak', 3.2], ['nightSide', 4.0], ['nightPagoda', 3.6],
@@ -244,10 +249,53 @@ export const WALK = (() => {
     ],
   };
 })();
+// —— 小红书版（coffee）的时间表：只拍咖啡。用户 2026-11-19：「不拍宗教，你拍喝咖啡呢，然后咖啡店名得换一下」——
+// 店名改成「半山咖啡」；画面里不跪拜、不上香、不诵经，没有「功德」，字幕不用宗教词。动作卡在拍子上：咖啡做好、递杯、每一口、空杯落桶
+export const COFFEE = (() => {
+  const cupReady = onBeat(30.0);
+  const give = onBeat(41.4);
+  return {
+    cuts: [16.8, 24.0, 43.2, 55.2, 62.4, 69.6], // 点单界面 ‖ 回到吧台 ‖ 两人坐下喝 ‖ 回收桶旁 ‖ 分享卡 ‖ 日落
+    approach: [0.4, 15.6], // 从石板小路走上露台、进厅、到吧台前
+    menu: [16.8, 24.0], // 点单界面（实拍截图）
+    brew: [24.0, cupReady],
+    cupReady,
+    toFriend: [33.6, 39.6], // 端着满杯走到朋友桌边
+    offer: give - 1.0,
+    give,
+    sit: [43.2, 55.2], // 两人坐在伞下：主角三口，朋友两口
+    sips: [onBeat(45.6), onBeat(49.2), onBeat(52.8)],
+    friendSips: [onBeat(47.4), onBeat(51.0)],
+    toBin: [55.8, 59.4],
+    binOffer: onBeat(60.6) - 1.0,
+    binDrop: onBeat(60.6),
+    card: [62.4, 69.6], // 分享卡
+    aerial: [69.6, 84.0], // 从露台升起来俯看整座咖啡馆，再落回门前，天色转暗
+    night: [84.0, 100.0],
+    nightSip: onBeat(90.0),
+    end: 96.0,
+    fadeOut: [97.2, 99.8],
+    hours: [[0, 14.6], [62.4, 15.6], [69.6, 16.6], [78, 17.5], [84, 18.4], [90, 19.6], [100, 20.3]],
+    caps: [
+      [1.0, 7.4, '半山咖啡', '山里新开了一家咖啡馆'],
+      [8.4, 14.8, '三开间 · 带露台', '吧台七米多，门口一只大纸杯'],
+      [17.4, 23.4, '点一杯', '五款都是现做'],
+      [24.6, 29.6, '咖啡师现做', '磨豆、萃取、打奶泡'],
+      [34.4, 42.6, '请朋友喝一杯', '端着满杯走到 TA 身边，递过去'],
+      [44.0, 50.8, '一杯三口', '坐在油纸伞下，慢慢喝'],
+      [56.2, 61.8, '空杯回收', '喝完扔进门口的大纸杯'],
+      [63.0, 69.0, '分享卡', '喝完生成一张，发给朋友'],
+      [72.0, 80.4, '傍晚', '天慢慢暗下来，灯一盏盏亮了'],
+      [86.0, 95.0, '入夜', '灯亮到很晚，夜里也有低因'],
+    ],
+  };
+})();
 // 配乐的段落：哪些时段鼓组收成半拍子、从哪里加笛子、哪里打镲、片尾在哪
 export const MUSIC = WALKCUT
   ? { light: [[WALK.bowStart - 0.6, WALK.bowEnd + 0.6], [WALK.sit, WALK.sheet[1] + 1.0]], leadFrom: WALK.craneLib[0], crash: [...WALK.cuts, WALK.craneLib[0], WALK.aerial[0], WALK.alleyWalk[0], WALK.nightWalk[0]], end: WALK.end }
-  : null;
+  : COFFEECUT
+    ? { light: [COFFEE.sit], leadFrom: COFFEE.aerial[0], crash: [...COFFEE.cuts, COFFEE.night[0]], end: COFFEE.end }
+    : null;
 
 // 讲解视频：每段口播配一组镜头，镜头平分这段的时长；段与段之间留一点气口
 const LEAD = 0.8, GAP = 0.55, TAIL = 3.2;

@@ -1,4 +1,4 @@
-// 山寺咖啡：东院的小茶寮里，咖啡师父现做一杯带走。
+// 半山咖啡（原名山寺咖啡，2026-11-19 为避开宗教词改名）：东院的小茶寮里，咖啡师现做一杯带走。
 // 一杯分三口喝；满杯可以请别人喝（常住僧人或别的访客）；喝完把空杯放进回收桶。
 // 这里是饮品表、手里那只杯子的模型、点单面板、手边的杯子条和分享卡片；走路、动作、联机在 main.ts。
 import * as THREE from 'three';
@@ -179,7 +179,7 @@ export class CafeUI {
     this.menu.hidden = true;
     const sheet = el('div', 'cafe-sheet');
     const head = el('header');
-    const title = el('div', 'cafe-title', '<h2>山寺咖啡</h2><small></small>');
+    const title = el('div', 'cafe-title', '<h2>半山咖啡</h2><small></small>');
     const close = el('button', 'icon-btn small', ICON_X);
     close.onclick = () => this.closeMenu(true);
     head.append(title, close);
@@ -344,8 +344,9 @@ export class CafeUI {
   }
 }
 
-// 分享卡：1080×1440 竖图。米色纸面，上面一只画出来的杯子，饮品名、一句话、落款和印
-async function shareCard(id: DrinkId, name: string, from: string | undefined, note: string) {
+// 分享卡：1080×1440 竖图。米色纸面，上面一只画出来的杯子，饮品名、一句话、落款和印。
+// foot 是最底下那行小字（默认是网站域名）；宣传片里传空字符串，画面里不出现网址
+export async function shareCard(id: DrinkId, name: string, from: string | undefined, note: string, foot = location.host || 'santemple') {
   const d = DRINK_BY_ID.get(id)!;
   const W = 1080, H = 1440;
   const c = document.createElement('canvas');
@@ -370,7 +371,7 @@ async function shareCard(id: DrinkId, name: string, from: string | undefined, no
   g.textAlign = 'center';
   g.fillStyle = '#7a6450';
   g.font = `500 30px ${serif}`;
-  spaced(g, '山 寺 咖 啡', W / 2, 140, 10);
+  spaced(g, '半 山 咖 啡', W / 2, 140, 10);
   g.font = `22px ${serif}`;
   g.fillStyle = '#a08a74';
   spaced(g, 'SANSA TEMPLE CAFÉ', W / 2, 182, 6);
@@ -491,7 +492,7 @@ async function shareCard(id: DrinkId, name: string, from: string | undefined, no
   g.drawImage(seal, W / 2 - 34, 1262, 68, 68);
   g.fillStyle = '#a08a74';
   g.font = `24px ${serif}`;
-  g.fillText(location.host || 'santemple', W / 2, H - 70);
+  if (foot) g.fillText(foot, W / 2, H - 70);
   return c.toDataURL('image/png');
 }
 

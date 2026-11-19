@@ -1,4 +1,4 @@
-// 山寺咖啡：东院一座三开间的茶寮。朱红柱、灰瓦四坡顶，檐下「山寺咖啡」金匾，两根中柱挂一副对联；
+// 半山咖啡：东院一座三开间的茶寮。朱红柱、灰瓦四坡顶，檐下「半山咖啡」金匾，两根中柱挂一副对联；
 // 厅里后墙前一整排吧台：咖啡机、两台磨豆机、手冲架、点心柜、一摞摞纸杯，墙上三块菜单牌、木架上一排豆罐；
 // 两侧山墙开格子窗，窗边各一张小桌。厅前一片木平台，四张小圆桌各撑一把油纸伞；
 // 平台角上竹竿挑着「咖啡」布幌子、一只半人高的大纸杯收空杯，入口旁立菜单木牌；前檐挂一排纸灯笼，夜里亮。
@@ -53,15 +53,15 @@ function menuTexture() {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.font = `600 64px ${KAI}`;
-    g.fillText('山寺咖啡', 256, 100);
+    g.fillText('半山咖啡', 256, 100);
     g.fillStyle = 'rgba(239,227,196,0.5)';
     g.fillRect(150, 150, 212, 2);
     g.fillStyle = '#efe3c4';
     g.font = `46px ${KAI}`;
-    ['般若拿鐵', '菩提美式', '上岸冷萃', '桂花拿鐵', '放下 · 低因'].forEach((s, i) => g.fillText(s, 256, 232 + i * 92));
+    ['山霧拿鐵', '清醒美式', '上岸冷萃', '桂花拿鐵', '放下 · 低因'].forEach((s, i) => g.fillText(s, 256, 232 + i * 92));
     g.fillStyle = 'rgba(239,227,196,0.7)';
     g.font = `34px ${KAI}`;
-    g.fillText('— 隨 喜 —', 256, 712);
+    g.fillText('— 一 杯 三 口 —', 256, 712);
   });
 }
 
@@ -97,7 +97,7 @@ function flagTexture() {
 }
 
 
-// 大纸杯回收桶的杯套：牛皮纸色，一圈印「山寺咖啡」和「空杯回收 · 惜福」，中间一方小红印
+// 大纸杯回收桶的杯套：牛皮纸色，一圈印「半山咖啡」和「空杯回收 · 下次再来」，中间一方小红印
 function binSleeveTexture() {
   const tx = canvasTex(1024, 256, (g) => {
     g.fillStyle = '#b98a5a';
@@ -111,10 +111,10 @@ function binSleeveTexture() {
     for (const x of [256, 768]) {
       g.fillStyle = '#2e2018';
       g.font = `700 78px ${KAI}`;
-      g.fillText('山寺咖啡', x, 100);
+      g.fillText('半山咖啡', x, 100);
       g.font = `40px ${KAI}`;
       g.fillStyle = '#3d2a1f';
-      g.fillText('空杯回收 · 惜福', x, 180);
+      g.fillText('空杯回收 · 下次再来', x, 180);
     }
     g.fillStyle = '#a8261c';
     for (const x of [512, 0, 1024]) g.fillRect(x - 22, 106, 44, 44);
@@ -302,12 +302,12 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   }
   {
     const w = 2.3, h = w * (340 / (260 * 4 + 140));
-    const plaque = mesh(new THREE.BoxGeometry(w, h, 0.1), [M.gold, M.gold, M.gold, M.gold, std({ map: plaqueTexture('山寺咖啡'), roughness: 0.5, metalness: 0.2 }), M.redDark]);
+    const plaque = mesh(new THREE.BoxGeometry(w, h, 0.1), [M.gold, M.gold, M.gold, M.gold, std({ map: plaqueTexture('半山咖啡'), roughness: 0.5, metalness: 0.2 }), M.redDark]);
     plaque.position.set(0, top - 0.3, 3.08);
     g.add(plaque);
   }
   // 中间两根前柱上一副对联
-  ([[-1.8, '一盞清香消俗慮'], [1.8, '半窗山色入禪心']] as [number, string][]).forEach(([x, text]) => {
+  ([[-1.8, '一盞清香消俗慮'], [1.8, '半窗山色入詩心']] as [number, string][]).forEach(([x, text]) => {
     const tex = coupletTexture(text);
     const h = 0.22 * ((110 * 7 + 60) / 128);
     const board = mesh(new THREE.BoxGeometry(0.22, h, 0.04), [darkWood, darkWood, darkWood, darkWood, std({ map: tex, roughness: 0.5 }), darkWood]);
@@ -359,7 +359,7 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   }
   const boards: THREE.MeshStandardMaterial[] = [];
   ([
-    [-2.6, '咖 啡', ['般若拿鐵', '菩提美式', '上岸冷萃', '桂花拿鐵', '放下 · 低因']],
+    [-2.6, '咖 啡', ['山霧拿鐵', '清醒美式', '上岸冷萃', '桂花拿鐵', '放下 · 低因']],
     [0, '手沖 · 雲南豆', ['保山小粒', '普洱日曬', '德宏蜜處理']],
     [2.6, '茶 點', ['桂花糕', '素月餅', '棗泥酥', '柿餅']],
   ] as [number, string, string[]][]).forEach(([x, title, lines]) => {

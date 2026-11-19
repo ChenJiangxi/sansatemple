@@ -1032,7 +1032,7 @@ async function start() {
     getLang() === 'zh'
   );
 
-  // —— 山寺咖啡：东院茶寮点一杯；分三口喝；满杯可以请人喝（常住僧人或别的访客）；空杯放回收桶 ——
+  // —— 半山咖啡：东院茶寮点一杯；分三口喝；满杯可以请人喝（常住僧人或别的访客）；空杯放回收桶 ——
   let cup: { d: DrinkId; sips: number; from?: string } | null = null;
   let brewing = false;
   let pendingGift: { id: string; d: DrinkId } | null = null;
