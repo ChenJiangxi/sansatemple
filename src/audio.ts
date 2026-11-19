@@ -17,6 +17,8 @@ export class AudioEngine {
   private bellTimer = 0;
   private chantNodes: { stop(): void } | null = null;
   private listeners = new Set<() => void>();
+  private radioBus: GainNode | null = null;
+  private ducked = false;
 
   constructor() {
     try {
@@ -116,7 +118,26 @@ export class AudioEngine {
   setVolume(bus: Bus, v: number) {
     this.volumes[bus] = v;
     localStorage.setItem(VOL_KEY, JSON.stringify(this.volumes));
-    if (this.ctx) this.buses[bus].gain.setTargetAtTime(v, this.ctx.currentTime, 0.05);
+    if (this.ctx) this.buses[bus].gain.setTargetAtTime(v * (bus === 'ambient' && this.ducked ? 0.3 : 1), this.ctx.currentTime, 0.05);
+  }
+
+  // —— 耳机电台用 ——
+  // 电台自己的一路输出（接在总音量后面，静音时一起静音）；戴上耳机时风声鸟鸣压低
+  radioOut() {
+    if (!this.ctx) return null;
+    if (!this.radioBus) {
+      this.radioBus = this.ctx.createGain();
+      this.radioBus.gain.value = 0.85;
+      this.radioBus.connect(this.master);
+    }
+    return this.radioBus;
+  }
+  duckForRadio(on: boolean) {
+    this.ducked = on;
+    if (this.ctx) this.buses.ambient.gain.setTargetAtTime(this.volumes.ambient * (on ? 0.3 : 1), this.ctx.currentTime, 0.5);
+  }
+  noiseBuffer() {
+    return this.noise;
   }
 
   private noiseSource(loop = false) {
@@ -300,6 +321,13 @@ export class AudioEngine {
     g.gain.exponentialRampToValueAtTime(0.0004, t + o.len);
     n.connect(bp).connect(g).connect(this.buses.effects);
     n.start(t, Math.random() * 3, o.len + 0.05);
+  }
+
+  // 拍立得：快门「咔嚓」一声，接着出相纸的马达声
+  shutter() {
+    this.hiss({ len: 0.05, f: 3200, q: 1.2, gain: 0.5 });
+    this.hiss({ at: 0.06, len: 0.04, f: 2200, q: 1.5, gain: 0.35 });
+    this.hiss({ at: 0.25, len: 0.9, f: 900, f2: 1100, q: 6, gain: 0.08, rate: 0.6 });
   }
 
   // 毛笔落在纸上的一声「沙」

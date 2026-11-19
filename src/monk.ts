@@ -333,6 +333,40 @@ function folds(g: THREE.BufferGeometry) {
 // 头：略扁的球
 const HEAD_C = new THREE.Vector3(0, 0.24, 0);
 const HEAD_R = new THREE.Vector3(0.28, 0.27, 0.272);
+
+// —— 头戴耳机（耳机电台）：奶白头梁、焦糖色耳罩、深色海绵垫，按 Q 版大头的尺寸做 ——
+// 各电台的拍速：戴着耳机的人跟着点头（别人看到的是同一个拍速，不一定同一拍）
+export const STATION_BPM: Record<string, number> = { lofi: 76, rain: 60, qin: 54 };
+const NOD_ACTIONS = new Set(['idle', 'bench', 'sit', 'walk']);
+let phonesKit: { band: THREE.BufferGeometry; cups: THREE.BufferGeometry; pads: THREE.BufferGeometry; rims: THREE.BufferGeometry; mats: THREE.Material[] } | null = null;
+function phonesGeo() {
+  if (phonesKit) return phonesKit;
+  const pts: THREE.Vector3[] = [];
+  for (let k = 0; k <= 24; k++) {
+    const th = THREE.MathUtils.lerp(0.1, Math.PI - 0.1, k / 24);
+    pts.push(new THREE.Vector3(Math.cos(th) * 0.305, HEAD_C.y + Math.sin(th) * 0.305, -0.03));
+  }
+  const band = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.019, 8, false);
+  band.scale(1, 1, 1.5);
+  const cupProfile = [[0, -0.03], [0.064, -0.03], [0.074, -0.022], [0.078, 0], [0.074, 0.022], [0.064, 0.03], [0, 0.03]].map(([r, y]) => new THREE.Vector2(r, y));
+  const cup = new THREE.LatheGeometry(cupProfile, 28).rotateZ(Math.PI / 2);
+  const pad = new THREE.TorusGeometry(0.058, 0.022, 10, 28).rotateY(Math.PI / 2);
+  const rim = new THREE.TorusGeometry(0.075, 0.005, 6, 28).rotateY(Math.PI / 2);
+  const side = (g: THREE.BufferGeometry, x: number) => [g.clone().translate(x, 0.205, -0.015), g.clone().translate(-x, 0.205, -0.015)];
+  phonesKit = {
+    band,
+    cups: mergeGeometries(side(cup, 0.318))!,
+    pads: mergeGeometries(side(pad, 0.282))!,
+    rims: mergeGeometries([...side(rim, 0.338)])!,
+    mats: [
+      new THREE.MeshStandardMaterial({ color: '#f1ebdf', roughness: 0.45 }),
+      new THREE.MeshPhysicalMaterial({ color: '#c47d4b', roughness: 0.38, clearcoat: 0.4, clearcoatRoughness: 0.4 }),
+      new THREE.MeshStandardMaterial({ color: '#3a302b', roughness: 0.95 }),
+      new THREE.MeshStandardMaterial({ color: '#d8b46a', metalness: 0.8, roughness: 0.35 }),
+    ],
+  };
+  return phonesKit;
+}
 const cheek = (y: number) => {
   const dy = y - HEAD_C.y;
   return dy >= 0 ? 1 : 1 + 0.05 * Math.sin(Math.min(1, -dy / 0.2) * Math.PI * 0.5);
@@ -629,6 +663,10 @@ export class Monk {
   private legR = new THREE.Group();
   private torso = new THREE.Group();
   private headG = new THREE.Group();
+  private phones: THREE.Group | null = null;
+  private phonesBpm = 0;
+  // 本机戴耳机时由电台给出准确的拍子（几拍了），别人的用本地时钟按拍速估
+  beatClock: (() => number) | null = null;
   private armL = new THREE.Group();
   private armR = new THREE.Group();
   private handL = new THREE.Group();
@@ -1042,6 +1080,31 @@ export class Monk {
   }
 
   // —— 咖啡杯 ——
+  // 戴上耳机（station 为电台名），null 摘下；Q 版才有
+  setHeadphones(station: string | null) {
+    if (REAL) return;
+    if (!station) {
+      if (this.phones) this.phones.visible = false;
+      this.phonesBpm = 0;
+      return;
+    }
+    if (!this.phones) {
+      const K = phonesGeo();
+      this.phones = new THREE.Group();
+      for (const [g, m] of [[K.band, K.mats[0]], [K.cups, K.mats[1]], [K.pads, K.mats[2]], [K.rims, K.mats[3]]] as [THREE.BufferGeometry, THREE.Material][]) {
+        const ms = new THREE.Mesh(g, m);
+        ms.castShadow = true;
+        this.phones.add(ms);
+      }
+      this.headG.add(this.phones);
+    }
+    this.phones.visible = true;
+    this.phonesBpm = STATION_BPM[station] ?? 70;
+  }
+  get headphones() {
+    return !!this.phones?.visible;
+  }
+
   setCup(kind: DrinkId | null, sips = 3) {
     if (kind !== this.cupKind) {
       if (this.cupG) {
@@ -1367,6 +1430,14 @@ export class Monk {
     this.legR.rotation.set(p.legR, p.legSpread, 0);
     this.torso.rotation.x = p.torso;
     this.headG.rotation.x = p.head;
+    this.headG.rotation.z = 0;
+    // 戴着耳机、站着或坐着时，跟着拍子轻轻点头、偶尔左右晃一下
+    if (this.phonesBpm && NOD_ACTIONS.has(this.action)) {
+      const beats = this.beatClock ? this.beatClock() : (performance.now() / 1000) * (this.phonesBpm / 60);
+      const ph = beats - Math.floor(beats);
+      this.headG.rotation.x += 0.075 * Math.pow(Math.max(0, Math.cos(ph * Math.PI * 2)), 3);
+      this.headG.rotation.z = 0.035 * Math.sin((beats / 4) * Math.PI * 2);
+    }
     this.armL.rotation.set(p.armLp, p.armLy, p.armLr);
     this.armR.rotation.set(p.armRp, p.armRy, p.armRr);
     this.handL.rotation.x = p.wrist;

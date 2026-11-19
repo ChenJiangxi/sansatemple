@@ -96,6 +96,21 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 调试：`&panel=practice&ptab=sutras|rules|look` 打开修行面板的某一页，`&read=pumen` 直接打开某部经（编号：heart、eight、amitabha、pumen、forty2、diamond）。
 
+### 耳机电台、拍立得打卡（2026-11-19）
+
+用户要「更现代一点的」玩法，挑了拍立得打卡、围炉煮茶、耳机电台。
+
+- **耳机电台**（`src/radio.ts`、`src/radio-ui.ts`）：右上角耳机按钮，三个台都用 Web Audio 实时合成，不用录音、不调用音乐生成模型：
+  - 山间 lo-fi：76 拍，电钢琴七和弦、软鼓、摇摆踩镲、贝斯、黑胶噪声；
+  - 雨天钢琴：雨声加慢分解和弦，偶尔屋檐滴水；
+  - 古琴夜话：Karplus–Strong 拨弦走 D 宫五声，偶尔滑音，低音持续，远处虫鸣。
+- **戴耳机的样子**：小和尚戴上奶白头梁、焦糖色耳罩的耳机，跟着拍子点头（`Monk.setHeadphones`、`beatClock`）。联机时状态里带 `h`（台名），别人也看得到耳机。听电台时风声鸟鸣压低。
+- **拍立得打卡**（`src/polaroid.ts`）：右上角相机按钮。
+  - 小和尚转身面向镜头，倒数 3、2、1，闪光，只取游戏画面（主循环 `post.render` 之后当场取，界面文字不入画）；
+  - 照片印成白边拍立得，底下用志莽行书手写地名和日期，像相纸一样慢慢显影，可以存图；
+  - 十二处景点第一次拍的照片收进「打卡册」（`localStorage` 的 `sansa.album`，存 260 像素小图）。
+- **调试参数**：`&radio=lofi|rain|qin`。
+
 ### 半山咖啡
 
 原名「山寺咖啡」，2026-11-19 为了能发小红书改名：店名、饮品名、对联里不再用宗教词（「般若拿铁」改「山雾拿铁」，「菩提美式」改「清醒美式」，「咖啡师父」改「咖啡师」，「禅心」改「诗心」）。
@@ -232,6 +247,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/head/` | Lee Perry-Smith「Infinite, 3D Head Scan」（triplegangers.com，经 three.js 示例分发） | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | 运行时切掉肩颈、贴图上淡化胡茬，作所有僧人的头 |
 | `public/tex/tree/` | ez-tree 自带：橡树树皮（Poly Haven）、松树树皮（TextureCan）、树叶 | CC0 / MIT | 只留用到的几张，缩到 512 像素 |
 | `public/tex/linen_*.jpg` | Poly Haven「Rough Linen」 | CC0 | 只用法线和粗糙度，缩到 512 像素，作僧袍布纹 |
+| `public/fonts/hand.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | SIL OFL | 只取拍立得相纸题字用到的字（十二处地名、山寺、数字），2026-11-19 |
 | `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
 

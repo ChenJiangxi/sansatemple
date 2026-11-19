@@ -22,6 +22,8 @@ const LANTERN_MAX = 30;
 const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d{1,2})$/;
 // 手里的咖啡：饮品.还剩几口
 const CUP_RE = /^(latte|americano|coldbrew|osmanthus|decaf)\.[0-3]$/;
+// 耳机电台：戴着耳机在听哪个台（空串是没戴）
+const RADIO_RE = /^(lofi|rain|qin)?$/;
 const LOOK_RE = /^[a-z]{2,10}\.[a-z]{2,10}\.[0-6]$/;
 const PLACES = new Set(['yard', 'altar']);
 
@@ -295,6 +297,7 @@ wss.on('connection', (ws) => {
         // 衣钵与等级：只收「小写字母.小写字母.0-6」这种格式
         if (typeof msg.k === 'string' && LOOK_RE.test(msg.k)) me.k = msg.k;
         if (msg.c === '' || (typeof msg.c === 'string' && CUP_RE.test(msg.c))) me.c = msg.c;
+        if (typeof msg.h === 'string' && RADIO_RE.test(msg.h)) me.h = msg.h;
         if (msg.s === null || (typeof msg.s === 'string' && me.s === msg.s)) me.s = msg.s ?? null;
         break;
       case 'name':
@@ -416,7 +419,7 @@ setInterval(() => {
     room.lanterns = room.lanterns.filter((l) => l.until > now);
     if (room.lanterns.length !== lb) broadcast(room, lanternMsg(room));
     if (!room.players.size) continue;
-    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n, q.k, q.c]);
+    const p = [...room.players.values()].map((q) => [q.id, q.name, q.x, q.z, q.yaw, q.a, q.s, q.n, q.k, q.c, q.h || '']);
     broadcast(room, { t: 'snap', p });
   }
 }, TICK_MS);

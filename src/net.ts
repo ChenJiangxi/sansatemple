@@ -12,6 +12,7 @@ export interface RemoteState {
   n: number; // 今天的礼拜数
   k?: string; // 衣钵与等级：僧袍.念珠.等级（旧版客户端没有）
   c?: string; // 手里的咖啡：饮品.还剩几口（空着手是空串）
+  h?: string; // 戴着耳机在听哪个台（空串是没戴）
 }
 
 export interface RoomInfo {
@@ -151,7 +152,7 @@ export class Net {
         case 'snap':
           this.emit(
             'snapshot',
-            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7], k: typeof p[8] === 'string' ? p[8] : undefined , c: typeof p[9] === 'string' ? p[9] : ''}))
+            (msg.p as any[]).map((p) => ({ id: p[0], name: p[1], x: p[2], z: p[3], yaw: p[4], a: p[5], s: p[6], n: p[7], k: typeof p[8] === 'string' ? p[8] : undefined , c: typeof p[9] === 'string' ? p[9] : '', h: typeof p[10] === 'string' ? p[10] : '' }))
           );
           break;
         case 'leave':
@@ -231,7 +232,7 @@ export class Net {
     if (this.online) this.ws!.send(JSON.stringify(obj));
   }
 
-  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number; k: string; c: string }) {
+  sendState(s: { x: number; z: number; yaw: number; a: Action; s: string | null; n: number; k: string; c: string; h: string }) {
     const now = performance.now();
     const r = (v: number) => Math.round(v * 100) / 100;
     const key = `${r(s.x)},${r(s.z)},${r(s.yaw)},${s.a},${s.s},${s.n},${s.k},${s.c}`;
@@ -240,7 +241,7 @@ export class Net {
     if (now - this.lastSentAt < 100) return;
     this.lastSent = key;
     this.lastSentAt = now;
-    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n, k: s.k, c: s.c });
+    this.send({ t: 'state', x: r(s.x), z: r(s.z), yaw: r(s.yaw), a: s.a, s: s.s, n: s.n, k: s.k, c: s.c, h: s.h });
   }
 
   setName(name: string) {

@@ -602,3 +602,48 @@ canvas.main.point { cursor: pointer; }
 .wish-card-acts { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .wish-report { border: 0; background: none; color: #a08a74; font: inherit; font-size: 11.5px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .wish-report[hidden] { display: none; }
+
+/* —— 耳机电台：右上角的耳机按钮、选台的小面板 —— */
+.radio-pop { position: absolute; top: calc(64px + var(--safe-t)); right: 14px; z-index: 8; display: flex; flex-direction: column; gap: 2px; padding: 6px; border-radius: 16px; height: auto; min-width: 168px; }
+.radio-pop[hidden] { display: none; }
+.radio-st { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 12px; color: var(--text); font-size: 14px; text-align: left; }
+.radio-st:hover { background: rgba(255, 255, 255, 0.08); }
+.radio-st i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.25); flex: none; }
+.radio-st.on { color: var(--accent); }
+.radio-st.on i { background: var(--accent); box-shadow: 0 0 0 4px rgba(234, 213, 138, 0.18); animation: radio-pulse 1.6s ease-in-out infinite; }
+@keyframes radio-pulse { 50% { box-shadow: 0 0 0 7px rgba(234, 213, 138, 0.05); } }
+
+/* —— 拍立得打卡：倒数、闪光、显影的相纸、打卡册 —— */
+.pola-count { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; z-index: 11; font: 600 96px/1 'Songti SC', serif; color: #fff; text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45); opacity: 0; }
+.pola-count.go { animation: pola-count 0.65s ease-out; }
+@keyframes pola-count { 0% { opacity: 0; transform: scale(1.4); } 25% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.9); } }
+.pola-flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 12; }
+.pola-flash.go { animation: pola-flash 0.6s ease-out; }
+@keyframes pola-flash { 0% { opacity: 0.95; } 100% { opacity: 0; } }
+.pola { position: absolute; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(12, 10, 8, 0.45); }
+.pola[hidden], .pola-sheet[hidden], .pola-album[hidden] { display: none; }
+.pola-sheet { position: relative; display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.pola-photo { width: min(78vw, 360px); aspect-ratio: 900 / 1080; transform: rotate(-2.2deg); box-shadow: 0 22px 50px rgba(0, 0, 0, 0.45); border-radius: 2px; background: #f6f2e8; }
+.pola-photo.dev { animation: pola-dev 3.2s ease-out, pola-out 0.6s cubic-bezier(0.2, 0.9, 0.3, 1); }
+@keyframes pola-dev { 0% { filter: brightness(0.25) sepia(0.8) blur(2px); } 60% { filter: brightness(0.85) sepia(0.3) blur(0.3px); } 100% { filter: none; } }
+@keyframes pola-out { 0% { transform: translateY(40px) rotate(0deg); opacity: 0; } 100% { transform: translateY(0) rotate(-2.2deg); opacity: 1; } }
+.pola-close { position: absolute; top: -6px; right: -6px; background: var(--glass-strong); color: var(--text); }
+.pola-acts { display: flex; gap: 10px; }
+.pola-acts .pill-btn.fresh { box-shadow: 0 0 0 2px var(--accent); }
+.pola-album { width: min(94vw, 460px); max-height: 90vh; overflow-y: auto; padding: 16px; border-radius: var(--radius-sheet); background: #f3eee2; color: #33261b; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42); }
+.pola-album header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+.pola-album header .icon-btn { color: #6a5340; }
+.pola-album-title { flex: 1; }
+.pola-album-title h2 { margin: 0; font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-size: 20px; letter-spacing: 3px; }
+.pola-album-title small { color: #8a6e58; font-size: 12px; }
+.pola-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 10px; }
+.pola-grid figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.pola-mini { width: 100%; aspect-ratio: 900 / 1080; background: #fbf8f1; border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); display: grid; place-items: center; }
+.pola-grid figure:nth-child(odd) .pola-mini { transform: rotate(-1.5deg); }
+.pola-grid figure:nth-child(even) .pola-mini { transform: rotate(1.2deg); }
+.pola-mini img { width: 100%; height: 100%; object-fit: cover; }
+.pola-grid figure:not(.got) .pola-mini::after { content: ''; width: 72%; aspect-ratio: 1; margin-bottom: 18%; background: rgba(60, 40, 20, 0.07); }
+.pola-grid figcaption { font-size: 12px; color: #6a5340; }
+.pola-grid figure:not(.got) figcaption { color: #a8998a; }
+.pola-acts .pill-btn { display: inline-flex; align-items: center; text-decoration: none; height: 40px; }
+.pola-acts .pill-btn:not(.primary) { color: var(--text); border-color: var(--line); background: var(--glass-strong); }

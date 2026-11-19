@@ -27,6 +27,9 @@ import { buildCafe } from './world/cafe';
 import { buildGarden } from './world/garden';
 import { WishUI, wishStore, assignHooks, newWishId, type Wish } from './wishes';
 import { CafeUI, parseCup, cupCode, SIPS, BREW_MS, DRINK_BY_ID, type DrinkId } from './coffee';
+import { Radio, type StationId } from './radio';
+import { mountRadioUI } from './radio-ui';
+import { PolaroidUI } from './polaroid';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
 import { Monk, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
@@ -1034,6 +1037,26 @@ async function start() {
   let cup: { d: DrinkId; sips: number; from?: string } | null = null;
   let brewing = false;
   let pendingGift: { id: string; d: DrinkId } | null = null;
+  // —— 拍立得打卡：右上角相机；倒数时小和尚转身面向镜头，拍下画面（不带界面），印成拍立得，收进打卡册 ——
+  let grabFrame: ((c: HTMLCanvasElement) => void) | null = null;
+  new PolaroidUI(ui.root, {
+    name: () => name,
+    where: () => ({ x: player.x, z: player.z }),
+    pose: () => {
+      if (me.action === 'idle' && !player.seat) player.yaw = Math.atan2(camera.position.x - player.x, camera.position.z - player.z);
+    },
+    grab: (cb) => (grabFrame = cb),
+    shutter: () => audio.shutter(),
+  });
+
+  // —— 耳机电台：右上角选台；戴上耳机的小和尚跟着拍子点头，别人也看得到耳机 ——
+  const radio = new Radio(audio);
+  mountRadioUI(ui.root, radio, (st: StationId | null) => {
+    me.setHeadphones(st);
+    me.beatClock = st ? () => radio.beats() : null;
+    if (st) ui.toast(t('radioOn', { x: t(`station_${st}` as Key) }));
+  });
+
   const cafeUI = new CafeUI(ui.root, {
     choose: (d) => brewCoffee(d),
     sip: () => sipCup(),
@@ -1839,6 +1862,7 @@ async function start() {
     x: number; z: number; yaw: number; tx: number; tz: number; tyaw: number; a: Action; s: string | null; n: number;
     k: string; lv: number; // 衣钵与等级（旧版客户端没有，lv 为 -1）
     c: string; // 手里的咖啡
+    h: string; // 戴着耳机在听哪个台（空串是没戴）
   }
   function renderRemoteTag(r: Remote) {
     r.tag.innerHTML = (r.lv >= 0 ? `<span class="title">${t(LEVELS[r.lv].key as Key)}</span>` : '') + escapeHtml(r.name);
@@ -1872,7 +1896,7 @@ async function start() {
         const tag = document.createElement('div');
         tag.className = 'tag other';
         ui.tags.appendChild(tag);
-        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n, k: '', lv: -1, c: '' };
+        r = { id: p.id, name: '', monk, tag, x: p.x, z: p.z, yaw: p.yaw, tx: p.x, tz: p.z, tyaw: p.yaw, a: p.a, s: p.s, n: p.n, k: '', lv: -1, c: '', h: '' };
         remotes.set(p.id, r);
       }
       if (r.name !== p.name || r.k !== (p.k ?? '')) {
@@ -1896,6 +1920,11 @@ async function start() {
         r.c = pc;
         r.monk.setCup(now?.d ?? null, now?.sips ?? 0);
         if (before && now && before.d === now.d && now.sips < before.sips) r.monk.sip();
+      }
+      const ph = p.h ?? '';
+      if (ph !== r.h) {
+        r.h = ph;
+        r.monk.setHeadphones(ph || null);
       }
     }
     for (const id of [...remotes.keys()]) if (!seen.has(id)) removeRemote(id);
@@ -1985,6 +2014,13 @@ async function start() {
     const dbgCup = sp.get('coffee');
     if (dbgCup && DRINK_BY_ID.has(dbgCup as DrinkId)) setTimeout(() => setCup({ d: dbgCup as DrinkId, sips: Number(sp.get('sips') ?? SIPS) }), 1000);
     if (sp.has('sipnow')) setTimeout(() => me.sip(), Number(sp.get('sipnow')) || 3000);
+    // 调试：&radio=lofi|rain|qin 直接戴上耳机开台
+    const dbgRadio = sp.get('radio') as StationId | null;
+    if (dbgRadio && ['lofi', 'rain', 'qin'].includes(dbgRadio)) {
+      me.setHeadphones(dbgRadio);
+      me.beatClock = () => radio.beats();
+      radio.start(dbgRadio).catch(() => {});
+    }
     if (sp.has('offernow')) setTimeout(() => me.offer(), Number(sp.get('offernow')) || 3000);
     const dbgBrew = sp.get('brew');
     if (dbgBrew && DRINK_BY_ID.has(dbgBrew as DrinkId)) {
@@ -2725,9 +2761,15 @@ async function start() {
     }
     env.tick(dt, camera.position);
     post.render(dt / slowmo);
+    // 拍立得：在这一帧画完的同时取画面（画布不保留上一帧，必须当场取）
+    if (grabFrame) {
+      const cb = grabFrame;
+      grabFrame = null;
+      cb(renderer.domElement);
+    }
     stage.render(dt);
     updateTags();
-    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())), c: cupCode(cup) });
+    net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())), c: cupCode(cup), h: radio.station ?? '' });
     if (!booted) {
       booted = true;
       bootEl.classList.add('gone');
