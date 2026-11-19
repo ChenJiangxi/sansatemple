@@ -4,7 +4,7 @@ import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import type { Look } from './post';
 import { rng } from '../textures';
 import { pbr, loadTexture } from './pbr';
-import { HALL, COURT, POND, BELL, DRUM, SIDE_HALLS, BRIDGE, LIBRARY, MAPLES, PINES } from '../layout';
+import { HALL, COURT, POND, BELL, SIDE_HALLS, BRIDGE, LIBRARY, MAPLES, PINES } from '../layout';
 
 export type TimeMode = 'auto' | 'dawn' | 'day' | 'dusk' | 'night';
 
@@ -392,9 +392,8 @@ export function buildTerrain(scene: THREE.Scene) {
   // 中轴参道：山门 → 石拱桥 → 大殿台阶（桥上不铺路面）
   addPath(0, COURT.z1 + 2, 0, BRIDGE.z1, 4.2);
   addPath(0, BRIDGE.z0, 0, HALL.stepZ1 - 0.1, 4.2);
-  // 通往钟楼、鼓楼
+  // 通往钟楼（东边原来的鼓楼 2026-11-19 去掉了，那里种了一棵银杏）
   addPath(-2, BELL.z + 0.5, BELL.x + BELL.size / 2 + 0.6, BELL.z + 0.5, 2.4);
-  addPath(2, DRUM.z + 0.5, DRUM.x - DRUM.size / 2 - 0.6, DRUM.z + 0.5, 2.4);
   // 放生池两岸的小路
   for (const sx of [-1, 1]) addPath(sx * 2.2, BRIDGE.z0 - 0.6, sx * (POND.rx + 2.5), POND.z, 2.0);
   // 大殿前横向的路，连到两侧配殿

@@ -55,9 +55,8 @@ export const LIB_DESKS = [-4.6, 0, 4.6];
 export const LIB_DESK_Z = 0.1;
 export const LIB_SEAT_Z = LIB_DESK_Z + 0.82;
 
-// 钟楼（左）与鼓楼（右）：晨钟暮鼓
+// 钟楼（左）；右边原来的鼓楼 2026-11-19 去掉了
 export const BELL = { x: -24, z: 27, size: 6.4, platform: 0.22 };
-export const DRUM = { x: 24, z: 27, size: 6.4, platform: 0.22 };
 
 export const SPAWN = { x: 0, z: 38, yaw: Math.PI };
 
@@ -181,6 +180,8 @@ export const MAPLES: [number, number, number][] = [
   [19, 4, 1.2], [21, 17, 1.25], [37, 26, 1.1], [18, 42, 1.1], [33.5, 58.5, 1.2], [21, 63, 1.0],
   [-9, 31, 0.9], [9, 31, 0.9],
   [-24, -27, 1.35], [24, -28, 1.35], [-38, -14, 1.2], [38, -16, 1.2], [-38, 4, 1.05], [38, 6, 1.05],
+  // 原来鼓楼的位置（2026-11-19 去掉鼓楼），种一棵大银杏，和西边的钟楼相对
+  [24, 27, 1.3],
 ];
 
 export const PINES: [number, number, number][] = [
@@ -192,12 +193,12 @@ export const ROCKS: [number, number, number][] = [
 ];
 
 
-// 配殿前、通往钟鼓楼的石灯（夜里点亮，照亮寺院两侧）
+// 配殿前、通往钟楼的石灯（夜里点亮，照亮寺院两侧）
 export const SIDE_LAMPS: [number, number][] = [
   [-20.6, -11], [-20.6, -4], [-20.6, 3], [-20.6, 10], [-20.6, 17],
   [20.6, -11], [20.6, -4], [20.6, 3], [20.6, 10], [20.6, 17],
-  // 通往钟楼、鼓楼的小路两旁
-  [-11.5, 29.4], [-16.5, 29.4], [11.5, 29.4], [16.5, 29.4],
+  // 通往钟楼的小路两旁（东边原来通鼓楼的那两盏随鼓楼一起去掉了）
+  [-11.5, 29.4], [-16.5, 29.4],
   // 放生池两侧石凳旁
   [-17, 52.2], [17, 52.2], [-16, 45.5], [16, 45.5],
   // 藏经阁台阶两旁
@@ -265,8 +266,8 @@ for (const p of PAGODAS) {
 // 香炉两旁的烛台架
 for (const sx of [-1, 1]) boxes.push({ x0: INCENSE.x + sx * 2.6 - 0.85, x1: INCENSE.x + sx * 2.6 + 0.85, z0: INCENSE.z - 0.7, z1: INCENSE.z - 0.1 });
 for (const x of HALL.colX) circles.push({ x, z: HALL.colZFront, r: 0.4 });
-// 钟楼、鼓楼：四根柱子和中间的钟（鼓）
-for (const T of [BELL, DRUM]) {
+// 钟楼：四根柱子和中间的钟
+for (const T of [BELL]) {
   const h = T.size / 2 - 0.4;
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) circles.push({ x: T.x + sx * h, z: T.z + sz * h, r: 0.38 });
   circles.push({ x: T.x, z: T.z, r: 1.35 });
@@ -351,7 +352,7 @@ export function heightAt(x: number, z: number): number {
     const t = (z - h.stepZ0) / (h.stepZ1 - h.stepZ0);
     return h.baseH * (1 - t);
   }
-  for (const T of [BELL, DRUM]) {
+  for (const T of [BELL]) {
     const b = T.size / 2 + 0.6;
     if (Math.abs(x - T.x) < b && Math.abs(z - T.z) < b) return T.platform;
   }

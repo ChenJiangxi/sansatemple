@@ -400,40 +400,6 @@ export class AudioEngine {
     n.start(t, 0, 0.3);
   }
 
-  // 鼓：低沉的一声“咚”，带一点皮面的噪声
-  drum(gain = 1) {
-    if (!this.enabled || !this.ctx) return;
-    const ctx = this.ctx;
-    const t = ctx.currentTime;
-    const out = ctx.createGain();
-    out.gain.value = 0.9 * gain;
-    out.connect(this.buses.ambient);
-    const send = ctx.createGain();
-    send.gain.value = 0.7;
-    out.connect(send).connect(this.reverbSend);
-    for (const [f0, f1, a, d] of [[92, 58, 0.9, 1.6], [150, 96, 0.35, 0.7], [230, 160, 0.15, 0.35]] as const) {
-      const o = ctx.createOscillator();
-      o.frequency.setValueAtTime(f0, t);
-      o.frequency.exponentialRampToValueAtTime(f1, t + 0.25);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(a, t + 0.006);
-      g.gain.exponentialRampToValueAtTime(0.0005, t + d);
-      o.connect(g).connect(out);
-      o.start(t);
-      o.stop(t + d + 0.1);
-    }
-    const n = this.noiseSource();
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 900;
-    const ng = ctx.createGain();
-    ng.gain.setValueAtTime(0.5, t);
-    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-    n.connect(lp).connect(ng).connect(out);
-    n.start(t, Math.random() * 3, 0.25);
-  }
-
   // 念佛：共振峰合成的男声齐诵“南无阿弥陀佛”，配木鱼
   startChant() {
     if (!this.enabled || !this.ctx || this.chanting) return;

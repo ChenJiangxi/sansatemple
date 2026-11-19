@@ -35,7 +35,7 @@ import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
 import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY, cafeLocal } from './layout';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, DRUM, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -172,9 +172,7 @@ async function start() {
   const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
   const residents = buildResidents(scene, {
     bell: buildings.bell,
-    drum: buildings.drum,
     onBell: () => setTimeout(() => audio.templeBell(distGain(BELL.x, BELL.z)), 1050),
-    onDrum: () => setTimeout(() => audio.drum(distGain(DRUM.x, DRUM.z) * 0.8), 320),
     onQing: () => audio.bell(0.4 * distGain(0, -16)),
     onFeed: (x, z) => pond.feed(x, z),
   });
@@ -196,7 +194,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...buildings.drum.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, ...garden.interactives, pond.water];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, ...garden.interactives, pond.water];
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
   interactives.push(...sideHalls.interactives, ...sideHalls.doorHits, ...sideHalls.deskHits);
@@ -367,7 +365,7 @@ async function start() {
     replans: 0,
   };
   let claimed: Seat | null = null; // 已向服务器申请、正在走过去的座位
-  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'drum' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' | 'cafe' | 'bin' | 'gift' | 'wish' | 'hang' | 'persimmon' = null;
+  let intent: null | 'bow' | 'sit' | 'incense' | 'bell' | 'lantern' | 'feed' | 'fortune' | 'climb' | 'desk' | 'cafe' | 'bin' | 'gift' | 'wish' | 'hang' | 'persimmon' = null;
   const keys = new Set<string>();
 
   const myTag = document.createElement('div');
@@ -392,9 +390,9 @@ async function start() {
 
   // —— 常住僧人：名字标签、说话气泡、整点共修 ——
   const ROLE_KEY: Record<Role, Key> = {
-    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', drum: 'roleDrum', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian', barista: 'roleBarista', waiter: 'roleWaiter',
+    sweeper: 'roleSweeper', greeter: 'roleGreeter', elder: 'roleElder', xiangdeng: 'roleXiangdeng', weina: 'roleWeina', bell: 'roleBell', walker: 'roleWalker', novice: 'roleNovice', assembly: 'roleWeina', librarian: 'roleLibrarian', barista: 'roleBarista', waiter: 'roleWaiter',
   };
-  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', drum: 'npcDrum', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian', barista: 'npcBarista', waiter: 'npcWaiter' };
+  const LINES_KEY: Partial<Record<Role, Key>> = { sweeper: 'npcSweeper', greeter: 'npcGreeter', elder: 'npcElder', xiangdeng: 'npcXiangdeng', weina: 'npcWeina', bell: 'npcBell', walker: 'npcWalker', novice: 'npcNovice', librarian: 'npcLibrarian', barista: 'npcBarista', waiter: 'npcWaiter' };
   const npcUi = residents.list
     .filter((r) => r.role !== 'assembly')
     .map((r) => {
@@ -760,7 +758,6 @@ async function start() {
     else if (claimed) ui.setStatus('walkingToSeat', 'stop');
     else if (intent === 'incense') ui.setStatus('incenseWalking');
     else if (intent === 'bell') ui.setStatus('bellWalking');
-    else if (intent === 'drum') ui.setStatus('drumWalking');
     else if (intent === 'lantern') ui.setStatus('statusLantern');
     else if (intent === 'feed') ui.setStatus('statusFeed');
     else if (intent === 'fortune') ui.setStatus('statusFortune');
@@ -1307,6 +1304,7 @@ async function start() {
         garden.rise(hook, new THREE.Vector3(player.x + Math.sin(player.yaw) * 0.25, player.y + 1.45, player.z + Math.cos(player.yaw) * 0.25));
         net.wish({ id: w.id, text: w.text, c: w.c, k: w.k });
         audio.bell(0.25);
+        award('wish');
       };
       me.setAction('hang', true);
       refreshStatus();
@@ -1652,42 +1650,25 @@ async function start() {
 
   // —— 钟楼：撞钟 ——
   let lastBell = 0;
-  // 钟楼撞钟、鼓楼击鼓（晨钟暮鼓），同房间的人也会听到
-  const lastStrike: Record<'bell' | 'drum', number> = { bell: -1e9, drum: -1e9 };
-  function strikeInstrument(kind: 'bell' | 'drum') {
-    if (performance.now() - lastStrike[kind] < (kind === 'bell' ? 15000 : 4000)) {
+  // 钟楼撞钟，同房间的人也会听到（2026-11-19 去掉了鼓楼击鼓，钟和鼓只留钟）
+  const lastStrike = { bell: -1e9 };
+  function strikeInstrument() {
+    if (performance.now() - lastStrike.bell < 15000) {
       ui.toast(t('bellCooldown'));
       return;
     }
     if (player.seat) standUp();
     if (overlay) overlay === 'moktak' ? closeMoktak() : closeRosary();
-    intent = kind;
+    intent = 'bell';
     refreshStatus();
-    const b = kind === 'bell' ? buildings.bell : buildings.drum;
+    const b = buildings.bell;
     walkTo(b.standX, b.standZ, () => {
       intent = null;
       player.yaw = b.standYaw;
-      if (kind === 'bell') {
-        // 撞钟要自己拉：按住拉撞木，松手撞
-        me.setAction('hapjang');
-        charge.open();
-        refreshStatus();
-        return;
-      }
-      lastStrike[kind] = performance.now();
-      gain(3);
+      // 撞钟要自己拉：按住拉撞木，松手撞
       me.setAction('hapjang');
+      charge.open();
       refreshStatus();
-      b.strike();
-      progress.add(kind);
-      award(kind);
-      setTimeout(() => {
-        audio.drum();
-        net.ringBell(kind);
-      }, 320);
-      setTimeout(() => {
-        if (me.action === 'hapjang') me.setAction(baseAction());
-      }, HAPJANG_DURATION * 1000);
     });
   }
   // 松手：落在金色区间最好，钟声最洪亮、传得最远
@@ -1701,7 +1682,7 @@ async function start() {
       award('bell');
       setTimeout(() => {
         audio.templeBell(0.4 + 0.6 * q);
-        net.ringBell('bell');
+        net.ringBell();
       }, 700);
       const li = Math.round(2 + q * 16);
       const at = { x: innerWidth / 2, y: innerHeight * 0.42 };
@@ -1717,10 +1698,9 @@ async function start() {
     },
   });
 
-  net.on('bell', (_from, kind) => {
-    const b = kind === 'drum' ? buildings.drum : buildings.bell;
-    b.strike();
-    setTimeout(() => (kind === 'drum' ? audio.drum(0.6) : audio.templeBell(0.6)), kind === 'drum' ? 320 : 1050);
+  net.on('bell', () => {
+    buildings.bell.strike();
+    setTimeout(() => audio.templeBell(0.6), 1050);
   });
 
   // —— 木鱼 ——
@@ -1982,7 +1962,7 @@ async function start() {
     if (act === 'lantern') setTimeout(requestLantern, 1200);
     if (act === 'feed') setTimeout(() => requestFeed(POND.x - 3, POND.z - 1.5), 1200);
     if (act === 'fortune') setTimeout(requestFortune, 1200);
-    if (act === 'bell') setTimeout(() => strikeInstrument('bell'), 1200);
+    if (act === 'bell') setTimeout(() => strikeInstrument(), 1200);
     // 调试：&do=cafe 走去点咖啡；&coffee=饮品&sips=n 直接端上一杯；&sipnow / &offernow 过几秒做一次喝、递的动作
     if (act === 'cafe') setTimeout(requestCafe, 1200);
     // 调试：&do=wish 走去祈福台写心愿，&do=persimmon 去柿饼架；&wishdemo=n 在灯廊里挂 n 盏假心愿（只在本机）
@@ -2115,7 +2095,7 @@ async function start() {
   }
   const camRay = new THREE.Raycaster();
   // 挡镜头的建筑：用简单的长方体代替真实模型（算起来很省）。镜头和人之间被挡住，就把镜头拉到挡板前面；
-  // 钟鼓楼、山门只挡屋顶那一截，镜头可以从柱子之间、门洞里看过去；人本身在哪个长方体里，就不算它
+  // 钟楼、山门只挡屋顶那一截，镜头可以从柱子之间、门洞里看过去；人本身在哪个长方体里，就不算它
   const camBoxes: THREE.Box3[] = [];
   {
     const B = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => camBoxes.push(new THREE.Box3(new THREE.Vector3(x0, y0, z0), new THREE.Vector3(x1, y1, z1)));
@@ -2133,7 +2113,7 @@ async function start() {
       const ax = (across ? h.w : h.d) / 2 + 1.8, az = (across ? h.d : h.w) / 2 + 1.8;
       B(h.x - ax, 0, h.z - az, h.x + ax, h === HALLS[2] ? 14 : 9.5, h.z + az);
     }
-    for (const T of [BELL, DRUM]) B(T.x - 4.7, 5.0, T.z - 4.7, T.x + 4.7, 9.2, T.z + 4.7);
+    for (const T of [BELL]) B(T.x - 4.7, 5.0, T.z - 4.7, T.x + 4.7, 9.2, T.z + 4.7);
     for (const p of PAGODAS) B(p.x - 1.7 * p.s, 0, p.z - 1.7 * p.s, p.x + 1.7 * p.s, 22, p.z + 1.7 * p.s);
   }
   const camHit = new THREE.Vector3();
@@ -2297,8 +2277,8 @@ async function start() {
       requestIncense(p.interact.type === 'altarIncense' ? 'altar' : 'yard');
       return;
     }
-    if (p.interact?.type === 'bell' || p.interact?.type === 'drum') {
-      strikeInstrument(p.interact.type);
+    if (p.interact?.type === 'bell') {
+      strikeInstrument();
       return;
     }
     if (p.interact?.type === 'lantern') {
@@ -2394,7 +2374,6 @@ async function start() {
       label = s && seatTaken(s) ? t('seatTaken') : t('sit');
     } else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
     else if (it?.type === 'bell') label = t('ringBell');
-    else if (it?.type === 'drum') label = t('beatDrum');
     else if (it?.type === 'lantern') label = t('tipLantern');
     else if (it?.type === 'fortune') label = t('tipFortune');
     else if (it?.type === 'pagoda') label = t('placePagoda');
@@ -2727,7 +2706,6 @@ async function start() {
     cafe.update(dt, elapsed);
     garden.update(dt, elapsed);
     buildings.bell.update(dt);
-    buildings.drum.update(dt);
     env.follow(player.x, player.z);
     for (const [i, f] of hall.candleFlames.entries()) f.scale.set(1, 2.2 + Math.sin(elapsed * 9 + i * 2) * 0.25, 1);
     if (markerLife > 0) {

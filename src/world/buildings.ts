@@ -1,7 +1,7 @@
-// 配殿（观音殿、地藏殿）与钟楼、鼓楼：朱红柱、格扇门、彩画梁、带鸱吻的屋顶
+// 配殿（观音殿、地藏殿）与钟楼：朱红柱、格扇门、彩画梁、带鸱吻的屋顶
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { HALLS, BELL, DRUM } from '../layout';
+import { HALLS, BELL } from '../layout';
 import { plaqueTexture } from '../textures';
 import { worldBox, mesh, lathe } from './util';
 import { buildTempleBell } from './bronze';
@@ -235,7 +235,7 @@ export interface StrikeBuild {
   aim?(p: number): void; // 撞钟时把撞木往后拉（0 到 1）
 }
 
-// 钟鼓楼的亭子：台基、四根红柱、彩画梁、带鸱吻的四坡顶、匾额
+// 钟楼的亭子：台基、四根红柱、彩画梁、带鸱吻的四坡顶、匾额
 function pavilion(T: { x: number; z: number; size: number; platform: number }, name: string, group: THREE.Group) {
   const M = chineseMats();
   const g = new THREE.Group();
@@ -352,176 +352,6 @@ function bellTower(group: THREE.Group): StrikeBuild {
   };
 }
 
-function drumTower(group: THREE.Group): StrikeBuild {
-  const { g } = pavilion(DRUM, '鼓樓', group);
-  const M = chineseMats();
-  // 大鼓：鼓面朝左右（东边击鼓），鼓腔微鼓、朱漆描金带，鼓面边上两圈金钉；
-  // 鼓架是四根立柱（柱头莲苞）围在鼓外，两侧铜环把鼓吊在柱间的横枋上，下面一道托梁
-  const drum = new THREE.Group();
-  const HALF = 0.6;
-  const rAt = (x: number) => 0.9 + 0.13 * (1 - (x / HALF) ** 2);
-  const prof: [number, number][] = [[0, -HALF + 0.03]];
-  for (let i = 0; i <= 16; i++) {
-    const x = -HALF + (i / 16) * HALF * 2;
-    prof.push([rAt(x), x]);
-  }
-  prof.push([0, HALF - 0.03]);
-  const body = mesh(lathe(prof, 48), M.red);
-  body.rotation.z = Math.PI / 2;
-  drum.add(body);
-  const goldBand = (x: number, w: number) => {
-    const r0 = rAt(x);
-    const band = mesh(lathe([[r0 + 0.004, -w / 2], [r0 + 0.012, -w / 4], [r0 + 0.012, w / 4], [r0 + 0.004, w / 2]], 48), M.gold, false);
-    band.rotation.z = Math.PI / 2;
-    band.position.x = x;
-    drum.add(band);
-  };
-  for (const x of [-0.42, 0.42]) goldBand(x, 0.035);
-  for (const x of [-0.12, 0.12]) goldBand(x, 0.02);
-  // 鼓面：牛皮色，中间常敲的地方略深，边上一道暗圈
-  const headTex = (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const g = c.getContext('2d')!;
-    const grd = g.createRadialGradient(128, 128, 10, 128, 128, 128);
-    grd.addColorStop(0, '#b89a68');
-    grd.addColorStop(0.35, '#d2b884');
-    grd.addColorStop(0.85, '#dcc697');
-    grd.addColorStop(0.95, '#8a6a44');
-    grd.addColorStop(1, '#5a3d26');
-    g.fillStyle = grd;
-    g.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 500; i++) {
-      g.fillStyle = Math.random() < 0.5 ? 'rgba(120,90,50,0.06)' : 'rgba(255,245,220,0.05)';
-      g.beginPath();
-      g.arc(Math.random() * 256, Math.random() * 256, 2 + Math.random() * 8, 0, Math.PI * 2);
-      g.fill();
-    }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  })();
-  const headMat = new THREE.MeshStandardMaterial({ map: headTex, roughness: 0.75 });
-  const nails = new THREE.InstancedMesh(new THREE.SphereGeometry(0.026, 8, 6), M.gold, 2 * 2 * 44);
-  let ni = 0;
-  const nm = new THREE.Matrix4();
-  for (const s of [-1, 1]) {
-    const r0 = rAt(HALF);
-    const head = mesh(new THREE.CircleGeometry(r0 - 0.01, 48), headMat);
-    head.rotation.y = (s * Math.PI) / 2;
-    head.position.x = s * (HALF + 0.004);
-    drum.add(head);
-    for (const [dx, n] of [[0.035, 44], [0.085, 44]] as const) {
-      const x = s * (HALF - dx);
-      for (let k = 0; k < n; k++) {
-        const a = ((k + (dx > 0.05 ? 0.5 : 0)) / n) * Math.PI * 2;
-        const rr = rAt(x) + 0.004;
-        nm.makeTranslation(x, Math.cos(a) * rr, Math.sin(a) * rr);
-        nails.setMatrixAt(ni++, nm);
-      }
-    }
-  }
-  drum.add(nails);
-  // 两侧的铜环
-  const ringMat = new THREE.MeshStandardMaterial({ color: '#8a6a3a', metalness: 0.85, roughness: 0.38 });
-  for (const sz of [-1, 1]) {
-    const lug = mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.08, 10), ringMat, false);
-    lug.rotation.x = Math.PI / 2;
-    lug.position.z = sz * (rAt(0) + 0.03);
-    drum.add(lug);
-    const ring = mesh(new THREE.TorusGeometry(0.09, 0.016, 8, 20), ringMat, false);
-    ring.position.set(0, 0, sz * (rAt(0) + 0.13));
-    drum.add(ring);
-  }
-  const CY = DRUM.platform + 1.42;
-  drum.position.set(0, CY, 0);
-  g.add(drum);
-  // 鼓架
-  const frame: THREE.BufferGeometry[] = [];
-  const PZ = rAt(0) + 0.32, PX = 0.62, TOP = CY + 0.42;
-  for (const sz of [-1, 1]) {
-    for (const sx of [-1, 1]) {
-      const post = new THREE.CylinderGeometry(0.075, 0.085, TOP - DRUM.platform, 12);
-      post.translate(sx * PX, DRUM.platform + (TOP - DRUM.platform) / 2, sz * PZ);
-      frame.push(post);
-      const foot = new THREE.CylinderGeometry(0.12, 0.14, 0.1, 12);
-      foot.translate(sx * PX, DRUM.platform + 0.05, sz * PZ);
-      frame.push(foot);
-    }
-    // 柱间上、下两道横枋，铜环挂在上枋正中
-    const upper = worldBox(PX * 2 + 0.2, 0.12, 0.12, 1);
-    upper.translate(0, CY + 0.12, sz * PZ);
-    frame.push(upper);
-    const lower = worldBox(PX * 2, 0.1, 0.1, 1);
-    lower.translate(0, DRUM.platform + 0.32, sz * PZ);
-    frame.push(lower);
-    const hook = worldBox(0.05, 0.12, 0.05, 1);
-    hook.translate(0, CY + 0.02, sz * (rAt(0) + 0.2));
-    frame.push(hook);
-  }
-  // 底下前后两道纵枋，中间一道托梁贴着鼓腹
-  for (const sx of [-1, 1]) {
-    const rail = worldBox(0.1, 0.1, PZ * 2, 1);
-    rail.translate(sx * PX, DRUM.platform + 0.32, 0);
-    frame.push(rail);
-  }
-  const cradle = worldBox(PX * 2 - 0.1, 0.1, 0.5, 1);
-  cradle.translate(0, CY - rAt(0) - 0.06, 0);
-  frame.push(cradle);
-  for (const sx of [-1, 1]) {
-    const strut = worldBox(0.1, CY - rAt(0) - 0.11 - (DRUM.platform + 0.37), 0.1, 1);
-    strut.translate(sx * (PX - 0.18), (CY - rAt(0) - 0.11 + DRUM.platform + 0.37) / 2, 0);
-    frame.push(strut);
-  }
-  g.add(mesh(mergeGeometries(frame.map((x) => (x.index ? x.toNonIndexed() : x)).map((x) => {
-    x.deleteAttribute('uv');
-    return x;
-  })), M.redDark));
-  // 柱头莲苞
-  const bud = lathe([[0, 0], [0.09, 0.0], [0.11, 0.05], [0.1, 0.11], [0.06, 0.17], [0, 0.21]], 12);
-  for (const sz of [-1, 1])
-    for (const sx of [-1, 1]) {
-      const b = mesh(bud, M.gold, false);
-      b.position.set(sx * PX, TOP, sz * PZ);
-      g.add(b);
-    }
-  // 鼓槌
-  const stickPivot = new THREE.Group();
-  stickPivot.position.set(1.15, CY, 0.25);
-  const stick = mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.7, 8), M.redDark);
-  stick.rotation.z = Math.PI / 2;
-  stick.position.x = 0.35;
-  stickPivot.add(stick);
-  g.add(stickPivot);
-  const hit = new THREE.Mesh(new THREE.BoxGeometry(2.6, 2.6, 2.6), new THREE.MeshBasicMaterial({ visible: false }));
-  hit.position.set(0, CY, 0);
-  hit.userData.interact = { type: 'drum' };
-  g.add(hit);
-  let t = 0;
-  let shake = 0;
-  return {
-    interactives: [hit],
-    standX: DRUM.x + 1.9,
-    standZ: DRUM.z + 0.3,
-    standYaw: -Math.PI / 2,
-    strike() {
-      t = 1;
-    },
-    update(dt) {
-      if (t > 0) {
-        t = Math.max(0, t - dt * 1.6);
-        const k = 1 - t;
-        stickPivot.rotation.y = k < 0.5 ? -k * 1.4 : -(1 - k) * 1.4;
-        if (k > 0.48 && shake <= 0) shake = 1;
-      }
-      if (shake > 0) {
-        shake = Math.max(0, shake - dt * 2);
-        drum.position.x = Math.sin(shake * 40) * 0.01 * shake;
-      }
-    },
-  };
-}
-
 export function buildBuildings(scene: THREE.Scene) {
   const group = new THREE.Group();
   const halls = HALLS.map((d, i) => {
@@ -530,7 +360,6 @@ export function buildBuildings(scene: THREE.Scene) {
     return h;
   });
   const bell = bellTower(group);
-  const drum = drumTower(group);
   scene.add(group);
-  return { group, bell, drum, halls };
+  return { group, bell, halls };
 }

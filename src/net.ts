@@ -47,7 +47,7 @@ type Events = {
   leave: (id: string) => void;
   incense: (list: IncenseItem[], serverNow: number) => void;
   claim: (seat: string, ok: boolean) => void;
-  bell: (from: string, kind: 'bell' | 'drum') => void;
+  bell: (from: string) => void;
   lanterns: (list: LanternMsg[], serverNow: number) => void;
   gift: (from: string, name: string, cup: string) => void; // 别人请我喝了一杯
   gave: (to: string, ok: boolean, why: string) => void; // 我请别人喝：成没成
@@ -167,7 +167,8 @@ export class Net {
           this.emit('lanterns', msg.list, msg.now);
           break;
         case 'bell':
-          this.emit('bell', msg.from, msg.kind === 'drum' ? 'drum' : 'bell');
+          // 旧版本客户端还可能发「击鼓」，寺里已经没有鼓楼了，不理它
+          if (msg.kind !== 'drum') this.emit('bell', msg.from);
           break;
         case 'gift':
           this.emit('gift', String(msg.from), String(msg.name ?? ''), String(msg.c ?? ''));
@@ -280,7 +281,7 @@ export class Net {
     this.send({ t: 'lantern' });
   }
 
-  ringBell(kind: 'bell' | 'drum' = 'bell') {
-    this.send({ t: 'bell', kind });
+  ringBell() {
+    this.send({ t: 'bell', kind: 'bell' });
   }
 }

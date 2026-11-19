@@ -1,6 +1,6 @@
 // 常住僧人与时刻表。所有动作都由「服务器时间」推算，同一房间的人看到的是同一场：
 //   每小时 0 分：钟头撞钟三下 → 大众从两侧配殿走进大雄宝殿 → 1–5 分大殿共修（礼拜、木鱼、引磬、诵经）→ 散去
-//   每小时 30 分：鼓头击鼓九下
+//   （原来每小时 30 分鼓头击鼓九下；2026-11-19 去掉了鼓楼）
 // 平时各忙各的（也按服务器时间循环）：
 //   扫地僧扫完一圈到银杏下石凳歇脚喝茶；知客僧迎客、收拾河灯台；
 //   小沙弥甲提壶到池边打水，挨棵给树浇水；小沙弥乙从观音殿端茶给银杏下打坐的老和尚，
@@ -13,15 +13,14 @@ import type { StrikeBuild } from './world/buildings';
 import { REAL } from './body-real';
 import { cushionMesh } from './world/hall';
 
-export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'drum' | 'walker' | 'novice' | 'assembly' | 'librarian' | 'barista' | 'waiter';
+export type Role = 'sweeper' | 'greeter' | 'elder' | 'xiangdeng' | 'weina' | 'bell' | 'walker' | 'novice' | 'assembly' | 'librarian' | 'barista' | 'waiter';
 // 头顶写着的「在做什么」，对应 i18n 里的 act_*
 export type Activity =
   | 'sweep' | 'rest' | 'read' | 'water' | 'fill' | 'bring' | 'serve' | 'tea' | 'teach' | 'listen' | 'incense'
   | 'wipe' | 'tidy' | 'patrol' | 'greet' | 'feed' | 'circle' | 'meditate' | 'stroll' | 'brew';
 
 // 一小时里的时刻（秒）
-export const SVC = { bell: [3, 11, 19], gather: 25, chant: 62, end: 300, gone: 348, drum: 1800 };
-const DRUM_BEATS = 9;
+export const SVC = { bell: [3, 11, 19], gather: 25, chant: 62, end: 300, gone: 348 };
 
 type P = { x: number; z: number };
 
@@ -138,14 +137,12 @@ interface Resident {
   label?: Activity;
   route?: P[]; // 大众：从配殿门口到大殿的路线
   spot?: P;
-  lastStrike: number; // 上次木鱼、钟、鼓的时刻（避免一秒里重复）
+  lastStrike: number; // 上次木鱼、钟的时刻（避免一秒里重复）
 }
 
 export interface ResidentsOpts {
   bell: StrikeBuild;
-  drum: StrikeBuild;
   onBell(): void; // 钟头撞了一下（调用方放钟声）
-  onDrum(): void;
   onQing(): void; // 维那敲引磬
   onFeed(x: number, z: number): void; // 僧人往池里撒了一把鱼食
 }
@@ -175,9 +172,8 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   const fy = HALL.baseH;
   const xiangdeng = add('xiangdeng', 'resident', { x: -3.95, z: -16.55, yaw: Math.PI, action: 'idle' });
   const weina = add('weina', 'resident', { x: 3.95, z: -16.55, yaw: Math.PI, action: 'idle' });
-  // 钟头、鼓头站在钟鼓旁
+  // 钟头站在钟旁
   const bellMonk = add('bell', 'resident', { x: o.bell.standX - 0.9, z: o.bell.standZ + 0.6, yaw: Math.PI / 2, action: 'idle' });
-  const drumMonk = add('drum', 'resident', { x: o.drum.standX + 0.9, z: o.drum.standZ + 0.6, yaw: -Math.PI / 2, action: 'idle' });
   // 知客僧：站在新来的人进寺的地方旁边
   const greeter = add('greeter', 'resident', { x: SPAWN.x + 3.2, z: SPAWN.z - 1.0, yaw: -Math.PI / 2, action: 'idle' });
   // 老和尚：银杏树下打坐（垫一个蒲团）
@@ -226,24 +222,21 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
   ]);
   weina.windows = [[SVC.gone + 50, 3600 - 60]];
 
-  // —— 钟头、鼓头：在楼上转一圈扫两处地；鼓头再把鼓擦一擦 ——
-  const towerRound = (r: Resident, cx: number, cz: number, sx: number, drum: boolean) =>
+  // —— 钟头：在楼上转一圈扫两处地 ——
+  const towerRound = (r: Resident, cx: number, cz: number, sx: number) =>
     program(at(r), [
       { stay: 50, act: 'idle' },
       { to: { x: cx, z: cz + 3.0 }, v: 0.6, label: 'sweep' },
       { stay: 12, act: 'sweep', yaw: (-sx * Math.PI) / 2, label: 'sweep' },
       { to: { x: cx - sx * 3.0, z: cz }, v: 0.6, label: 'sweep' },
       { stay: 12, act: 'sweep', yaw: Math.PI, label: 'sweep' },
-      ...(drum ? ([{ to: { x: cx, z: cz + 1.8 }, v: 0.5, label: 'wipe' }, { stay: 14, act: 'wipe', yaw: Math.PI, label: 'wipe' }] as Step[]) : []),
       { to: { x: cx, z: cz - 3.0 }, v: 0.6 },
       { stay: 8, act: 'idle', yaw: Math.PI },
       { to: r.post, v: 0.6 },
       { stay: 2, act: 'idle', yaw: r.post.yaw },
     ]);
-  bellMonk.prog = towerRound(bellMonk, o.bell.standX + 2.6, o.bell.standZ - 1.0, -1, false);
+  bellMonk.prog = towerRound(bellMonk, o.bell.standX + 2.6, o.bell.standZ - 1.0, -1);
   bellMonk.windows = [[40, 3600 - 40]];
-  drumMonk.prog = towerRound(drumMonk, o.drum.standX - 1.9, o.drum.standZ - 0.3, 1, true);
-  drumMonk.windows = [[40, SVC.drum - 30], [SVC.drum + 40, 3600 - 20]];
 
   // —— 知客僧：在入口站一阵 → 到桥头朝山门合十 → 去河灯台把灯摆整齐 → 回来 ——
   const lanternYaw = Math.atan2(LANTERN_STAND.x - LANTERN_STAND.standX, LANTERN_STAND.z - LANTERN_STAND.standZ);
@@ -572,7 +565,7 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
             if (hourS < SVC.chant) r.lastStrike = -1;
           }
         }
-        // 钟头：每小时开头撞三下；鼓头：半点击鼓九下
+        // 钟头：每小时开头撞三下
         if (r.role === 'bell') {
           const i = SVC.bell.findIndex((b) => hourS >= b && hourS < b + 1);
           const key = hourN * 10 + i;
@@ -581,15 +574,6 @@ export function buildResidents(scene: THREE.Scene, o: ResidentsOpts) {
             m.setAction('hapjang');
             o.bell.strike();
             o.onBell();
-          }
-        }
-        if (r.role === 'drum') {
-          const k = Math.floor((hourS - SVC.drum) / 1.5);
-          if (k >= 0 && k < DRUM_BEATS && r.lastStrike !== hourN * 100 + k) {
-            r.lastStrike = hourN * 100 + k;
-            if (k === 0) m.setAction('hapjang');
-            o.drum.strike();
-            o.onDrum();
           }
         }
         if (m.action === 'hapjang' && m.actionTime > 2.4) m.setAction(r.post.action);

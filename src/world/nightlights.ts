@@ -1,8 +1,8 @@
-// 寺院两侧的夜间灯火：配殿门窗透出暖光、檐下红灯笼、钟鼓楼四角灯笼、配殿前一排石灯，
+// 寺院两侧的夜间灯火：配殿门窗透出暖光、檐下红灯笼、钟楼四角灯笼、配殿前一排石灯，
 // 以及地上的一圈圈光晕。大多用自发光和贴地光晕来「假装」照亮，只给两座配殿各配一盏真实点光源，手机也跑得动。
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { SIDE_HALLS, SIDE_LAMPS, BELL, DRUM } from '../layout';
+import { SIDE_HALLS, SIDE_LAMPS, BELL } from '../layout';
 import { chineseMats, aged } from './hall';
 import { pbr } from './pbr';
 
@@ -101,8 +101,8 @@ export function buildNightLights(scene: THREE.Scene) {
     group.add(g);
   }
 
-  // —— 钟楼、鼓楼：四角檐下各挂一盏 ——
-  for (const T of [BELL, DRUM]) {
+  // —— 钟楼：四角檐下各挂一盏 ——
+  for (const T of [BELL]) {
     const g = new THREE.Group();
     g.position.set(T.x, 0, T.z);
     const r = T.size / 2 - 0.4 + 0.75;
@@ -111,7 +111,7 @@ export function buildNightLights(scene: THREE.Scene) {
     group.add(g);
   }
 
-  // —— 配殿前、通往钟鼓楼的一排石灯 ——
+  // —— 配殿前、通往钟楼的一排石灯 ——
   // 六角石灯：土衬、须弥座、灯柱、中台、六根小柱围着灯室、六角攒尖顶加宝珠
   const stone = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(2.3, 2.22, 2.08) });
   aged(stone, 0.12, 0.3);

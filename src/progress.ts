@@ -1,6 +1,6 @@
-// 本地存档：寺游印谱（十二处印）、功德簿（各种功课的累计次数）、今天求到的签。都存在 localStorage。
-export type SealId = 'gate' | 'bow' | 'incense' | 'bell' | 'drum' | 'moktak' | 'beads' | 'sit' | 'bridge' | 'koi' | 'lantern' | 'fortune';
-export type MeritKey = 'bow' | 'incense' | 'moktak' | 'beads' | 'bell' | 'drum' | 'lantern' | 'koi' | 'visits' | 'service' | 'sutra';
+// 本地存档：寺游印谱（十二处印；2026-11-19 「暮鼓」换成「心願」）、功德簿（各种功课的累计次数）、今天求到的签。都存在 localStorage。
+export type SealId = 'gate' | 'bow' | 'incense' | 'bell' | 'wish' | 'moktak' | 'beads' | 'sit' | 'bridge' | 'koi' | 'lantern' | 'fortune';
+export type MeritKey = 'bow' | 'incense' | 'moktak' | 'beads' | 'bell' | 'lantern' | 'koi' | 'visits' | 'service' | 'sutra';
 
 // 印文用繁体，和寺里的匾额一致
 export const SEALS: { id: SealId; text: string }[] = [
@@ -8,7 +8,7 @@ export const SEALS: { id: SealId; text: string }[] = [
   { id: 'bow', text: '禮佛' },
   { id: 'incense', text: '心香' },
   { id: 'bell', text: '晨鐘' },
-  { id: 'drum', text: '暮鼓' },
+  { id: 'wish', text: '心願' },
   { id: 'moktak', text: '木魚' },
   { id: 'beads', text: '百八' },
   { id: 'sit', text: '靜坐' },

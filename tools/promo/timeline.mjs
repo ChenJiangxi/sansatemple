@@ -155,7 +155,7 @@ const LISTS = {
     ['title', 5.0], ['gate', 5.0], ['plaque', 3.6], ['grove', 4.5], ['leaves', 4.0], ['pond', 4.5], ['bridge', 4.5], ['court', 5.0],
     ['pagoda', 4.5], ['sideHall', 4.5], ['bench', 4.0], ['incense', 4.5], ['ding', 4.5], ['hallFront', 4.5], ['hallEnter', 4.5],
     ['rows', 4.5], ['ceiling', 4.5], ['buddha', 4.5], ['triad', 4.0], ['wall', 4.0], ['altar', 4.0], ['bowClose', 4.5], ['rosary', 4.0],
-    ['bell', 4.0], ['drum', 4.0], ['moktak', 3.5], ['nightSide', 4.5], ['nightPagoda', 4.0], ['night', 5.0], ['crowd', 4.5], ['end', 4.5],
+    ['bell', 4.0], ['moktak', 3.5], ['nightSide', 4.5], ['nightPagoda', 4.0], ['night', 5.0], ['crowd', 4.5], ['end', 4.5],
   ],
   features: [
     ['fTitle', 6.0], ['gate', 8.0], ['incense', 8.0], ['quest', 8.0], ['uiPractice', 8.0], ['looks', 8.0], ['guanyin', 8.5], ['library', 8.0],
@@ -173,7 +173,7 @@ const LISTS = {
   coffee: [['coffee', 100.0]],
   short34: [
     ['title', 4.6], ['gate', 4.0], ['grove', 3.6], ['pond', 3.8], ['court', 4.0], ['ding', 3.8], ['hallFront', 4.0], ['rows', 4.0],
-    ['buddha', 4.0], ['triad', 3.6], ['bowClose', 4.0], ['bell', 3.6], ['drum', 3.6], ['moktak', 3.2], ['nightSide', 4.0], ['nightPagoda', 3.6],
+    ['buddha', 4.0], ['triad', 3.6], ['bowClose', 4.0], ['bell', 3.6], ['moktak', 3.2], ['nightSide', 4.0], ['nightPagoda', 3.6],
     ['crowd', 4.0], ['end', 4.2],
   ],
 };

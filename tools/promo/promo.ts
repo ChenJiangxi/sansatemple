@@ -14,7 +14,7 @@ import { placeStatues } from '../../src/world/statues';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from '../../src/world/pbr';
 import { Monk, BOW_DURATION } from '../../src/monk';
 import { MoktakView, RosaryView } from '../../src/overlays';
-import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, DRUM, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, LIBRARY, heightAt } from '../../src/layout';
+import { HALL, ALTAR_BURNER, ALTAR_SPOT, INCENSE, BELL, CUSHIONS, CUSHION_ROWS, BENCH_SEATS, PAGODAS, SIDE_HALLS, LIBRARY, heightAt } from '../../src/layout';
 import { furnishSideHalls } from '../../src/world/sidehall';
 import { buildShrines } from '../../src/world/shrines';
 import { PostFX } from '../../src/world/post';
@@ -236,7 +236,6 @@ async function main() {
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     buildings.bell.update(dt);
-    buildings.drum.update(dt);
     for (const [i, f] of hall.candleFlames.entries()) f.scale.set(1, 2.2 + Math.sin(elapsed * 9 + i * 2) * 0.25, 1);
     for (const m of pool) if (m.root.visible) m.update(dt);
     if (me.root.visible) me.update(dt);
@@ -1371,27 +1370,6 @@ async function main() {
         while (rk < EVENTS.rosary.length && t >= EVENTS.rosary[rk]) {
           rosaryView.nudge(1);
           rk++;
-        }
-      },
-    },
-    drum: {
-      setup() {
-        const ms = cast(1);
-        const d = buildings.drum;
-        place(ms[0], d.standX, d.standZ, d.standYaw, heightAt(d.standX, d.standZ));
-        ms[0].setAction('idle');
-        dk = 0;
-        env.follow(DRUM.x, DRUM.z);
-      },
-      update(t, u) {
-        setFov(50);
-        camPath([
-          { p: [DRUM.x + 4.6, 1.9, DRUM.z + 3.8], l: [DRUM.x + 0.3, 1.7, DRUM.z] },
-          { p: [DRUM.x + 4.0, 1.8, DRUM.z + 3.1], l: [DRUM.x + 0.3, 1.75, DRUM.z] },
-        ])(u, camera);
-        while (dk < EVENTS.drum.length && t >= EVENTS.drum[dk]) {
-          buildings.drum.strike();
-          dk++;
         }
       },
     },
@@ -2848,7 +2826,6 @@ async function main() {
   let curDur = 4;
   let mk = 0;
   let rk = 0;
-  let dk = 0;
 
   // —— 封面：黄昏的大殿前，一位小和尚合十；上方大字标题，下方那一句话 ——
   async function renderCover(cw: number, ch: number, id: string) {

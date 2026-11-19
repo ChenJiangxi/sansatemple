@@ -110,7 +110,6 @@ const MERIT: [MeritKey, Key][] = [
   ['moktak', 'meritMoktak'],
   ['beads', 'meritBeads'],
   ['bell', 'meritBell'],
-  ['drum', 'meritDrum'],
   ['lantern', 'meritLantern'],
   ['koi', 'meritKoi'],
   ['sutra', 'meritSutra'],
