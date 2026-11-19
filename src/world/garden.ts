@@ -5,11 +5,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WISH_ALLEY, WISH_DESK, PERSIMMON, STONE_PATHS, COURT, CAFE, blocked, inPond } from '../layout';
 import { plaqueTexture } from '../textures';
-import { mesh, lathe } from './util';
+import { mesh } from './util';
 import { chineseMats, aged } from './hall';
 import { pbr } from './pbr';
 
-export const LANTERN_COLORS = ['#c8402e', '#e0ad45', '#4f9a86', '#efe7d4', '#e39a9a', '#4b6fa2'];
+export const LANTERN_COLORS = ['#b83a2a', '#d4a043', '#5a8c7c', '#eadfc8', '#cf8e88', '#4d6890'];
 
 export interface WishLanternView {
   hook: number;
@@ -62,22 +62,78 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
 }
 
 // 灯笼纸面：竖向的竹骨，上下两道深一点的边
+// 灯笼纸面：皮纸的纤维和深浅、十六道竹骨的阴影、上下收口处颜色加深（染色交给每盏灯的实例颜色）
 function lanternSkin() {
-  return canvasTex(256, 128, (g) => {
+  return canvasTex(512, 256, (g) => {
     g.fillStyle = '#ffffff';
-    g.fillRect(0, 0, 256, 128);
-    for (let k = 0; k < 16; k++) {
-      g.fillStyle = 'rgba(0,0,0,0.13)';
-      g.fillRect(k * 16, 0, 1.5, 128);
+    g.fillRect(0, 0, 512, 256);
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    // 纸的纤维：细短的浅深线
+    for (let k = 0; k < 2600; k++) {
+      g.strokeStyle = rnd() < 0.5 ? `rgba(0,0,0,${0.025 + rnd() * 0.04})` : `rgba(255,255,255,${0.05 + rnd() * 0.08})`;
+      g.lineWidth = 0.6 + rnd() * 0.8;
+      const x = rnd() * 512, y = rnd() * 256, a = rnd() * Math.PI, l = 3 + rnd() * 9;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l);
+      g.stroke();
     }
-    const band = g.createLinearGradient(0, 0, 0, 128);
-    band.addColorStop(0, 'rgba(0,0,0,0.22)');
-    band.addColorStop(0.12, 'rgba(0,0,0,0)');
-    band.addColorStop(0.88, 'rgba(0,0,0,0)');
-    band.addColorStop(1, 'rgba(0,0,0,0.22)');
+    // 大块的深浅（手工染纸不匀）
+    for (let k = 0; k < 40; k++) {
+      const x = rnd() * 512, y = rnd() * 256, r = 20 + rnd() * 60;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, `rgba(0,0,0,${0.03 + rnd() * 0.04})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    // 竹骨：每道一条细深线，两边各一道淡影
+    for (let k = 0; k < 16; k++) {
+      const x = k * 32;
+      g.fillStyle = 'rgba(40,20,10,0.32)';
+      g.fillRect(x - 1, 0, 2, 256);
+      g.fillStyle = 'rgba(40,20,10,0.08)';
+      g.fillRect(x - 5, 0, 10, 256);
+    }
+    const band = g.createLinearGradient(0, 0, 0, 256);
+    band.addColorStop(0, 'rgba(30,10,5,0.4)');
+    band.addColorStop(0.14, 'rgba(0,0,0,0)');
+    band.addColorStop(0.86, 'rgba(0,0,0,0)');
+    band.addColorStop(1, 'rgba(30,10,5,0.4)');
     g.fillStyle = band;
-    g.fillRect(0, 0, 256, 128);
+    g.fillRect(0, 0, 512, 256);
   });
+}
+// 瓜棱灯身：半径 r、半高 h，ribs 道竹骨，seg 圈分段、rows 行
+function ribbedLantern(r: number, h: number, ribs: number, seg: number, rows: number) {
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const idx: number[] = [];
+  for (let j = 0; j <= rows; j++) {
+    const v = j / rows;
+    const y = -h + 2 * h * v;
+    // 轮廓：中间最鼓，上下收到木托的半径
+    const prof = 0.36 + 0.64 * Math.sin(Math.PI * (0.06 + 0.88 * v));
+    for (let i = 0; i <= seg; i++) {
+      const th = (i / seg) * Math.PI * 2;
+      const rib = 1 - 0.07 * Math.pow(Math.abs(Math.cos((th * ribs) / 2)), 6);
+      const rr = r * prof * rib;
+      pos.push(Math.cos(th) * rr, y, Math.sin(th) * rr);
+      uv.push(i / seg, v);
+    }
+  }
+  for (let j = 0; j < rows; j++)
+    for (let i = 0; i < seg; i++) {
+      const a = j * (seg + 1) + i, b = a + 1, c = a + seg + 1, d = c + 1;
+      idx.push(a, b, c, b, d, c);
+    }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
 }
 // 纸签：竖条，写几道墨痕（远看像字）
 function tagSkin() {
@@ -195,10 +251,25 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
 
   // —— 灯笼：灯身、上下木帽、吊绳、纸签，都用实例化（一盏灯一个实例） ——
   const H = hooks.length;
-  const bodyGeo = lathe([[0.03, -0.24], [0.13, -0.22], [0.2, -0.13], [0.225, 0], [0.2, 0.13], [0.13, 0.22], [0.03, 0.24]], 16);
-  const bodyMat = glowMaterial({ map: lanternSkin(), roughness: 0.85, side: THREE.DoubleSide });
+  // 灯身：十六道竹骨处往里收、骨与骨之间鼓出来（瓜棱形），上下收口
+  const bodyGeo = ribbedLantern(0.225, 0.24, 16, 48, 18);
+  const skin = lanternSkin();
+  // 夜里亮起来时纸纹和竹骨也透出来，不是一片平涂的亮色
+  const bodyMat = glowMaterial({ map: skin, emissiveMap: skin, roughness: 0.92, side: THREE.DoubleSide });
   const bodies = new THREE.InstancedMesh(bodyGeo, bodyMat, H);
-  const caps = new THREE.InstancedMesh(mergeGeometries([new THREE.CylinderGeometry(0.08, 0.09, 0.05, 10).translate(0, 0.245, 0), new THREE.CylinderGeometry(0.09, 0.08, 0.05, 10).translate(0, -0.245, 0)]), darkWood, H);
+  // 上下木托，各镶一道细金边
+  const capGold = new THREE.MeshStandardMaterial({ color: '#c9a04f', metalness: 0.7, roughness: 0.4 });
+  const caps = new THREE.InstancedMesh(
+    mergeGeometries(
+      [
+        mergeGeometries([new THREE.CylinderGeometry(0.075, 0.095, 0.05, 16).translate(0, 0.245, 0), new THREE.CylinderGeometry(0.095, 0.075, 0.05, 16).translate(0, -0.245, 0)]),
+        mergeGeometries([new THREE.TorusGeometry(0.097, 0.007, 6, 24).rotateX(Math.PI / 2).translate(0, 0.222, 0), new THREE.TorusGeometry(0.097, 0.007, 6, 24).rotateX(Math.PI / 2).translate(0, -0.222, 0)]),
+      ],
+      true
+    ),
+    [darkWood, capGold],
+    H
+  );
   const cords = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 4).translate(0, -0.5, 0), cordMat, H);
   const tagMat = new THREE.MeshStandardMaterial({ map: tagSkin(), roughness: 0.9, side: THREE.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0 });
   const tags = new THREE.InstancedMesh(mergeGeometries([new THREE.PlaneGeometry(0.095, 0.25).translate(0, -0.125, 0), new THREE.PlaneGeometry(0.095, 0.25).translate(0, -0.125, 0).rotateY(Math.PI / 2)]), tagMat, H);

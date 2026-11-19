@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import './style.css';
 import { t, randomName, onLangChange, type Key } from './i18n';
 import { Environment, buildTerrain, type TimeMode } from './world/environment';
-import { buildHall } from './world/hall';
+import { buildHall, setRoofDetail } from './world/hall';
 import { buildNature } from './world/nature';
 import { furnishSideHalls, LAMPS } from './world/sidehall';
 import { floatText, Rhythm, Charge, leafPile, waterRing, type QuestDef } from './play';
@@ -88,6 +88,7 @@ async function start() {
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
   const app = document.getElementById('app')!;
   const isTouch = matchMedia('(pointer: coarse)').matches;
+  setRoofDetail(isTouch); // 手机上筒瓦垄距放宽，顶点少一半
 
   // —— 渲染器与场景 ——
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });

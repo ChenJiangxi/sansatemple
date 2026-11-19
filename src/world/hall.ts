@@ -411,6 +411,13 @@ export function buildRoof(opts: RoofOpts) {
     (u, v) => { const o = outward(Math.abs(u), v); return [cx - (W + (rx - W) * v) * o, yAt(v, Math.abs(u)), cz + u * D * (1 - v) * o, u * D, v * sideLen]; },
   ];
   addSlopes(group, slopes, segU, segV, M);
+  // 筒瓦：前后坡沿面阔方向平行排开，到戗脊处截断；两山的三角坡同理
+  addTileRuns(group, [
+    [slopes[0], (v) => W + (rx - W) * v],
+    [slopes[1], (v) => W + (rx - W) * v],
+    [slopes[2], (v) => D * (1 - v)],
+    [slopes[3], (v) => D * (1 - v)],
+  ]);
 
   const ridge = mesh(new THREE.BoxGeometry(rx * 2 + 0.6, 0.55, 0.6), M.ridge);
   ridge.position.set(cx, ridgeY + 0.22, cz);
@@ -481,6 +488,12 @@ export function buildSkirtRoof(o: { cx: number; cz: number; iW: number; iD: numb
     (u, v) => [o.cx - lerp(o.oW, o.iW, v), y(v, Math.abs(u)), o.cz + u * lerp(o.oD, o.iD, v), u * o.oD, v * len],
   ];
   addSlopes(group, slopes, segU, segV, M);
+  addTileRuns(group, [
+    [slopes[0], (v) => lerp(o.oW, o.iW, v)],
+    [slopes[1], (v) => lerp(o.oW, o.iW, v)],
+    [slopes[2], (v) => lerp(o.oD, o.iD, v)],
+    [slopes[3], (v) => lerp(o.oD, o.iD, v)],
+  ]);
   for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k <= 6; k++) {
@@ -490,6 +503,103 @@ export function buildSkirtRoof(o: { cx: number; cz: number; iW: number; iD: numb
     group.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 12, 0.15, 6, false), M.ridge));
   }
   return group;
+}
+
+// —— 筒瓦 ——
+// 屋面原来只是一张贴了瓦片照片的曲面，远看是一块平板。这里在曲面上真的铺一垄垄半圆的筒瓦，
+// 檐口每垄一个瓦当；每垄深浅略有不同。手机上垄距放宽一些，顶点少一半。
+let tileStep = 0.3;
+export function setRoofDetail(lite: boolean) {
+  tileStep = lite ? 0.46 : 0.3;
+}
+let tileMat: THREE.MeshStandardMaterial | null = null;
+type SlopeFn = (u: number, v: number) => [number, number, number, number, number];
+function addTileRuns(group: THREE.Group, faces: [SlopeFn, (v: number) => number][]) {
+  tileMat ??= new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.88, metalness: 0, envMapIntensity: 0.55 });
+  const r = tileStep * 0.34; // 筒瓦半径（两垄之间留出约三成的沟）
+  const pos: number[] = [];
+  const col: number[] = [];
+  const idx: number[] = [];
+  const rand = rng(91);
+  const P = new THREE.Vector3(), Q = new THREE.Vector3(), A = new THREE.Vector3(), Tv = new THREE.Vector3(), Tu = new THREE.Vector3(), Nn = new THREE.Vector3();
+  const at = (fn: SlopeFn, u: number, v: number, out: THREE.Vector3) => {
+    const [x, y, z] = fn(u, v);
+    return out.set(x, y, z);
+  };
+  const SEG = 6; // 半圆截面分段
+  for (const [fn, hw] of faces) {
+    const h0 = hw(0), h1 = hw(1);
+    const n = Math.floor((2 * h0) / tileStep);
+    for (let k = 0; k < n; k++) {
+      const x0 = -h0 + tileStep * (k + 0.5) + (2 * h0 - n * tileStep) / 2;
+      const ax = Math.abs(x0);
+      // 这一垄铺到哪里：中间几垄到正脊，两侧的在戗脊处截断
+      const vEnd = ax <= h1 ? 1 : Math.max(0, (h0 - ax) / (h0 - h1));
+      if (vEnd < 0.04) continue;
+      const len = at(fn, x0 / h0, 0, P).distanceTo(at(fn, x0 / Math.max(1e-3, hw(vEnd)), vEnd, Q));
+      const steps = Math.max(3, Math.ceil(len / 0.45));
+      const shade = 0.2 + rand() * 0.05 + (rand() < 0.06 ? 0.05 : 0);
+      const base = pos.length / 3;
+      for (let j = 0; j <= steps; j++) {
+        const v = (j / steps) * vEnd * 0.995;
+        const u = x0 / Math.max(1e-3, hw(v));
+        at(fn, u, v, P);
+        // 顺坡方向、横向方向，求法线（朝上）
+        at(fn, x0 / Math.max(1e-3, hw(Math.min(1, v + 0.01))), Math.min(1, v + 0.01), Q);
+        Tv.subVectors(Q, P).normalize();
+        at(fn, Math.min(1, u + 0.02), v, A);
+        Tu.subVectors(A, P);
+        if (Tu.lengthSq() < 1e-8) Tu.set(1, 0, 0);
+        Tu.normalize();
+        Nn.crossVectors(Tu, Tv).normalize();
+        if (Nn.y < 0) Nn.negate();
+        Tu.crossVectors(Tv, Nn).normalize();
+        for (let i = 0; i <= SEG; i++) {
+          const th = (i / SEG) * Math.PI;
+          const cx = Math.cos(th) * r, cy = Math.sin(th) * r * 0.9;
+          pos.push(P.x + Tu.x * cx + Nn.x * cy, P.y + Tu.y * cx + Nn.y * cy, P.z + Tu.z * cx + Nn.z * cy);
+          const g = shade * (0.92 + 0.08 * Math.sin(th));
+          col.push(g, g * 1.01, g * 1.02);
+        }
+      }
+      for (let j = 0; j < steps; j++)
+        for (let i = 0; i < SEG; i++) {
+          const a = base + j * (SEG + 1) + i, b = a + 1, c = a + SEG + 1, d = c + 1;
+          idx.push(a, c, b, b, c, d);
+        }
+      // 瓦当：檐口一枚小圆盘，面朝外
+      if (vEnd > 0.2) {
+        at(fn, x0 / h0, 0, P);
+        at(fn, x0 / hw(0.02), 0.02, Q);
+        Tv.subVectors(Q, P).normalize();
+        at(fn, Math.min(1, x0 / h0 + 0.02), 0, A);
+        Tu.subVectors(A, P).normalize();
+        Nn.crossVectors(Tu, Tv).normalize();
+        if (Nn.y < 0) Nn.negate();
+        const c0 = pos.length / 3;
+        const R = r * 1.12;
+        const center = P.clone().addScaledVector(Nn, r * 0.2).addScaledVector(Tv, -0.02);
+        pos.push(center.x, center.y, center.z);
+        col.push(shade * 0.85, shade * 0.86, shade * 0.88);
+        for (let i = 0; i <= 10; i++) {
+          const th = (i / 10) * Math.PI * 2;
+          const q = center.clone().addScaledVector(Tu, Math.cos(th) * R).addScaledVector(Nn, Math.sin(th) * R);
+          pos.push(q.x, q.y, q.z);
+          col.push(shade * 0.85, shade * 0.86, shade * 0.88);
+        }
+        for (let i = 0; i < 10; i++) idx.push(c0, c0 + 1 + i, c0 + 2 + i);
+      }
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const m = mesh(geo, tileMat);
+  m.material = tileMat;
+  (m.material as THREE.Material).side = THREE.DoubleSide;
+  group.add(m);
 }
 
 function addSlopes(group: THREE.Group, slopes: ((u: number, v: number) => [number, number, number, number, number])[], segU: number, segV: number, M: ReturnType<typeof getRoofMats>) {
