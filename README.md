@@ -127,6 +127,7 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 东院一座三开间的茶寮（`src/world/cafe.ts`，位置和尺寸在 `layout.ts` 的 `CAFE`）：厅宽 11 米、深 6.4 米，朱红柱、灰瓦四坡顶，檐下「半山咖啡」金匾，中间两根前柱挂对联「一盞清香消俗慮 / 半窗山色入詩心」。厅里后墙前一整排 7.6 米的吧台：咖啡机、两台磨豆机、三杯手冲架、点心柜（桂花糕、素月饼、柿饼），墙上三块菜单牌（咖啡、手冲云南豆、茶点），三盏竹编吊灯；两侧山墙开格子窗，窗边各一张小桌。厅前一片 5 米深的木平台，四张小圆桌各撑一把油纸伞，两角竹盆；平台左前角竹竿挑「咖啡」布幌子，右前角一只大纸杯回收桶，入口旁立菜单木牌。一共 6 张桌 12 只圆凳（`k0`–`k11`，可以坐）。吧台后两位咖啡师父，一位跑堂小沙弥端托盘给露台送咖啡、收拾桌子。夜里前檐一排纸灯笼和厅里的暖光亮起来。
 
+- **吧台和伞的模型**（2026-11-19）：咖啡机、两台磨豆机换成 Lanzaman 的青绿色双头意式咖啡机和配套磨豆机；露台四把伞换成 Milight 的红色梅花油纸伞（伞面加一点自发光，像迎着太阳透光；整体抬高 0.7 米，伞柄从桌面中间穿出）。模型下载好之前先显示原来的简单几何体。
 - **点单**：点茶寮、菜单牌或咖啡师，走到柜台前打开纸菜单（`src/coffee.ts`）：山雾拿铁、清醒美式、上岸冷萃、桂花拿铁、放下·低因。点一杯等 6.5 秒（磨豆、萃取的声音，机器冒热气），杯子端在右手上。
 - **喝**：右下角的杯子条「喝一口」，一杯三口；喝完一句收尾的话，算今日功课「喝完一杯半山咖啡」（+4）。
 - **请人喝**：端着满杯时点常住僧人或别的访客，走过去双手递上（+8 功德）；僧人会道谢，访客手里多一杯，会收到「某某请你喝了一杯……」。联机时服务器核对：自己是满杯、对方空着手、两人相距 3.5 米内。
@@ -264,7 +265,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/props/camp_chair.glb` | [Camping Chair](https://sketchfab.com/3d-models/46b592f41c1f441ca19faadd2b4bb90a) by lpfeffer | CC BY 4.0 | 围炉的露营椅 |
 | `public/models/props/coffee_machine.glb`、`grinder.glb` | [Canarian Cafe - Coffee Machine](https://sketchfab.com/3d-models/17042d9af8c5461e98876064fd80385d)、[Coffee Grinder](https://sketchfab.com/3d-models/78d7e61da65c4b368074c978e742bdfc) by Lanzaman (lanzaboy) | CC BY 4.0 | 半山咖啡吧台 |
 | `public/models/props/parasol.glb` | [Umbrella](https://sketchfab.com/3d-models/ae0abff9bb9d4bb3b2ef634b8bc539d5) by Tatiana Sumarokova (Milight) | CC BY 4.0 | 红色梅花油纸伞，放大当露台遮阳伞，游戏里接长了伞杆 |
-| `public/models/props/tea_table.glb`、`cafe_set.glb` | Poly Haven：chinese_tea_table、outdoor_table_chair_set_01 | [CC0](https://polyhaven.com/license) | 围炉的茶几（放宽了桌面）；户外桌椅 |
+| `public/models/props/tea_table.glb` | Poly Haven：chinese_tea_table | [CC0](https://polyhaven.com/license) | 围炉的茶几（放宽了桌面） |
 | `public/fonts/hand.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | SIL OFL | 只取拍立得相纸题字用到的字（十二处地名、山寺、数字），2026-11-19 |
 | `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |

@@ -3,6 +3,7 @@
 // 两侧山墙开格子窗，窗边各一张小桌。厅前一片木平台，四张小圆桌各撑一把油纸伞；
 // 平台角上竹竿挑着「咖啡」布幌子、一只半人高的大纸杯收空杯，入口旁立菜单木牌；前檐挂一排纸灯笼，夜里亮。
 import * as THREE from 'three';
+import { loadProp } from './glb';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CAFE, CAFE_TABLE_LOCAL, CAFE_SEATS, CAFE_COLS, cafeWorld } from '../layout';
 import { plaqueTexture } from '../textures';
@@ -413,9 +414,11 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     mach.add(body, rail, gauge);
     mach.position.set(x, T, bz - 0.02);
     g.add(mach);
+    return mach;
   };
-  machine(-2.1);
+  const machG = machine(-2.1);
   // 两台磨豆机
+  const grindG = new THREE.Group();
   for (const x of [-1.25, -0.95]) {
     const gb = mesh(new THREE.BoxGeometry(0.16, 0.3, 0.22), black);
     gb.position.set(x, T + 0.15, bz - 0.06);
@@ -423,8 +426,24 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     hopper.position.set(x, T + 0.39, bz - 0.06);
     const hb = mesh(new THREE.CylinderGeometry(0.066, 0.04, 0.1, 14), beans);
     hb.position.set(x, T + 0.35, bz - 0.06);
-    g.add(gb, hb, hopper);
+    grindG.add(gb, hb, hopper);
   }
+  g.add(grindG);
+  // 模型下载好以后换成精细的：青绿色双头意式咖啡机和配套磨豆机（Lanzaman，CC BY 4.0），冲煮头朝师父
+  loadProp('coffee_machine').then((o) => {
+    o.rotation.y = Math.PI;
+    o.position.set(-2.1, T, bz - 0.02);
+    g.remove(machG);
+    g.add(o);
+  });
+  Promise.all([loadProp('grinder'), loadProp('grinder')]).then(([a, c]) => {
+    for (const [o, x] of [[a, -1.3], [c, -0.98]] as [THREE.Object3D, number][]) {
+      o.rotation.y = Math.PI;
+      o.position.set(x, T, bz - 0.06);
+      g.add(o);
+    }
+    g.remove(grindG);
+  });
   // 手冲架：一条木架上三只白瓷滤杯，下面三只玻璃壶；旁边一把细嘴铜壶
   {
     const stand = mesh(new THREE.BoxGeometry(0.9, 0.03, 0.18), darkWood);
@@ -577,7 +596,26 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     sprig.position.set(0.12, 0.96, -0.08);
     tg.add(topM, leg, foot, vase, sprig);
     if (tz > HD) {
-      // 油纸伞：竹杆从桌子中间穿出，伞面是一顶浅锥，里面看得到一圈伞骨
+      // 油纸伞：先用一顶简单的浅锥占位，模型（Milight 的红色梅花油纸伞，CC BY 4.0）下载好以后换上。
+      // 原模型是手持的伞，放大到伞面 2.4 米时伞沿只有 1.36 米高，所以整体抬高 0.7 米，伞柄从桌面中间穿出
+      const place = new THREE.Group();
+      tg.add(place);
+      loadProp('parasol').then((o) => {
+        // 油纸伞迎着太阳会透光：伞面加一点用自身贴图的自发光，从伞下看不发暗
+        o.traverse((m) => {
+          const mm = m as THREE.Mesh;
+          if (!mm.isMesh) return;
+          const mat = (mm.material as THREE.MeshStandardMaterial).clone();
+          mat.emissive = new THREE.Color('#ffffff');
+          mat.emissiveMap = mat.map;
+          mat.emissiveIntensity = 0.42;
+          mm.material = mat;
+        });
+        o.position.y = 0.7;
+        o.rotation.y = i * 1.3;
+        tg.remove(place);
+        tg.add(o);
+      });
       const pole = mesh(new THREE.CylinderGeometry(0.02, 0.025, 2.35, 8), std({ color: '#7a5a32', roughness: 0.6 }));
       pole.position.y = 1.18;
       const tex = parasolTexture(umbrellaColors[i % umbrellaColors.length]);
@@ -585,7 +623,7 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
       canopy.position.y = 2.3;
       const tip = mesh(new THREE.SphereGeometry(0.04, 8, 6), darkWood);
       tip.position.y = 2.53;
-      tg.add(pole, canopy, tip);
+      place.add(pole, canopy, tip);
     }
     g.add(tg);
   });
