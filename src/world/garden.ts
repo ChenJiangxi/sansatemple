@@ -105,7 +105,7 @@ function lanternSkin() {
   });
 }
 // 瓜棱灯身：半径 r、半高 h，ribs 道竹骨，seg 圈分段、rows 行
-function ribbedLantern(r: number, h: number, ribs: number, seg: number, rows: number) {
+export function ribbedLantern(r: number, h: number, ribs: number, seg: number, rows: number) {
   const pos: number[] = [];
   const uv: number[] = [];
   const idx: number[] = [];

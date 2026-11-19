@@ -1,11 +1,12 @@
 // 院中陈设（汉传佛寺）：红灯笼与宫灯、八角七层楼阁塔、铜鼎香炉与烛台架、石凳、
 // 黄色寺墙、三开间山门、放生池上的石拱桥
 import * as THREE from 'three';
+import { ribbedLantern } from './garden';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng, geshanTexture } from '../textures';
 import { mesh, worldBox, lathe } from './util';
-import { buildRoof, buildPolyEave, beamRing, chineseMats, meterUV, aged } from './hall';
+import { buildRoof, buildPolyEave, beamRing, chineseMats, meterUV, aged, addTileRuns, type SlopeFn } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
 import { buildDing } from './bronze';
@@ -30,29 +31,66 @@ function glowMaterial(base: THREE.MeshStandardMaterialParameters) {
   return mat;
 }
 
+// 红灯笼的绸面（白底，颜色交给每盏灯的实例颜色）：细细的绸纹，十六道竹骨的阴影，上下收口处颜色加深、各一道金边，
+// 前后各一个圆框里的「福」
 function lanternTexture() {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 128;
+  c.width = 512;
+  c.height = 256;
   const g = c.getContext('2d')!;
   g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, 256, 128);
-  g.fillStyle = 'rgba(120,40,30,0.35)';
-  for (let x = 0; x < 256; x += 16) g.fillRect(x - 1, 0, 3, 128);
-  g.strokeStyle = 'rgba(240,200,90,0.9)';
-  g.lineWidth = 5;
-  for (const cx of [64, 192]) {
+  g.fillRect(0, 0, 512, 256);
+  // 绸纹：横竖极细的线
+  for (let y = 0; y < 256; y += 2) {
+    g.fillStyle = `rgba(0,0,0,${0.025 + ((y * 7) % 5) * 0.004})`;
+    g.fillRect(0, y, 512, 1);
+  }
+  for (let x = 0; x < 512; x += 3) {
+    g.fillStyle = 'rgba(255,255,255,0.05)';
+    g.fillRect(x, 0, 1, 256);
+  }
+  // 竹骨：一道深线，两侧淡影
+  for (let x = 0; x < 512; x += 32) {
+    const gr = g.createLinearGradient(x - 10, 0, x + 10, 0);
+    gr.addColorStop(0, 'rgba(60,10,5,0)');
+    gr.addColorStop(0.5, 'rgba(60,10,5,0.28)');
+    gr.addColorStop(1, 'rgba(60,10,5,0)');
+    g.fillStyle = gr;
+    g.fillRect(x - 10, 0, 20, 256);
+    g.fillStyle = 'rgba(50,10,5,0.4)';
+    g.fillRect(x - 1, 0, 2, 256);
+  }
+  // 上下收口：颜色加深，各一道金边
+  const band = g.createLinearGradient(0, 0, 0, 256);
+  band.addColorStop(0, 'rgba(40,5,0,0.55)');
+  band.addColorStop(0.16, 'rgba(0,0,0,0)');
+  band.addColorStop(0.84, 'rgba(0,0,0,0)');
+  band.addColorStop(1, 'rgba(40,5,0,0.55)');
+  g.fillStyle = band;
+  g.fillRect(0, 0, 512, 256);
+  g.fillStyle = 'rgba(255,214,120,0.95)';
+  g.fillRect(0, 26, 512, 5);
+  g.fillRect(0, 225, 512, 5);
+  // 福
+  for (const cx of [128, 384]) {
+    g.strokeStyle = 'rgba(255,214,120,0.95)';
+    g.lineWidth = 7;
     g.beginPath();
-    g.arc(cx, 64, 26, 0, Math.PI * 2);
+    g.arc(cx, 128, 50, 0, Math.PI * 2);
     g.stroke();
-    g.fillStyle = 'rgba(240,200,90,0.95)';
-    g.font = '700 34px "Songti SC","STSong","Noto Serif CJK SC",serif';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(cx, 128, 58, 0, Math.PI * 2);
+    g.stroke();
+    g.fillStyle = 'rgba(255,214,120,0.98)';
+    g.font = '700 66px "Songti SC","STSong","Noto Serif CJK SC",serif';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('福', cx, 66);
+    g.fillText('福', cx, 132);
   }
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
   return t;
 }
 
@@ -153,22 +191,22 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   // —— 红灯笼：参道两侧各四根灯杆拉灯绳，大殿屋檐下每间一盏大的 ——
   type L = { p: THREE.Vector3; s: number };
   const lanterns: L[] = [];
-  const wireMat = new THREE.LineBasicMaterial({ color: '#3a2e26' });
   const poleZ = [11, 22, 33, 43.5];
   const poleH = 4.1;
-  const finial = lathe([[0, 0], [0.07, 0], [0.09, 0.06], [0.07, 0.14], [0.03, 0.2], [0, 0.25]], 12);
+  // 灯杆：方石座 + 八角石鼓，朱漆八棱木杆箍三道金环，杆头金色覆莲托一颗宝珠（2026-11-19 原来是一根细红圆杆）
+  const poleStone: THREE.BufferGeometry[] = [];
+  const poleRed: THREE.BufferGeometry[] = [];
+  const poleGold: THREE.BufferGeometry[] = [];
+  const cords: THREE.BufferGeometry[] = [];
   for (const sx of [-1, 1]) {
     const x = sx * 2.75;
     for (const z of poleZ) {
-      const pole = mesh(meterUV(new THREE.CylinderGeometry(0.065, 0.075, poleH, 10), 0.45, poleH), M.red);
-      pole.position.set(x, poleH / 2, z);
-      group.add(pole);
-      const base = mesh(lathe([[0, 0], [0.2, 0], [0.2, 0.12], [0.15, 0.2], [0, 0.2]], 14), stoneMat);
-      base.position.set(x, 0, z);
-      group.add(base);
-      const top = mesh(finial, M.gold, false);
-      top.position.set(x, poleH, z);
-      group.add(top);
+      poleStone.push(new THREE.BoxGeometry(0.44, 0.12, 0.44).translate(x, 0.06, z));
+      poleStone.push(lathe([[0.17, 0.12], [0.19, 0.16], [0.19, 0.27], [0.15, 0.31], [0.11, 0.34], [0, 0.34]], 8).rotateY(Math.PI / 8).translate(x, 0, z));
+      poleRed.push(meterUV(new THREE.CylinderGeometry(0.072, 0.084, poleH - 0.34, 8), 0.45, poleH).translate(x, 0.34 + (poleH - 0.34) / 2, z));
+      for (const y of [0.52, 2.3, poleH - 0.24]) poleGold.push(new THREE.CylinderGeometry(0.094, 0.094, 0.045, 8).translate(x, y, z));
+      poleGold.push(lathe([[0.085, 0], [0.11, 0.025], [0.1, 0.05], [0.06, 0.1], [0.045, 0.13]], 16).translate(x, poleH, z));
+      poleGold.push(new THREE.SphereGeometry(0.06, 14, 10).translate(x, poleH + 0.19, z));
     }
     for (let i = 0; i < poleZ.length - 1; i++) {
       const za = poleZ[i], zb = poleZ[i + 1];
@@ -179,53 +217,54 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
         const tt = k / 24;
         pts.push(new THREE.Vector3(x, y0 - Math.sin(tt * Math.PI) * sag, za + (zb - za) * tt));
       }
-      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), wireMat));
+      cords.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.008, 4, false));
       for (let k = 1; k < 7; k++) {
         const tt = k / 7;
         lanterns.push({ p: new THREE.Vector3(x, y0 - Math.sin(tt * Math.PI) * sag - 0.45, za + (zb - za) * tt), s: 0.8 });
       }
     }
   }
+  group.add(mesh(mergeGeometries(poleStone.map((g) => g.toNonIndexed()))!, stoneMat));
+  group.add(mesh(mergeGeometries(poleRed)!, M.red));
+  group.add(mesh(mergeGeometries(poleGold.map((g) => (g.index ? g.toNonIndexed() : g)))!, M.gold));
   for (let i = 0; i < HALL.colX.length - 1; i++) {
     const x = (HALL.colX[i] + HALL.colX[i + 1]) / 2;
     lanterns.push({ p: new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.9, HALL.colZFront + 1.2), s: 1.9 });
   }
-  const lanternMat = glowMaterial({ map: lanternTexture(), roughness: 0.6 });
-  // 瓜棱形：16 道竹骨处往里收，骨与骨之间鼓出来
-  const lanternGeo = new THREE.SphereGeometry(0.2, 64, 20);
-  {
-    const lp = lanternGeo.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < lp.count; i++) {
-      const x = lp.getX(i), y = lp.getY(i), z = lp.getZ(i);
-      const th = Math.atan2(z, x);
-      const k = 0.955 + 0.045 * Math.sqrt(Math.abs(Math.sin(8 * th)));
-      lp.setXYZ(i, x * k, y * 0.85, z * k);
-    }
-    lanternGeo.computeVertexNormals();
-  }
+  const ltex = lanternTexture();
+  const lanternMat = glowMaterial({ map: ltex, emissiveMap: ltex, roughness: 0.55 });
+  // 瓜棱形：16 道竹骨处往里收，骨与骨之间鼓出来（和祈福灯廊的纸灯同一个生成函数）
+  const lanternGeo = ribbedLantern(0.205, 0.17, 16, 48, 16);
   const lm = new THREE.InstancedMesh(lanternGeo, lanternMat, lanterns.length);
-  const caps = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.12, 0.05, 12), M.gold, lanterns.length * 2);
-  const tassels = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.01, 0.035, 0.26, 6), new THREE.MeshStandardMaterial({ color: '#b51f18', roughness: 0.8 }), lanterns.length);
+  // 上下金帽（带一道边）和流苏上方的小金环，合成一个几何体
+  const capTop = lathe([[0, 0], [0.112, 0], [0.118, 0.012], [0.104, 0.028], [0.07, 0.042], [0.03, 0.05], [0, 0.05]], 20);
+  const capGeo = mergeGeometries([
+    capTop.clone().translate(0, 0.162, 0),
+    capTop.clone().rotateX(Math.PI).translate(0, -0.162, 0),
+    new THREE.TorusGeometry(0.018, 0.006, 6, 14).rotateX(Math.PI / 2).translate(0, -0.235, 0),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  const caps = new THREE.InstancedMesh(capGeo, M.gold, lanterns.length);
+  // 流苏：一小截绳、一个结、下面一束散开的穗
+  const tasselGeo = mergeGeometries([
+    new THREE.CylinderGeometry(0.005, 0.005, 0.05, 5).translate(0, -0.2, 0),
+    new THREE.SphereGeometry(0.024, 10, 8).translate(0, -0.235, 0),
+    new THREE.CylinderGeometry(0.014, 0.04, 0.22, 12, 1, true).translate(0, -0.365, 0),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  const tassels = new THREE.InstancedMesh(tasselGeo, new THREE.MeshStandardMaterial({ color: '#a8231a', roughness: 0.85, side: THREE.DoubleSide }), lanterns.length);
   const m4 = new THREE.Matrix4();
   const q = new THREE.Quaternion();
-  const strings: number[] = [];
   lanterns.forEach((L, i) => {
     const sc = new THREE.Vector3(L.s, L.s, L.s);
     m4.compose(L.p, q, sc);
     lm.setMatrixAt(i, m4);
     lm.setColorAt(i, new THREE.Color(r() > 0.12 ? '#d8361a' : '#e0a030'));
-    m4.compose(L.p.clone().add(new THREE.Vector3(0, 0.17 * L.s, 0)), q, sc);
-    caps.setMatrixAt(i * 2, m4);
-    m4.compose(L.p.clone().add(new THREE.Vector3(0, -0.17 * L.s, 0)), q, sc);
-    caps.setMatrixAt(i * 2 + 1, m4);
-    m4.compose(L.p.clone().add(new THREE.Vector3(0, -0.32 * L.s, 0)), q, sc);
+    caps.setMatrixAt(i, m4);
     tassels.setMatrixAt(i, m4);
-    strings.push(L.p.x, L.p.y + 0.19 * L.s, L.p.z, L.p.x, L.p.y + 0.45, L.p.z);
+    const len = 0.45 - 0.19 * L.s;
+    if (len > 0.02) cords.push(new THREE.CylinderGeometry(0.006, 0.006, len, 4).translate(L.p.x, L.p.y + 0.19 * L.s + len / 2, L.p.z));
   });
   group.add(lm, caps, tassels);
-  const stringGeo = new THREE.BufferGeometry();
-  stringGeo.setAttribute('position', new THREE.Float32BufferAttribute(strings, 3));
-  group.add(new THREE.LineSegments(stringGeo, wireMat));
+  group.add(mesh(mergeGeometries(cords.map((g) => (g.index ? g.toNonIndexed() : g)))!, new THREE.MeshStandardMaterial({ color: '#3a2420', roughness: 0.9 }), false));
   const pathLights = [new THREE.PointLight('#ff9a6a', 0, 14, 1.5), new THREE.PointLight('#ff9a6a', 0, 14, 1.5)];
   pathLights[0].position.set(0, 3.4, 18);
   pathLights[1].position.set(0, 3.4, 36);
@@ -653,7 +692,8 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   // —— 黄色寺墙（灰瓦顶）——
   // 墙：下面一段乱石砌的墙基（下碱），上面黄墙身，墙顶两道砖檐、两坡灰瓦的墙帽和一道正脊
   const wallMat = pbr('plaster', { metersPerTile: 2.6, color: '#d9a548' });
-  aged(wallMat, 0.0, 0.22);
+  // 墙身：雨痕和斑驳比原来重一些，看得出是多年的老墙
+  aged(wallMat, 0.08, 0.4);
   const baseMat = pbr('stonewall', { metersPerTile: 1.6, color: '#c9c1b2' });
   aged(baseMat, 0.1, 0.25);
   const capMat = pbr('roof', { metersPerTile: 1.2, color: '#6e7270' });
@@ -676,13 +716,83 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     for (const s of [-1, 1]) put(mesh(worldBox(len, 0.05, 0.56, 1), capMat), 2.62, s * slope, s * 0.24);
     const ridge = mesh(new THREE.CylinderGeometry(0.07, 0.07, len, 8).rotateZ(Math.PI / 2), brickMat);
     put(ridge, 2.76);
+    // 墙帽两坡铺真筒瓦，檐口一排瓦当（和殿顶同一套做法）
+    const tiles = new THREE.Group();
+    const half = len / 2;
+    const face = (sgn: number): SlopeFn => (u, v) => [u * half, 2.5 + 0.27 * v, sgn * 0.5 * (1 - v), u * half, v * 0.56];
+    addTileRuns(tiles, [[face(1), () => half], [face(-1), () => half]]);
+    tiles.position.set((xa + xb) / 2, 0, (za + zb) / 2);
+    tiles.rotation.y = -ang;
+    group.add(tiles);
   };
+  // 圆形花窗（冰裂纹），墙两面各一扇：砖色窗框 + 深色窗芯；离殿阁、茶寮、山门太近的墙段不开
+  const latticeTex = (() => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d')!;
+    g.fillStyle = '#2f302d';
+    g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = '#a9a69c';
+    g.lineWidth = 7;
+    g.lineCap = 'round';
+    const R = rng(77);
+    // 冰裂纹：从几处散开的折线
+    const pts: [number, number][] = [];
+    for (let i = 0; i < 26; i++) pts.push([R() * 256, R() * 256]);
+    for (const [x, y] of pts) {
+      let best: [number, number][] = pts.filter((p) => p[0] !== x || p[1] !== y).sort((a, b) => Math.hypot(a[0] - x, a[1] - y) - Math.hypot(b[0] - x, b[1] - y)).slice(0, 3);
+      for (const [bx, by] of best) {
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(bx, by);
+        g.stroke();
+      }
+      best = [];
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+  const winSpots: { x: number; z: number; yaw: number }[] = [];
+  const winAlong = (xa: number, za: number, xb: number, zb: number, skip: (x: number, z: number) => boolean) => {
+    const len = Math.hypot(xb - xa, zb - za);
+    const n = Math.floor(len / 12);
+    for (let i = 1; i < n; i++) {
+      const tt = i / n;
+      const x = xa + (xb - xa) * tt, z = za + (zb - za) * tt;
+      if (!skip(x, z)) winSpots.push({ x, z, yaw: -Math.atan2(zb - za, xb - xa) });
+    }
+  };
+
   const { x0, x1, z0, z1, gateX } = COURT;
   addWall(x0, z0, x1, z0);
   addWall(x0, z0, x0, z1);
   addWall(x1, z0, x1, z1);
   addWall(x0, z1, -gateX - 2.4, z1);
   addWall(gateX + 2.4, z1, x1, z1);
+  winAlong(x0, z0, x1, z0, (x) => Math.abs(x) < 9);
+  winAlong(x0, z0, x0, z1, (_, z) => Math.abs(z - (-4)) < 11);
+  winAlong(x1, z0, x1, z1, (_, z) => Math.abs(z - (-4)) < 11 || (z > 40 && z < 58));
+  winAlong(x0, z1, -gateX - 2.4, z1, (x) => x > -10);
+  winAlong(gateX + 2.4, z1, x1, z1, (x) => x < 10);
+  {
+    const frame = new THREE.InstancedMesh(new THREE.RingGeometry(0.46, 0.56, 40), new THREE.MeshStandardMaterial({ color: '#7d7a72', roughness: 0.85 }), winSpots.length * 2);
+    const core = new THREE.InstancedMesh(new THREE.CircleGeometry(0.46, 40), new THREE.MeshStandardMaterial({ map: latticeTex, roughness: 0.9 }), winSpots.length * 2);
+    const m4 = new THREE.Matrix4(), qq = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), pp = new THREE.Vector3();
+    winSpots.forEach((w, i) => {
+      for (const side of [0, 1]) {
+        const yaw = w.yaw + (side ? Math.PI : 0);
+        qq.setFromEuler(new THREE.Euler(0, yaw, 0));
+        // 墙身厚 0.5，花窗贴在两面外 1 厘米
+        pp.set(w.x + Math.sin(yaw) * 0.262, 1.6, w.z + Math.cos(yaw) * 0.262);
+        m4.compose(pp, qq, one);
+        frame.setMatrixAt(i * 2 + side, m4);
+        core.setMatrixAt(i * 2 + side, m4);
+      }
+    });
+    frame.receiveShadow = core.receiveShadow = true;
+    group.add(frame, core);
+  }
 
   // —— 山门：三开间，朱红柱，彩画梁，带鸱吻的屋顶，挂寺名匾 ——
   {

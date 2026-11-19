@@ -578,17 +578,32 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   }
 
   // —— 桌、凳、油纸伞：露台四张撑伞，厅里两张不撑 ——
-  const tableMat = std({ color: '#6b4a32', roughness: 0.55 });
+  // 桌凳用木纹材质（Poly Haven 的旧木柜贴图），染成胡桃色
+  const tableMat = pbr('wood', { metersPerTile: 0.8, color: '#a8805e' });
+  tableMat.roughness = 0.6;
+  const legWood = pbr('wood', { metersPerTile: 0.6, color: '#6e4e36' });
+  // 小圆桌：桌面上沿圆角、下沿收一道（2026-11-19 原来是一块圆饼加一根圆棍）
+  const tableTopGeo = lathe([[0, 0], [0.4, 0], [0.44, 0.012], [0.462, 0.03], [0.465, 0.045], [0.455, 0.056], [0, 0.056]], 40);
+  const pedestalGeo = lathe([[0.075, 0], [0.07, 0.04], [0.045, 0.08], [0.04, 0.32], [0.05, 0.36], [0.04, 0.4], [0.036, 0.62], [0.06, 0.66], [0.07, 0.69], [0, 0.69]], 16);
+  const feetGeo = (() => {
+    const fs: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2;
+      const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0.12, 0), new THREE.Vector3(0.2, 0.08, 0), new THREE.Vector3(0.3, 0.012, 0));
+      fs.push(new THREE.TubeGeometry(curve, 12, 0.022, 6, false).rotateY(a));
+      fs.push(new THREE.SphereGeometry(0.026, 8, 6).translate(0.3, 0.015, 0).rotateY(a));
+    }
+    return mergeGeometries(fs.map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  })();
   const umbrellaColors = ['#b8432f', '#d0953b', '#3f5f7a', '#a8432f'];
   CAFE_TABLE_LOCAL.forEach(([tx, tz], i) => {
     const tg = new THREE.Group();
     tg.position.set(tx, b, tz);
-    const topM = mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.045, 28), tableMat);
-    topM.position.y = 0.74;
-    const leg = mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.72, 10), darkWood);
-    leg.position.y = 0.36;
-    const foot = mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.04, 18), darkWood);
-    foot.position.y = 0.02;
+    const topM = mesh(tableTopGeo, tableMat);
+    topM.position.y = 0.705;
+    const leg = mesh(pedestalGeo, legWood);
+    leg.position.y = 0.02;
+    const foot = mesh(feetGeo, legWood);
     const vase = mesh(lathe([[0, 0], [0.035, 0], [0.045, 0.05], [0.02, 0.12], [0.024, 0.14], [0, 0.14]], 12), std({ color: '#a9c2b0', roughness: 0.3 }));
     vase.position.set(0.12, 0.765, -0.08);
     const sprig = mesh(new THREE.SphereGeometry(0.05, 8, 6), std({ color: '#e7b84a', roughness: 0.8 }));
@@ -627,21 +642,28 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     }
     g.add(tg);
   });
+  // 圆凳：凳面中间微凹、边缘倒角；三条车削的腿往外撇，中间一圈横撑（原来是一块圆饼加三根细棍）
+  const stoolSeatGeo = lathe([[0, 0.034], [0.12, 0.03], [0.175, 0.038], [0.195, 0.032], [0.2, 0.016], [0.19, 0.002], [0.16, 0], [0, 0]], 32);
+  const stoolLegsGeo = (() => {
+    const ls: THREE.BufferGeometry[] = [];
+    const legProfile = lathe([[0.016, 0], [0.019, 0.05], [0.017, 0.2], [0.021, 0.3], [0.018, 0.41], [0, 0.41]], 8);
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2;
+      const l = legProfile.clone();
+      l.rotateZ(0.13);
+      l.translate(0.16, 0, 0);
+      l.rotateY(a);
+      ls.push(l);
+    }
+    ls.push(new THREE.TorusGeometry(0.135, 0.009, 6, 24).rotateX(Math.PI / 2).translate(0, 0.16, 0));
+    return mergeGeometries(ls.map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  })();
   for (const s of CAFE_SEATS) {
     const sg = new THREE.Group();
     sg.position.set(s.x, b, s.z);
-    const seat = mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.05, 20), tableMat);
-    seat.position.y = 0.435;
-    const legs: THREE.BufferGeometry[] = [];
-    for (let k = 0; k < 3; k++) {
-      const a = (k / 3) * Math.PI * 2;
-      const l = new THREE.CylinderGeometry(0.018, 0.022, 0.42, 6);
-      l.rotateZ(Math.cos(a) * 0.12);
-      l.rotateX(-Math.sin(a) * 0.12);
-      l.translate(Math.cos(a) * 0.12, 0.21, Math.sin(a) * 0.12);
-      legs.push(l);
-    }
-    sg.add(seat, mesh(mergeGeometries(legs), darkWood));
+    const seat = mesh(stoolSeatGeo, tableMat);
+    seat.position.y = 0.41;
+    sg.add(seat, mesh(stoolLegsGeo, legWood));
     const sh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 8), hitMat);
     sh.position.y = 0.45;
     sh.userData.interact = { type: 'seat', id: s.id };
@@ -654,12 +676,23 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   const menu = new THREE.Group();
   const menuTex = menuTexture();
   const menuMat = std({ map: menuTex, roughness: 0.8, emissive: '#ffffff', emissiveIntensity: 0, emissiveMap: menuTex });
+  // 两扇木框夹着黑板，四条腿着地，顶上一根合页轴（原来是两块斜靠的木板）
   for (const s of [1, -1]) {
-    const board = mesh(new THREE.BoxGeometry(0.62, 0.98, 0.03), s > 0 ? [darkWood, darkWood, darkWood, darkWood, menuMat, darkWood] : darkWood);
-    board.position.set(0, 0.52, s * 0.13);
-    board.rotation.x = -s * 0.2;
-    menu.add(board);
+    const leaf = new THREE.Group();
+    leaf.position.set(0, 1.08, 0);
+    leaf.rotation.x = -s * 0.2;
+    const panel = mesh(new THREE.BoxGeometry(0.54, 0.8, 0.018), s > 0 ? [darkWood, darkWood, darkWood, darkWood, menuMat, darkWood] : darkWood);
+    panel.position.set(0, -0.5, s * 0.004);
+    leaf.add(panel);
+    const frameParts: THREE.BufferGeometry[] = [];
+    for (const x of [-0.29, 0.29]) frameParts.push(new THREE.BoxGeometry(0.05, 1.08, 0.04).translate(x, -0.54, 0));
+    for (const y of [-0.08, -0.92]) frameParts.push(new THREE.BoxGeometry(0.58, 0.05, 0.04).translate(0, y, 0));
+    leaf.add(mesh(mergeGeometries(frameParts)!, legWood));
+    menu.add(leaf);
   }
+  const hinge = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.64, 10).rotateZ(Math.PI / 2), std({ color: '#3a3430', metalness: 0.6, roughness: 0.4 }));
+  hinge.position.y = 1.08;
+  menu.add(hinge);
   const mw = cafeWorld(1.9, 9.0);
   menu.position.set(mw.x, 0, mw.z);
   menu.rotation.y = CAFE.yaw + 0.25;
@@ -704,7 +737,9 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   cupLid.position.y = cupH;
   const slot = mesh(new THREE.BoxGeometry(0.22, 0.02, 0.09), std({ color: '#0e0c0b' }));
   slot.position.set(0, cupH + 0.072, 0.12);
-  bin.add(cupBody, sleeve, cupLid, slot);
+  const rim = mesh(new THREE.TorusGeometry(0.4, 0.014, 8, 40).rotateX(Math.PI / 2), std({ color: '#f6f3ec', roughness: 0.6 }));
+  rim.position.y = cupH - 0.004;
+  bin.add(cupBody, sleeve, cupLid, slot, rim);
   const binHit = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 1.2, 10), hitMat);
   binHit.position.y = 0.6;
   binHit.userData.interact = { type: 'cafeBin' };

@@ -553,8 +553,8 @@ export function setRoofDetail(lite: boolean) {
   tileStep = lite ? 0.46 : 0.3;
 }
 let tileMat: THREE.MeshStandardMaterial | null = null;
-type SlopeFn = (u: number, v: number) => [number, number, number, number, number];
-function addTileRuns(group: THREE.Group, faces: [SlopeFn, (v: number) => number][]) {
+export type SlopeFn = (u: number, v: number) => [number, number, number, number, number];
+export function addTileRuns(group: THREE.Group, faces: [SlopeFn, (v: number) => number][]) {
   tileMat ??= new THREE.MeshStandardMaterial({ color: '#ffffff', vertexColors: true, roughness: 0.88, metalness: 0, envMapIntensity: 0.55 });
   const r = tileStep * 0.34; // 筒瓦半径（两垄之间留出约三成的沟）
   const pos: number[] = [];
