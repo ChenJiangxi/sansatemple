@@ -267,8 +267,9 @@ function mats() {
       legging: new THREE.MeshStandardMaterial({ color: LEGGING, roughness: 0.9 }),
       kasaya: new THREE.MeshPhysicalMaterial({ map: fieldRobeTexture(), roughness: 0.78, sheen: 0.45, sheenRoughness: 0.6, sheenColor: new THREE.Color('#ffb898'), side: THREE.DoubleSide }),
       collar: new THREE.MeshStandardMaterial({ color: COLLAR, roughness: 0.8 }),
-      skin: new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.6 }),
-      headSkin: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 }),
+      // 皮肤：高光压低、边缘一层暖色绒光（像皮肤透光），不再是塑料的亮斑
+      skin: new THREE.MeshPhysicalMaterial({ color: SKIN, roughness: 0.66, specularIntensity: 0.3, sheen: 0.55, sheenRoughness: 0.75, sheenColor: new THREE.Color('#ffcbb4') }),
+      headSkin: new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.66, specularIntensity: 0.3, sheen: 0.55, sheenRoughness: 0.75, sheenColor: new THREE.Color('#ffcbb4') }),
       shoe: new THREE.MeshStandardMaterial({ color: SHOE, roughness: 0.7 }),
       gold: new THREE.MeshStandardMaterial({ color: '#d9ab52', metalness: 0.8, roughness: 0.3 }),
       face: new THREE.MeshBasicMaterial({ color: '#4a3226' }),
@@ -279,6 +280,22 @@ function mats() {
       wood: new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.6 }),
       bead: new THREE.MeshStandardMaterial({ color: '#4a2212', roughness: 0.35 }),
     };
+    // 僧袍、袈裟、裤腿：细亚麻的布纹（Poly Haven Rough Linen 的法线和粗糙度，CC0）。
+    // Q 版身形小，纹理重复多一些、凹凸浅一些，近看是布、远看不花
+    const lin = linenMaps();
+    const tile = (t: THREE.Texture, rx: number, ry: number) => {
+      const c = t.clone();
+      c.repeat.set(rx, ry);
+      c.needsUpdate = true;
+      return c;
+    };
+    for (const [k, rx, ry] of [['robe', 5, 2.5], ['lining', 5, 2.5], ['legging', 3, 2], ['kasaya', 6, 3], ['collar', 4, 1]] as [string, number, number][]) {
+      const m = sharedMats[k] as THREE.MeshStandardMaterial;
+      m.normalMap = tile(lin.n, rx, ry);
+      m.normalScale.set(0.65, 0.65);
+      m.roughnessMap = tile(lin.r, rx, ry);
+      m.needsUpdate = true;
+    }
   }
   return sharedMats;
 }
