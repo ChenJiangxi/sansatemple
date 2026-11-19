@@ -171,7 +171,15 @@ export const STONE_PATHS: { x: number; z: number }[][] = [
   [{ x: -3.4, z: 43.2 }, { x: -9, z: 42.9 }, { x: -13.5, z: 42.6 }, { x: -18.6, z: 43.6 }, { x: -21, z: 47.5 }, { x: -21.4, z: 51.6 }],
 ];
 
-export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS, ...CAFE_SEATS];
+// 围炉煮茶：半山咖啡北边那棵大枫树下，一张放宽的明式茶几，中间架着火钵，四把露营椅对着茶几四条边（座位 t0–t3，面朝炉子）
+export const TEA = { x: 31.0, z: 57.8, half: 0.61 };
+export const TEA_SEATS: Seat[] = [0, 1, 2, 3].map((i) => {
+  const a = (i * Math.PI) / 2;
+  const r = 1.12, ra = 1.85;
+  const x = TEA.x + Math.sin(a) * r, z = TEA.z + Math.cos(a) * r;
+  return { id: `t${i}`, kind: 'bench' as const, x, z, y: 0.42, yaw: a + Math.PI, approachX: TEA.x + Math.sin(a) * ra, approachZ: TEA.z + Math.cos(a) * ra };
+});
+export const ALL_SEATS: Seat[] = [...CUSHIONS, ...BENCH_SEATS, ...CAFE_SEATS, ...TEA_SEATS];
 export const SEAT_BY_ID = new Map(ALL_SEATS.map((s) => [s.id, s]));
 
 // 院中的树（大多是银杏，少数枫树），坐标 + 大小
@@ -222,6 +230,8 @@ const circles: Circle[] = [];
 const boxes: Box[] = [];
 
 for (const [x, z, s] of MAPLES) circles.push({ x, z, r: 0.45 * s });
+// 围炉的茶几
+boxes.push({ x0: TEA.x - TEA.half, x1: TEA.x + TEA.half, z0: TEA.z - TEA.half, z1: TEA.z + TEA.half });
 for (const [x, z, s] of PINES) circles.push({ x, z, r: 0.5 * s });
 for (const [x, z, s] of ROCKS) circles.push({ x, z, r: 0.9 * s });
 for (const sx of [-1, 1]) for (const z of [11, 22, 33, 43.5]) circles.push({ x: sx * 2.75, z, r: 0.28 });

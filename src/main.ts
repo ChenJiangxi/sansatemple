@@ -30,6 +30,8 @@ import { CafeUI, parseCup, cupCode, SIPS, BREW_MS, DRINK_BY_ID, type DrinkId } f
 import { Radio, type StationId } from './radio';
 import { mountRadioUI } from './radio-ui';
 import { PolaroidUI } from './polaroid';
+import { buildTea, ROAST_SECONDS } from './world/tea';
+import { TeaUI } from './tea-ui';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
 import { Monk, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
@@ -38,7 +40,7 @@ import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
 import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY, cafeLocal } from './layout';
-import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
+import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, TEA_SEATS, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
 import { OverlayStage, MoktakView, RosaryView } from './overlays';
@@ -173,6 +175,7 @@ async function start() {
   const shrines = buildShrines(scene);
   const cafe = buildCafe(scene);
   const garden = buildGarden(scene, { lite: isTouch });
+  const tea = buildTea(scene);
   const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
   const residents = buildResidents(scene, {
     bell: buildings.bell,
@@ -198,7 +201,7 @@ async function start() {
   scene.traverse((o) => {
     if (o.name === 'walkable') walkables.push(o);
   });
-  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, ...garden.interactives, pond.water];
+  const interactives = [...hall.interactives, ...props.interactives, ...buildings.bell.interactives, ...shrines.interactives, ...residents.interactives, ...cafe.interactives, ...garden.interactives, ...tea.interactives, pond.water];
   // 两座配殿：修行到「行者」开观音殿，到「沙弥」开地藏殿
   const sideHalls = furnishSideHalls(buildings.halls, roomEnv);
   interactives.push(...sideHalls.interactives, ...sideHalls.doorHits, ...sideHalls.deskHits);
@@ -1037,6 +1040,31 @@ async function start() {
   let cup: { d: DrinkId; sips: number; from?: string } | null = null;
   let brewing = false;
   let pendingGift: { id: string; d: DrinkId } | null = null;
+  // —— 围炉煮茶：坐到炉边以后，喝茶（常住僧人那套端杯喝茶的动作）、烤橘子柿子栗子，烤好了吃掉 ——
+  const teaUI = new TeaUI(ui.root, {
+    drink: () => {
+      if (!player.seat?.id.startsWith('t')) return;
+      me.setAction(me.action === 'tea' ? 'bench' : 'tea');
+    },
+    drinking: () => me.action === 'tea',
+    roast: (kind) => {
+      const slot = tea.roast(kind);
+      if (slot < 0) {
+        ui.toast(t('roastFull'));
+        return;
+      }
+      ui.toast(t('roastPut', { n: ROAST_SECONDS }));
+      setTimeout(() => {
+        if (tea.ready(slot) && teaUI.shown) teaUI.addReady(slot, kind);
+      }, ROAST_SECONDS * 1000 + 100);
+    },
+    eat: (slot) => {
+      tea.take(slot);
+      floatText(ui.root, innerWidth / 2, innerHeight * 0.42, t('roastAte'), 'merit');
+      gain(2);
+    },
+  });
+
   // —— 拍立得打卡：右上角相机；倒数时小和尚转身面向镜头，拍下画面（不带界面），印成拍立得，收进打卡册 ——
   let grabFrame: ((c: HTMLCanvasElement) => void) | null = null;
   new PolaroidUI(ui.root, {
@@ -2310,6 +2338,13 @@ async function start() {
       if (seat) goToSeat(seat, 'sit');
       return;
     }
+    // 点茶几：走到离自己最近的空椅子坐下
+    if (p.interact?.type === 'tea') {
+      const free = TEA_SEATS.filter((s) => !seatTaken(s)).sort((a, b) => Math.hypot(a.x - player.x, a.z - player.z) - Math.hypot(b.x - player.x, b.z - player.z));
+      if (free[0]) goToSeat(free[0], 'sit');
+      else ui.toast(t('seatTaken'));
+      return;
+    }
     if (p.interact?.type === 'incense' || p.interact?.type === 'altarIncense') {
       requestIncense(p.interact.type === 'altarIncense' ? 'altar' : 'yard');
       return;
@@ -2409,7 +2444,8 @@ async function start() {
     if (it?.type === 'seat') {
       const s = SEAT_BY_ID.get(it.id);
       label = s && seatTaken(s) ? t('seatTaken') : t('sit');
-    } else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
+    } else if (it?.type === 'tea') label = t('tipTea');
+    else if (it?.type === 'incense' || it?.type === 'altarIncense') label = t('incense');
     else if (it?.type === 'bell') label = t('ringBell');
     else if (it?.type === 'lantern') label = t('tipLantern');
     else if (it?.type === 'fortune') label = t('tipFortune');
@@ -2769,6 +2805,9 @@ async function start() {
     }
     stage.render(dt);
     updateTags();
+    // 围炉：坐在炉边的椅子上才出现操作条；炭火天黑以后更亮
+    teaUI.setVisible(!!player.seat && player.seat.id.startsWith('t'));
+    tea.update(dt, Math.min(1, env.lanternLevel));
     net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())), c: cupCode(cup), h: radio.station ?? '' });
     if (!booted) {
       booted = true;

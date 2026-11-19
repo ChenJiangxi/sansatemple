@@ -111,6 +111,16 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
   - 十二处景点第一次拍的照片收进「打卡册」（`localStorage` 的 `sansa.album`，存 260 像素小图）。
 - **调试参数**：`&radio=lofi|rain|qin`。
 
+### 围炉煮茶（2026-11-19）
+
+半山咖啡北边那棵大枫树下（`layout.ts` 的 `TEA`），`src/world/tea.ts`：
+- 一张放宽的明式茶几，中间一只青花火钵，钵上平放铁烤盘，盘中一把铁壶冒热气，四周烤着橘子、柿子、栗子，茶几一角一套青瓷茶具；四把露营椅对着茶几四条边（座位 `t0`–`t3`，服务器 `SEAT_RE` 已放行）。
+- 火钵里透出炭火光，天黑以后照亮围坐的人。
+- 点茶几就走到最近的空椅子坐下。坐下后底部出现操作条（`src/tea-ui.ts`）：
+  - 「喝杯茶」用常住僧人端杯喝茶的 `tea` 动作，联机时别人也看得到；
+  - 「烤橘子 / 柿子 / 栗子」往烤盘上放一个，8 秒烤好变成「吃」按钮，吃掉 +2 功德。烤的东西只在自己这边。
+- 模型都在 `public/models/props/`，用 `src/world/glb.ts` 加载（同一文件只下一次，取用时克隆）。
+
 ### 半山咖啡
 
 原名「山寺咖啡」，2026-11-19 为了能发小红书改名：店名、饮品名、对联里不再用宗教词（「般若拿铁」改「山雾拿铁」，「菩提美式」改「清醒美式」，「咖啡师父」改「咖啡师」，「禅心」改「诗心」）。
@@ -247,6 +257,14 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/head/` | Lee Perry-Smith「Infinite, 3D Head Scan」（triplegangers.com，经 three.js 示例分发） | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) | 运行时切掉肩颈、贴图上淡化胡茬，作所有僧人的头 |
 | `public/tex/tree/` | ez-tree 自带：橡树树皮（Poly Haven）、松树树皮（TextureCan）、树叶 | CC0 / MIT | 只留用到的几张，缩到 512 像素 |
 | `public/tex/linen_*.jpg` | Poly Haven「Rough Linen」 | CC0 | 只用法线和粗糙度，缩到 512 像素，作僧袍布纹 |
+| `public/models/props/brasero.glb` | [Japanese Ceramic Brasero](https://sketchfab.com/3d-models/cba525be001d4874a3b366829d084657) by GiyoP | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | 围炉的青花火钵；tools/prep-prop.mjs 缩贴图、压缩 |
+| `public/models/props/grill.glb` | [Iron Grill](https://sketchfab.com/3d-models/2b6f1f4aac514fecbecf510fc71d28fd) by Mike Rowley (scrumpy26) | CC BY 4.0 | 平放在火钵上当烤盘 |
+| `public/models/props/tetsubin.glb` | [Cast Iron Tetsubin](https://sketchfab.com/3d-models/1a49b0714571487d9164b9ba13d03e3f) by toomuchtea | CC BY 4.0 | 炉上的铁壶 |
+| `public/models/props/teaset.glb` | [Teaset](https://sketchfab.com/3d-models/c072fcbce5db4f4e81a499e1cd187432) by 捺/nuts (alc.72) | CC BY 4.0 | 茶几上的青瓷茶具 |
+| `public/models/props/camp_chair.glb` | [Camping Chair](https://sketchfab.com/3d-models/46b592f41c1f441ca19faadd2b4bb90a) by lpfeffer | CC BY 4.0 | 围炉的露营椅 |
+| `public/models/props/coffee_machine.glb`、`grinder.glb` | [Canarian Cafe - Coffee Machine](https://sketchfab.com/3d-models/17042d9af8c5461e98876064fd80385d)、[Coffee Grinder](https://sketchfab.com/3d-models/78d7e61da65c4b368074c978e742bdfc) by Lanzaman (lanzaboy) | CC BY 4.0 | 半山咖啡吧台 |
+| `public/models/props/parasol.glb` | [Umbrella](https://sketchfab.com/3d-models/ae0abff9bb9d4bb3b2ef634b8bc539d5) by Tatiana Sumarokova (Milight) | CC BY 4.0 | 红色梅花油纸伞，放大当露台遮阳伞，游戏里接长了伞杆 |
+| `public/models/props/tea_table.glb`、`cafe_set.glb` | Poly Haven：chinese_tea_table、outdoor_table_chair_set_01 | [CC0](https://polyhaven.com/license) | 围炉的茶几（放宽了桌面）；户外桌椅 |
 | `public/fonts/hand.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | SIL OFL | 只取拍立得相纸题字用到的字（十二处地名、山寺、数字），2026-11-19 |
 | `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
