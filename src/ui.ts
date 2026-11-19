@@ -7,24 +7,24 @@ const svg = (body: string, size = 20) =>
   `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
 export const ICON = {
-  exit: svg('<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M15 12H4m4-4-4 4 4 4"/>'),
+  exit: svg('<path d="M14.5 6 8.5 12l6 6"/>'),
   chevron: svg('<path d="m7 10 5 5 5-5"/>', 14),
   people: svg('<circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><path d="M15.5 5a3 3 0 0 1 0 6m2.5 8.5c-.3-1.8-1.1-3.2-2.3-4.1"/>', 16),
   soundOn: svg('<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>'),
   soundOff: svg('<path d="M4 9.5v5h3.5L12 18V6L7.5 9.5H4z"/><path d="m16 9.5 5 5m0-5-5 5"/>'),
-  settings: svg('<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
-  hapjang: svg('<path d="M12 3.5c-1.2 1.6-3.2 4.4-3.2 8.6v4.2L6 19.5h12l-2.8-3.2v-4.2c0-4.2-2-7-3.2-8.6z"/><path d="M12 7v12"/>', 22),
-  bow: svg('<circle cx="12" cy="6.5" r="2.6"/><path d="M6.5 19.5c0-3.8 2.4-7 5.5-7s5.5 3.2 5.5 7z"/><path d="M10 15.5h4"/>', 22),
-  moktak: svg('<ellipse cx="11" cy="14" rx="7" ry="5.5"/><path d="M6 14.5c2.6 1.4 7.4 1.4 10 0"/><path d="M15.5 8.5c.8-2.2 3.4-3.2 4.8-2"/>', 22),
-  rosary: svg('<circle cx="12" cy="4.5" r="1.3"/><circle cx="17" cy="6.5" r="1.3"/><circle cx="19.2" cy="11.5" r="1.3"/><circle cx="17" cy="16.5" r="1.3"/><circle cx="7" cy="16.5" r="1.3"/><circle cx="4.8" cy="11.5" r="1.3"/><circle cx="7" cy="6.5" r="1.3"/><circle cx="12" cy="19" r="2"/>', 22),
+  settings: svg('<path d="M5 8h9M18 8h1M5 16h3M12 16h7"/><circle cx="16" cy="8" r="2"/><circle cx="10" cy="16" r="2"/>'),
+  hapjang: svg('<path d="M11.4 20V9.6c0-1.6-.6-3.2-1.5-4.4L9 4"/><path d="M12.6 20V9.6c0-1.6.6-3.2 1.5-4.4L15 4"/><path d="M9 4c-1.4 2.6-2 5.4-2 8.2V16l3 4M15 4c1.4 2.6 2 5.4 2 8.2V16l-3 4"/>', 22),
+  bow: svg('<circle cx="9" cy="7" r="2.2"/><path d="M5 19.5h14M7 19.5c0-3 1-5.5 3.5-6.5l4 1.2c1.6.5 2.6 2 2.6 3.7v1.6"/><path d="M10.5 13l3-3.2"/>', 22),
+  moktak: svg('<path d="M4.5 13c0-4 3.6-7 7.8-7 3.5 0 6.2 2.3 7.2 5.3.3 1-.4 2-1.4 2.2l-3.4.6"/><path d="M4.5 13c.6 3.2 3.7 5.5 7.4 5.5 3.3 0 6-1.8 7.1-4.4"/><path d="M9 13.2h6.5"/><circle cx="8.3" cy="10" r=".6" fill="currentColor"/>', 22),
+  rosary: svg('<circle cx="12" cy="11" r="6.2"/><circle cx="12" cy="4.8" r="1.2" fill="currentColor"/><circle cx="18.2" cy="11" r="1.2" fill="currentColor"/><circle cx="5.8" cy="11" r="1.2" fill="currentColor"/><circle cx="7.6" cy="15.4" r="1.2" fill="currentColor"/><circle cx="16.4" cy="15.4" r="1.2" fill="currentColor"/><path d="M12 17.2v3.3M10.8 20.5h2.4"/>', 22),
   play: svg('<path d="M8 5.5v13l10-6.5z"/>', 16),
   pause: svg('<path d="M8.5 5.5v13M15.5 5.5v13"/>', 16),
   close: svg('<path d="m6 6 12 12M18 6 6 18"/>', 16),
   back: svg('<path d="M19 12H5m5-5-5 5 5 5"/>', 16),
   temple: svg('<path d="M2 11c5-1 8-4 10-7 2 3 5 6 10 7M4 12h16M7 13v7m10-7v7M4 20h16M10 15h4v5"/>', 32),
   incense: svg('<path d="M12 3c1 1.5-1 2.5 0 4M9 5c.7 1-.7 1.8 0 3M15 5c.7 1-.7 1.8 0 3"/><path d="M6 13h12l-1.5 5h-9z"/><path d="M12 9v4M9 10v3M15 10v3"/>', 18),
-  practice: svg('<path d="M12 4.5c-2.2 2.5-2.4 6.1 0 9 2.4-2.9 2.2-6.5 0-9z"/><path d="M12 13.5c-2.5.1-5.8-1.3-7.5-4-.3 3.3 2.7 6.1 7.5 6.1s7.8-2.8 7.5-6.1c-1.7 2.7-5 4.1-7.5 4z"/><path d="M6.5 18.5h11"/>'),
-  seal: svg('<rect x="4.5" y="4.5" width="15" height="15" rx="2"/><path d="M9 8.5v7M15 8.5v7M9 12h6"/>'),
+  practice: svg('<path d="M12 5.5c-1.8 2-2 5 0 7.5 2-2.5 1.8-5.5 0-7.5Z"/><path d="M12 13c-2.3-.2-5.2-1.5-6.6-3.6-.4 3 2.4 5.6 6.6 5.6s7-2.6 6.6-5.6C17.2 11.5 14.3 12.8 12 13Z"/><path d="M7 18.5h10"/>'),
+  seal: svg('<path d="M9.5 4.5h5a1 1 0 0 1 1 1v3a2 2 0 0 1-1 1.7v1.3h-5v-1.3a2 2 0 0 1-1-1.7v-3a1 1 0 0 1 1-1Z"/><rect x="5" y="11.5" width="14" height="5" rx="1.5"/><path d="M6 19.5h12"/>'),
   sit: svg('<circle cx="12" cy="6" r="2.5"/><path d="M5 18.5c1.8-1.6 4.2-2.5 7-2.5s5.2.9 7 2.5M8.5 15l1-3.5h5l1 3.5"/>', 18),
 };
 
@@ -86,7 +86,10 @@ export class UI {
   sealsBtn!: HTMLButtonElement;
   practiceBtn!: HTMLButtonElement;
   private exitBtn!: HTMLButtonElement;
-  private chantBtn!: HTMLButtonElement;
+  chantBtn!: HTMLButtonElement;
+  // 左边一列（寺名牌、修行进度、共修提示、寺务提示从上往下排，不会互相压住）；底部操作栏右端放电台和快门
+  leftCol!: HTMLElement;
+  dockExtra!: HTMLElement;
   private hint!: HTMLElement;
   private status!: HTMLElement;
   private statusText!: HTMLElement;
@@ -137,29 +140,35 @@ export class UI {
   private build() {
     const r = this.root;
     // 左上：离开 | 山寺 01 ▾ | 人数
-    const left = el('div', 'pill top-left');
-    this.exitBtn = el('button', 'icon-btn', ICON.exit);
+    // 左上：离开（圆钮）+ 寺名牌（第一行寺名和房间号，第二行在线人数），下面一条修行进度
+    this.leftCol = el('div', 'left-col');
+    const left = el('div', 'top-left');
+    this.exitBtn = el('button', 'icon-btn glass-btn', ICON.exit);
     this.exitBtn.onclick = () => this.h.exit();
+    const place = el('div', 'pill place');
     this.roomBtn = el('button', 'room-btn');
     this.roomBtn.onclick = () => this.togglePanel('servers', this.roomBtn);
     this.countBtn = el('button', 'count-btn');
     this.countBtn.onclick = () => this.togglePanel('visitors', this.countBtn);
-    left.append(this.exitBtn, el('span', 'sep'), this.roomBtn, this.countBtn);
-    // 左上角常驻：称号、到下一级的功德进度、今日功课几项完成；点开修行面板
+    place.append(this.roomBtn, this.countBtn);
+    left.append(this.exitBtn, place);
+    // 称号、到下一级的功德进度、今日功课几项完成；点开修行面板
     this.practiceChip = el('button', 'pill practice-chip');
     this.practiceChip.onclick = () => this.openPractice('progress');
-    // 右上：声音 | 设置
-    const right = el('div', 'pill top-right');
-    this.soundBtn = el('button', 'icon-btn', ICON.soundOff);
+    this.leftCol.append(left, this.practiceChip);
+    // 右上：竖排四个圆钮——修行、印谱、声音、设置
+    const right = el('div', 'top-right');
+    this.soundBtn = el('button', 'icon-btn glass-btn', ICON.soundOff);
     this.soundBtn.onclick = () => this.h.toggleSound();
-    this.settingsBtn = el('button', 'icon-btn', ICON.settings);
+    this.settingsBtn = el('button', 'icon-btn glass-btn', ICON.settings);
     this.settingsBtn.onclick = () => this.togglePanel('settings', this.settingsBtn);
-    this.sealsBtn = el('button', 'icon-btn', ICON.seal);
+    this.sealsBtn = el('button', 'icon-btn glass-btn', ICON.seal);
     this.sealsBtn.onclick = () => this.togglePanel('seals', this.sealsBtn);
-    this.practiceBtn = el('button', 'icon-btn', ICON.practice);
+    this.practiceBtn = el('button', 'icon-btn glass-btn', ICON.practice);
     this.practiceBtn.onclick = () => (this.panelKind === 'practice' ? this.closePanel() : this.openPractice(this.practiceTab));
     right.append(this.practiceBtn, this.sealsBtn, this.soundBtn, this.settingsBtn);
-    this.chantBtn = el('button', 'pill chant-btn');
+    // 听念佛：交给电台菜单当其中一项（radio-ui 会把它搬进去）
+    this.chantBtn = el('button', 'radio-st chant-st');
     this.chantBtn.onclick = () => this.h.toggleChant();
 
     this.hint = el('div', 'hint');
@@ -177,11 +186,13 @@ export class UI {
     const dock = el('nav', 'pill dock');
     for (const k of ['hapjang', 'bow', 'moktak', 'rosary'] as DockKind[]) {
       const b = el('button', 'dock-btn');
-      b.innerHTML = `${ICON[k]}<span></span>`;
+      b.innerHTML = `${ICON[k]}<span></span><kbd>${{ hapjang: '3', bow: '1', moktak: '5', rosary: '2' }[k]}</kbd>`;
       b.onclick = () => this.h.dock(k);
       dock.appendChild(b);
       this.dockBtns.set(k, b);
     }
+    this.dockExtra = el('div', 'dock-extra');
+    dock.append(el('span', 'sep dock-sep'), this.dockExtra);
 
     this.panel = el('section', 'panel');
     this.panel.hidden = true;
@@ -232,7 +243,7 @@ export class UI {
     this.farewell.innerHTML = `<span class="mark">${ICON.temple}</span><h1></h1><p></p><button class="stay-btn"></button>`;
     (this.farewell.querySelector('.stay-btn') as HTMLButtonElement).onclick = () => this.h.stay();
 
-    r.append(left, this.practiceChip, right, this.chantBtn, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.caption, this.farewell);
+    r.append(this.leftCol, right, this.hint, this.toastEl, this.status, dock, this.panel, this.moktakHit, this.moktakCount, this.moktakBar, this.rosaryPad, this.rosaryBox, this.rosaryBar, this.tooltip, this.caption, this.farewell);
 
     // 模糊层要在主场景之上、特写画布之下
     const parent = r.parentElement!;
@@ -287,9 +298,9 @@ export class UI {
 
   private renderTop() {
     const roomNo = this.room ? String(this.room).padStart(2, '0') : '—';
-    this.roomBtn.innerHTML = `<strong>${t('server')}</strong><span class="room-no">${roomNo}</span>${ICON.chevron}`;
+    this.roomBtn.innerHTML = `<strong>${t('server')}</strong><span class="room-no">· ${roomNo}</span>${ICON.chevron}`;
     this.roomBtn.setAttribute('aria-label', `${t('server')} ${roomNo}. ${t('serverSelect')}`);
-    this.countBtn.innerHTML = this.online ? `${this.count}/${this.capacity}` : `${ICON.people}<span>1</span>`;
+    this.countBtn.innerHTML = `<i class="${this.online ? 'live' : 'off'}"></i>${t('hudPeople', { n: this.online ? this.count : 1 })}`;
     this.countBtn.setAttribute('aria-label', `${this.online ? this.count : 1}${t('people')} · ${t('visitors')}`);
   }
 
@@ -306,7 +317,7 @@ export class UI {
     this.soundBtn.classList.toggle('on', this.soundOn);
     this.rosarySoundBtn.innerHTML = this.soundOn ? ICON.soundOn : ICON.soundOff;
     this.rosarySoundBtn.setAttribute('aria-label', t(this.soundOn ? 'soundOff' : 'soundOn'));
-    this.chantBtn.textContent = t(this.chantOn ? 'chantOff' : 'chantOn');
+    this.chantBtn.innerHTML = `<i></i><span>${t(this.chantOn ? 'chantOff' : 'chantOn')}</span>`;
     this.chantBtn.classList.toggle('on', this.chantOn);
     this.chantBtn.setAttribute('aria-pressed', String(this.chantOn));
   }

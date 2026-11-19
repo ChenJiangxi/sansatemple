@@ -3,6 +3,8 @@ export type Lang = 'zh' | 'ko' | 'ja' | 'en';
 
 const dict = {
   zh: {
+    radioShort: "电台",
+    hudPeople: "{n} 人在寺里",
     teaTitle: "围炉煮茶",
     teaDrink: "喝杯茶",
     teaStop: "放下茶杯",
@@ -473,6 +475,8 @@ const dict = {
     you: '你',
   },
   ko: {
+    radioShort: "라디오",
+    hudPeople: "{n}명이 절에 있어요",
     teaTitle: "화로에 차 끓이기",
     teaDrink: "차 한 잔",
     teaStop: "찻잔 내려놓기",
@@ -943,6 +947,8 @@ const dict = {
     you: '나',
   },
   ja: {
+    radioShort: "ラジオ",
+    hudPeople: "{n} 人が境内に",
     teaTitle: "囲炉でお茶",
     teaDrink: "お茶を一杯",
     teaStop: "湯呑みを置く",
@@ -1413,6 +1419,8 @@ const dict = {
     you: 'わたし',
   },
   en: {
+    radioShort: "Radio",
+    hudPeople: "{n} here now",
     teaTitle: "Tea by the brazier",
     teaDrink: "Have tea",
     teaStop: "Put the cup down",

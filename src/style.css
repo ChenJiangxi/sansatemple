@@ -1,8 +1,8 @@
 :root {
-  --glass: rgba(36, 38, 31, 0.38);
-  --glass-strong: rgba(30, 32, 26, 0.66);
+  --glass: rgba(30, 32, 27, 0.30);
+  --glass-strong: rgba(26, 28, 24, 0.6);
   --glass-light: rgba(246, 243, 234, 0.9);
-  --line: rgba(255, 255, 255, 0.2);
+  --line: rgba(255, 255, 255, 0.22);
   --text: #f6f2e8;
   --muted: rgba(246, 242, 232, 0.7);
   --ink: #34372d;
@@ -10,7 +10,9 @@
   --accent: #ead58a;
   --radius-pill: 999px;
   --radius-sheet: 18px;
-  --blur: blur(14px) saturate(1.15);
+  --blur: blur(18px) saturate(1.4);
+  --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(0, 0, 0, 0.1), 0 8px 24px rgba(0, 0, 0, 0.16);
+  --live: #e57a5f; /* 「正在发生」的小红点：深色玻璃上用亮一点的朱砂 */
   --font: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans', 'Apple SD Gothic Neo', 'Noto Sans CJK SC', 'Segoe UI', sans-serif;
   --safe-t: env(safe-area-inset-top, 0px);
   --safe-b: env(safe-area-inset-bottom, 0px);
@@ -38,7 +40,7 @@ canvas.main.point { cursor: pointer; }
 .pill {
   display: flex; align-items: center; background: var(--glass); border: 1px solid var(--line);
   backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); border-radius: var(--radius-pill);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12); color: var(--text);
+  box-shadow: var(--glass-shadow); color: var(--text);
 }
 .sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
 .icon-btn { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--text); }
@@ -658,3 +660,75 @@ canvas.main.point { cursor: pointer; }
 .tea-btn.ready { background: #c4612a; border-color: #c4612a; color: #fff6ea; animation: tea-pop 0.4s ease-out; }
 .tea-ready { display: contents; }
 @keyframes tea-pop { 0% { transform: scale(0.7); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+/* 调试：?noui 时只留游戏画面 */
+.noui #app > :not(canvas), .noui .name-tag, .noui .tag { visibility: hidden !important; }
+
+
+/* —— 2026-11-19 界面新排布（保留磨砂玻璃质感）——
+   左边一列：离开 + 寺名牌、修行进度、共修提示、寺务提示，从上往下排，同时出现也不会互相压住；
+   右上竖排四个圆钮：修行、印谱、声音、设置；
+   底部操作栏：合十、礼佛、木鱼、念珠 | 电台、快门（浅色圆钮，最显眼的一个） */
+.glass-btn { background: var(--glass); border: 1px solid var(--line); backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); box-shadow: var(--glass-shadow); transition: background 0.18s ease, transform 0.12s ease; }
+.glass-btn:hover { background: rgba(48, 50, 44, 0.42); }
+.glass-btn:active, .dock-btn:active { transform: scale(0.96); }
+
+.left-col { position: absolute; top: calc(12px + var(--safe-t)); left: 12px; z-index: 2; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none; }
+.left-col > * { pointer-events: auto; position: static !important; transform: none !important; margin: 0 !important; }
+.top-left { display: flex; align-items: center; gap: 8px; height: auto; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.place { flex-direction: column; align-items: flex-start; justify-content: center; height: 46px; padding: 0 16px 0 14px; border-radius: 23px; }
+.room-btn { height: auto; padding: 0; gap: 4px; font-size: 15px; line-height: 1.2; }
+.room-btn strong { font-family: 'Songti SC', 'Noto Serif CJK SC', serif; font-weight: 600; letter-spacing: 1px; }
+.room-btn .room-no { font-size: 13px; }
+.room-btn svg { width: 12px; height: 12px; }
+.count-btn { height: auto; padding: 0; gap: 5px; font-size: 11.5px; line-height: 1.3; color: var(--muted); }
+.count-btn i { width: 6px; height: 6px; border-radius: 50%; background: #86c493; box-shadow: 0 0 0 3px rgba(134, 196, 147, 0.18); }
+.count-btn i.off { background: rgba(255, 255, 255, 0.45); box-shadow: none; }
+.practice-chip { height: 32px; }
+.quest-pill { height: 32px; }
+.service-chip .svc-go { background: var(--live); }
+.service-chip::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 4px rgba(229, 122, 95, 0.2); margin-right: -2px; }
+
+.top-right { display: flex; flex-direction: column; gap: 10px; height: auto; padding: 0; background: none; border: 0; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; right: 12px; }
+.top-right .icon-btn.on { color: var(--accent); }
+.panel-settings, .panel-seals, .panel-practice { right: 66px; }
+
+.dock { padding: 6px; gap: 2px; border-radius: 28px; }
+.dock-btn { position: relative; width: 60px; height: 58px; gap: 4px; border-radius: 18px; font-size: 11.5px; }
+.dock-btn svg { stroke-width: 1.6; }
+.dock-btn kbd { display: none; }
+.dock-sep { height: 30px; margin: 0 6px; }
+.dock-extra { display: flex; align-items: center; gap: 4px; }
+.dock .radio-btn.on { color: var(--accent); background: rgba(234, 213, 138, 0.12); }
+.shutter { width: 54px; height: 54px; margin-left: 4px; border-radius: 50%; display: grid; place-items: center; background: rgba(250, 246, 238, 0.94); color: #2a241f; box-shadow: inset 0 0 0 3px rgba(250, 246, 238, 0.94), inset 0 0 0 4.5px rgba(42, 36, 31, 0.32), 0 4px 14px rgba(0, 0, 0, 0.18); transition: transform 0.12s ease; }
+.shutter:hover { background: #fff; }
+.shutter:active { transform: scale(0.94); }
+.shutter svg { width: 23px; height: 23px; }
+
+.hint { top: auto; bottom: calc(100px + var(--safe-b)); }
+.status { bottom: calc(100px + var(--safe-b)); }
+.overlay-bar { bottom: calc(96px + var(--safe-b)); }
+.tea-bar { bottom: calc(100px + var(--safe-b)); }
+.radio-pop { top: auto; right: auto; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--safe-b)); }
+.chant-st { border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; margin-top: 4px; padding-top: 2px; }
+
+/* 电脑：操作栏大一点，动作右上角标快捷键；共修提示放到顶部正中 */
+@media (pointer: fine) and (min-width: 900px) {
+  .dock { padding: 8px; gap: 4px; }
+  .dock-btn { width: 66px; height: 64px; font-size: 12px; }
+  .dock-btn kbd { display: block; position: absolute; top: 6px; right: 8px; font: 600 9px/14px var(--font); min-width: 14px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+  .shutter { width: 60px; height: 60px; }
+  .hint, .status, .tea-bar { bottom: calc(112px + var(--safe-b)); }
+  .radio-pop, .overlay-bar { bottom: calc(108px + var(--safe-b)); }
+  .left-col > .service-chip { position: fixed !important; top: calc(14px + var(--safe-t)); left: 50%; transform: translateX(-50%) !important; }
+}
+/* 窄手机：操作栏再收一点，六个按钮放得下 */
+@media (max-width: 400px) {
+  .dock { padding: 5px; gap: 0; }
+  .dock-btn { width: 52px; height: 54px; font-size: 11px; }
+  .dock-sep { margin: 0 3px; }
+  .shutter { width: 50px; height: 50px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glass-btn, .shutter { transition: none; }
+}

@@ -92,6 +92,8 @@ function angleLerp(a: number, b: number, k: number) {
 async function start() {
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
   const app = document.getElementById('app')!;
+  // 调试：?noui 隐藏所有界面（截干净的游戏画面用）
+  if (new URL(location.href).searchParams.has('noui')) document.documentElement.classList.add('noui');
   const isTouch = matchMedia('(pointer: coarse)').matches;
   setRoofDetail(isTouch); // 手机上筒瓦垄距放宽，顶点少一半
 
@@ -532,7 +534,7 @@ async function start() {
   const qPill = document.createElement('div');
   qPill.className = 'pill quest-pill';
   qPill.hidden = true;
-  ui.root.appendChild(qPill);
+  ui.leftCol.appendChild(qPill);
   let questWork: { o: (typeof qRun)[number]; i: number; until: number } | null = null;
   function questShow(o: (typeof qRun)[number]) {
     const st = progress.quest(o.q.id);
@@ -655,7 +657,7 @@ async function start() {
     }
   }
 
-  const chip = serviceChip(ui.root, () => {
+  const chip = serviceChip(ui.leftCol, () => {
     if (me.action !== 'bow' && intent !== 'bow') toggleBow();
   });
   const svcNow = () => Date.now() + serverOffset + svcShift * 1000;
@@ -1075,7 +1077,7 @@ async function start() {
     },
     grab: (cb) => (grabFrame = cb),
     shutter: () => audio.shutter(),
-  });
+  }, ui.dockExtra);
 
   // —— 耳机电台：右上角选台；戴上耳机的小和尚跟着拍子点头，别人也看得到耳机 ——
   const radio = new Radio(audio);
@@ -1083,7 +1085,7 @@ async function start() {
     me.setHeadphones(st);
     me.beatClock = st ? () => radio.beats() : null;
     if (st) ui.toast(t('radioOn', { x: t(`station_${st}` as Key) }));
-  });
+  }, { slot: ui.dockExtra, chant: ui.chantBtn });
 
   const cafeUI = new CafeUI(ui.root, {
     choose: (d) => brewCoffee(d),

@@ -87,13 +87,14 @@ export class PolaroidUI {
   private busy = false;
   open = false;
 
-  constructor(root: HTMLElement, private h: PolaroidHooks) {
+  constructor(root: HTMLElement, private h: PolaroidHooks, slot: HTMLElement) {
     loadHand();
+    // 快门：底部操作栏最右边一个浅色圆钮
     const btn = document.createElement('button');
-    btn.className = 'icon-btn camera-btn';
+    btn.className = 'shutter camera-btn';
     btn.innerHTML = ICON_CAMERA;
     btn.onclick = () => this.shoot();
-    root.querySelector('.top-right')?.prepend(btn);
+    slot.append(btn);
 
     this.flash = el('div', 'pola-flash');
     this.cd = el('div', 'pola-count');
