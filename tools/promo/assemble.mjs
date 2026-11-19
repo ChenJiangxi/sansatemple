@@ -31,6 +31,8 @@ if (voices.length) {
   parts.push(`[md][vo]amix=inputs=2:normalize=0,alimiter=limit=0.95[a]`);
   audioOut = '[a]';
 }
+// 只有一个镜头时不用叠化，直接拿第一路画面
+if (SHOTS.length === 1) parts.unshift('[0:v]null[v]');
 args.push('-filter_complex', parts.join(';'), '-map', '[v]', '-map', audioOut);
 args.push('-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(FPS));
 args.push('-c:a', 'aac', '-b:a', '192k', '-t', TOTAL.toFixed(3), '-movflags', '+faststart', out);

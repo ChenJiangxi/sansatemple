@@ -775,7 +775,7 @@ async function main() {
     gate: number[]; toBell: number[]; bellStrike: number; bellHit: number; toIncense: number[]; incenseStart: number; incensePlant: number;
     toHall: number[]; bowStart: number; bowTouches: number[]; bowEnd: number; walkOut: number[]; craneLib: number[]; libTeleport: number; libWalk: number[];
     sit: number; sheet: number[]; inks: number[]; sitEnd: number; aerial: number[]; alleyTeleport: number; alleyWalk: number[]; hangStart: number; hangRelease: number;
-    nightWalk: number[]; end: number; hours: number[][]; caps: [number, number, string, string][];
+    nightWalk: number[]; end: number; fadeOut: number[]; hours: number[][]; caps: [number, number, string, string][];
     cuts: number[]; incenseFrom: [number, number]; cafeIn: number[]; brew: number[]; cupReady: number; toSeat: number[]; sipAt: number[];
     persimmonTeleport: number; toPersimmon: number[]; persimmonBow: number; persimmonWord: number;
   };
@@ -2355,7 +2355,12 @@ async function main() {
         }
         else if (t < W_.nightWalk[0] + 0.4) fixed([hk.x + 1.9, 1.0, hk.z + 2.6], [hk.x - 0.1, 2.3, hk.z], 1.5);
         else if (t < W_.nightWalk[1] - 0.6) followCam(4.4, 1.35, 0.3, 4.0, 2.4);
-        else fixed([-24.0, 7.5, 58.5], [-27.0, 2.2, 49.0], 0.9);
+        else {
+          // 收尾：人停在灯廊里，镜头还在身后，慢慢往后退、抬头看满廊的灯（不升高，灯廊里限高 2.2 米）
+          const u = Math.max(0, t - (W_.nightWalk[1] - 0.6));
+          followCam(4.4 + u * 0.28, 1.35 + u * 0.1, 0.3, 4.0, 2.4 + u * 0.14);
+          k = 1.2;
+        }
         if (cutNow) {
           // 叠化切换：镜头直接到位
           camP.copy(wantP);
@@ -2371,7 +2376,7 @@ async function main() {
         const cl = cafeLocal(camP.x, camP.z);
         if (Math.abs(cl.lx) < CAFE.hw + 0.3 && cl.lz > -CAFE.hd && cl.lz < CAFE.hd + 0.6) camP.y = Math.min(camP.y, CAFE.base + CAFE.colH - 0.3);
         camP.y = Math.max(camP.y, heightAt(camP.x, camP.z) + 0.6);
-        setFov(t > W_.alleyWalk[0] && t < W_.nightWalk[1] ? 62 : 56);
+        setFov(t > W_.alleyWalk[0] ? 62 : 56);
         camera.position.copy(camP);
         camera.lookAt(camL);
       },
@@ -2427,6 +2432,15 @@ async function main() {
           ctx.save();
           ctx.globalAlpha = 1 - (t - c) / 0.5;
           ctx.drawImage(cutFrame, 0, 0);
+          ctx.restore();
+        }
+        // 片尾渐暗到黑
+        const fo = clamp01((t - W_.fadeOut[0]) / (W_.fadeOut[1] - W_.fadeOut[0]));
+        if (fo > 0) {
+          ctx.save();
+          ctx.globalAlpha = fo * fo * (3 - 2 * fo);
+          ctx.fillStyle = '#000';
+          ctx.fillRect(0, 0, W, H);
           ctx.restore();
         }
         lastCtx.drawImage(out, 0, 0);
