@@ -5,7 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng, geshanTexture } from '../textures';
 import { mesh, worldBox, lathe } from './util';
-import { buildRoof, beamRing, chineseMats, meterUV, aged } from './hall';
+import { buildRoof, buildPolyEave, beamRing, chineseMats, meterUV, aged } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
 import { buildDing } from './bronze';
@@ -269,7 +269,6 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
 
   // —— 八角七层楼阁塔：每层塔身 + 一圈出檐，顶上塔刹 ——
   const towerMat = pbr('plaster', { metersPerTile: 1.6, color: '#d8cfbf' });
-  const towerRoof = pbr('roof', { metersPerTile: 1.2, color: '#6e7270' });
   const pagodaLampMat = new THREE.MeshStandardMaterial({ color: '#d63a22', roughness: 0.6, emissive: '#ff6a2a', emissiveIntensity: 0.1 });
   const pagodaLampGeo = new THREE.SphereGeometry(0.075, 10, 8).scale(1, 1.3, 1);
   const doorMat = new THREE.MeshStandardMaterial({ map: geshanTexture(), roughness: 0.7 });
@@ -312,23 +311,12 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
         g.add(win);
       }
       y += hh;
-      const eave = new THREE.CylinderGeometry(rr * 0.9, rr * 1.55, 0.32, 8, 1);
-      const pos = eave.attributes.position as THREE.BufferAttribute;
-      for (let i = 0; i < pos.count; i++) {
-        if (pos.getY(i) < 0) {
-          const ang = Math.atan2(pos.getZ(i), pos.getX(i));
-          const corner = Math.abs(Math.cos(((ang - Math.PI / 8) * 8) / 2));
-          pos.setY(i, pos.getY(i) + corner * 0.12);
-        }
-      }
-      eave.computeVertexNormals();
+      // 塔檐：八个坡面的真屋檐，铺筒瓦、转角起翘（原来是一个光滑的八棱锥台）
       for (let c = 0; c < 8; c++) {
         const th = (c / 8) * Math.PI * 2;
-        lampAt.push(new THREE.Vector3(Math.sin(th) * rr * 1.48, y - 0.2, Math.cos(th) * rr * 1.48));
+        lampAt.push(new THREE.Vector3(Math.sin(th) * rr * 1.5, y - 0.18, Math.cos(th) * rr * 1.5));
       }
-      const em = mesh(eave, towerRoof);
-      em.position.y = y + 0.1;
-      g.add(em);
+      g.add(buildPolyEave({ sides: 8, rOut: rr * 1.62, rIn: rr * 0.98, yOut: y - 0.04, yIn: y + 0.3, lift: 0.2 }));
       // 檐下：一圈彩画额枋，上面每面两朵斗拱（坐斗 + 横拱），托着屋檐
       bands.push(new THREE.CylinderGeometry(rr * 1.04, rr * 1.02, 0.16, 8).translate(0, y - 0.12, 0));
       for (let c = 0; c < 16; c++) {

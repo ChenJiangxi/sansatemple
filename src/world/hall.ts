@@ -505,6 +505,46 @@ export function buildSkirtRoof(o: { cx: number; cz: number; iW: number; iD: numb
   return group;
 }
 
+// 多边形的一圈塔檐（八角塔每层一圈）：sides 个坡面，外沿 rOut、贴墙处 rIn，转角起翘 lift；坡面铺筒瓦，转角一道戗脊。
+// 角点的方位和 CylinderGeometry 一致：第 i 个角在 θ = i·2π/sides（x = sinθ，z = cosθ）
+export function buildPolyEave(o: { sides: number; rOut: number; rIn: number; yOut: number; yIn: number; lift: number }) {
+  const M = getRoofMats();
+  const group = new THREE.Group();
+  const { sides, rOut, rIn, yOut, yIn, lift } = o;
+  const half = Math.sin(Math.PI / sides);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+  const corner = (i: number, r: number) => [Math.sin((i / sides) * Math.PI * 2) * r, Math.cos((i / sides) * Math.PI * 2) * r];
+  const slopes: SlopeFn[] = [];
+  const hws: [SlopeFn, (v: number) => number][] = [];
+  for (let c = 0; c < sides; c++) {
+    const [ax, az] = corner(c, 1), [bx, bz] = corner(c + 1, 1);
+    const len = Math.hypot(bx - ax, bz - az) * (rOut - rIn);
+    const fn: SlopeFn = (u, v) => {
+      const t = (u + 1) / 2;
+      const r = lerp(rOut, rIn, v);
+      // 外沿在转角处再往外挑一点
+      const out = 1 + 0.06 * Math.pow(Math.abs(u), 3) * (1 - v);
+      const x = lerp(ax, bx, t) * r * out, z = lerp(az, bz, t) * r * out;
+      const y = lerp(yOut, yIn, Math.pow(v, 1.4)) + lift * Math.pow(Math.abs(u), 4) * Math.pow(1 - v, 2);
+      return [x, y, z, u * r * half, v * len];
+    };
+    slopes.push(fn);
+    hws.push([fn, (v) => lerp(rOut, rIn, v) * half]);
+  }
+  addSlopes(group, slopes, 16, 6, M);
+  addTileRuns(group, hws);
+  // 戗脊：每个转角从檐角到墙根
+  for (let c = 0; c < sides; c++) {
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 6; k++) {
+      const [x, y, z] = slopes[c](1, k / 6);
+      pts.push(new THREE.Vector3(x, y + 0.06, z));
+    }
+    group.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 10, 0.06, 5, false), M.ridge));
+  }
+  return group;
+}
+
 // —— 筒瓦 ——
 // 屋面原来只是一张贴了瓦片照片的曲面，远看是一块平板。这里在曲面上真的铺一垄垄半圆的筒瓦，
 // 檐口每垄一个瓦当；每垄深浅略有不同。手机上垄距放宽一些，顶点少一半。

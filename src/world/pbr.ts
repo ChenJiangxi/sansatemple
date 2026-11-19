@@ -2,7 +2,7 @@
 // UV 以米为单位时，用 metersPerTile 控制一张贴图覆盖多少米。
 import * as THREE from 'three';
 
-export type PbrName = 'floor' | 'wood' | 'path' | 'granite' | 'stonewall' | 'ground' | 'roof' | 'plaster';
+export type PbrName = 'floor' | 'wood' | 'path' | 'granite' | 'stonewall' | 'ground' | 'roof' | 'plaster' | 'brick';
 
 const loader = new THREE.TextureLoader();
 const base = () => new URL('tex/', document.baseURI).toString();
@@ -27,7 +27,7 @@ function tex(file: string, srgb: boolean) {
 
 // 进场前先把所有贴图下载好，避免一边渲染一边上传、闪出白模
 export async function preloadTextures(onProgress?: (done: number, total: number) => void) {
-  const names: PbrName[] = ['floor', 'wood', 'path', 'granite', 'stonewall', 'ground', 'roof', 'plaster'];
+  const names: PbrName[] = ['floor', 'wood', 'path', 'granite', 'stonewall', 'ground', 'roof', 'plaster', 'brick'];
   const files: [string, boolean][] = [];
   for (const n of names) files.push([`${n}_color.jpg`, true], [`${n}_normal.jpg`, false], [`${n}_rough.jpg`, false]);
   let done = 0;

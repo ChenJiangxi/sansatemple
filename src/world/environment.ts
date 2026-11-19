@@ -282,16 +282,17 @@ function canopyTexture() {
   return t;
 }
 
-// 地面：院子里平整，外面是起伏的秋山
-// 院子地面像天天有人扫：开阔处的落叶只剩零星几片，树冠底下、墙根、角落才积着叶子。
-// 地面贴图是「泥地上一层落叶」，落叶颜色鲜艳、泥地发灰，按饱和度认出叶子；不该有叶子的地方把它换成泥地色
-function sweptGround(mat: THREE.MeshStandardMaterial) {
+// 地面：院子里铺青砖（2026-11-19 用户嫌原来的一整片泥地太简陋），外面是起伏的秋山。
+// 青砖是底色；树冠底下、墙根、角落换成「泥地上一层落叶」的贴图，并且盖住砖缝的凹凸；
+// 开阔处的砖面再加一点深浅不匀、偶尔一片青苔和几片落叶，看起来是天天有人扫的老院子。
+function sweptGround(mat: THREE.MeshStandardMaterial, leafFloor: THREE.Texture) {
   const N = 32;
   const trees = [...MAPLES.map(([x, z, s]) => new THREE.Vector3(x, z, 5.2 * s)), ...PINES.map(([x, z, s]) => new THREE.Vector3(x, z, 3.2 * s))].slice(0, N);
   while (trees.length < N) trees.push(new THREE.Vector3(9999, 9999, 0));
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTrees = { value: trees };
     sh.uniforms.uCourtR = { value: new THREE.Vector4(COURT.x0, COURT.z0, COURT.x1, COURT.z1) };
+    sh.uniforms.uLeaf = { value: leafFloor };
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vGw;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGw = (modelMatrix * vec4(transformed, 1.0)).xz;');
@@ -302,6 +303,8 @@ function sweptGround(mat: THREE.MeshStandardMaterial) {
         varying vec2 vGw;
         uniform vec3 uTrees[${N}];
         uniform vec4 uCourtR;
+        uniform sampler2D uLeaf;
+        float gZone;
         float gH(vec2 p) { p = fract(p * vec2(127.1, 311.7)); p += dot(p, p + 19.19); return fract(p.x * p.y); }
         float gN(vec2 p) {
           vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
@@ -312,35 +315,56 @@ function sweptGround(mat: THREE.MeshStandardMaterial) {
         '#include <map_fragment>',
         `#include <map_fragment>
         {
-          // 哪里该有落叶：树冠下（越靠树干越多）、墙根三米内，再用噪声打散；开阔处保留一成
-          float m = 0.1;
+          // 哪里是落叶地：树冠下（越靠树干越多）、墙根三米内，再用噪声打散
+          float m = 0.0;
           for (int i = 0; i < ${N}; i++) {
             float d = distance(vGw, uTrees[i].xy);
-            m = max(m, smoothstep(uTrees[i].z, uTrees[i].z * 0.3, d));
+            m = max(m, smoothstep(uTrees[i].z * 0.9, uTrees[i].z * 0.35, d));
           }
           float dw = min(min(vGw.x - uCourtR.x, uCourtR.z - vGw.x), min(vGw.y - uCourtR.y, uCourtR.w - vGw.y));
-          m = max(m, smoothstep(3.5, 0.6, dw));
+          m = max(m, smoothstep(3.2, 0.8, dw));
           float n = gN(vGw * 0.33) * 0.65 + gN(vGw * 1.7) * 0.35;
-          m = clamp(m * mix(0.45, 1.35, n), 0.0, 1.0);
-          // 叶子：颜色饱和；泥地：偏灰褐
-          vec3 c = diffuseColor.rgb;
-          float mx = max(c.r, max(c.g, c.b)), mn = min(c.r, min(c.g, c.b));
+          gZone = smoothstep(0.3, 0.7, m * mix(0.6, 1.4, n));
+          // 砖面：大块深浅不匀，个别砖偏暗；低洼处一点青苔
+          vec3 brick = diffuseColor.rgb;
+          brick *= 0.86 + 0.26 * gN(vGw * 0.45);
+          float cell = gH(floor(vGw * vec2(4.1, 8.3)));
+          brick *= 0.93 + 0.12 * cell;
+          float moss = smoothstep(0.62, 0.9, gN(vGw * 0.8 + 7.0)) * 0.55;
+          brick = mix(brick, brick * vec3(0.72, 0.86, 0.6), moss);
+          // 落叶地
+          vec3 leaf = texture2D(uLeaf, vGw / 3.2).rgb * diffuse * vec3(1.05, 0.98, 0.92);
+          float mx = max(leaf.r, max(leaf.g, leaf.b)), mn = min(leaf.r, min(leaf.g, leaf.b));
           float sat = (mx - mn) / max(mx, 1e-4);
-          float leaf = smoothstep(0.62, 0.82, sat);
-          vec3 earth = diffuse * vec3(0.24, 0.188, 0.142) * (0.86 + 0.28 * gN(vGw * 4.3)) * (0.92 + 0.16 * gN(vGw * 0.6));
-          diffuseColor.rgb = mix(c, earth, leaf * (1.0 - m));
+          // 砖面上零星几片叶子
+          float stray = smoothstep(0.65, 0.85, sat) * step(0.83, gN(vGw * 2.3 + 3.0)) * 0.8;
+          diffuseColor.rgb = mix(brick, leaf, max(gZone, stray));
         }`
+      )
+      .replace(
+        '#include <normal_fragment_maps>',
+        `#include <normal_fragment_maps>
+        normal = normalize(mix(normal, nonPerturbedNormal, gZone * 0.85));`
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.95, gZone);`
       );
   };
-  mat.customProgramCacheKey = () => 'swept-ground';
+  mat.customProgramCacheKey = () => 'swept-ground-brick';
 }
 
 export function buildTerrain(scene: THREE.Scene) {
   const group = new THREE.Group();
 
   // 院子地面
-  const groundMat = pbr('ground', { metersPerTile: 3.2, color: '#c8bcae' });
-  sweptGround(groundMat);
+  // 院子铺青砖；落叶地的贴图交给着色器在树下、墙根混进来
+  const groundMat = pbr('brick', { metersPerTile: 2.2, color: '#d6d2cc' });
+  const leafFloor = pbr('ground').map!.clone();
+  leafFloor.repeat.set(1, 1);
+  leafFloor.needsUpdate = true;
+  sweptGround(groundMat, leafFloor);
   // 地面挖出莲池的洞（Shape 的 y 对应世界的 -z）
   const GM = 2.5;
   const gx0 = COURT.x0 - GM, gx1 = COURT.x1 + GM, gz0 = COURT.z0 - GM, gz1 = COURT.z1 + GM;

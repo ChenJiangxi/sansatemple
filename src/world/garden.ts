@@ -1,4 +1,4 @@
-// 西院的祈福灯廊、灯廊北头的柿饼架、两条通往咖啡摊和灯廊的石板小路，前院零零散散的草丛和野花。
+// 西院的祈福灯廊、灯廊北头的柿饼架，前院零零散散的草丛和野花（原来的石板踏脚小路在院子铺青砖后去掉了）。
 // 灯廊：两排高木杆，杆间拉绳，挂满各色灯笼；访客挂上的那盏下面吊一张写着心愿的纸签（自己的是金色的）。
 // 没人挂的位置由寺里挂上素灯笼，廊子什么时候看都是满的。夜里灯笼亮起来。
 import * as THREE from 'three';
@@ -6,8 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { WISH_ALLEY, WISH_DESK, PERSIMMON, STONE_PATHS, COURT, CAFE, blocked, inPond } from '../layout';
 import { plaqueTexture } from '../textures';
 import { mesh } from './util';
-import { chineseMats, aged } from './hall';
-import { pbr } from './pbr';
+import { chineseMats } from './hall';
 
 export const LANTERN_COLORS = ['#b83a2a', '#d4a043', '#5a8c7c', '#eadfc8', '#cf8e88', '#4d6890'];
 
@@ -481,37 +480,7 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
   interactives.push(rackHit);
   group.add(rack);
 
-  // —— 石板小路：不规则的青石板，一块接一块 ——
-  {
-    const slab = pbr('granite', { metersPerTile: 1.0, color: new THREE.Color().setRGB(2.3, 2.25, 2.15) });
-    aged(slab, 0.1, 0.3);
-    const geo = new THREE.CylinderGeometry(1, 1, 1, 7);
-    const list: THREE.Matrix4[] = [];
-    const Rs = rand(31);
-    for (const path of STONE_PATHS) {
-      for (let i = 0; i < path.length - 1; i++) {
-        const a = path[i], b = path[i + 1];
-        const L = Math.hypot(b.x - a.x, b.z - a.z);
-        const nx = -(b.z - a.z) / L, nz = (b.x - a.x) / L;
-        const steps = Math.max(1, Math.round(L / 0.78));
-        for (let k = 0; k < steps; k++) {
-          const t = (k + Rs() * 0.2) / steps;
-          const side = (k % 2 ? 1 : -1) * (0.12 + Rs() * 0.12);
-          const r = 0.3 + Rs() * 0.1;
-          const m = new THREE.Matrix4().compose(
-            new THREE.Vector3(a.x + (b.x - a.x) * t + nx * side, 0.012, a.z + (b.z - a.z) * t + nz * side),
-            new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Rs() * 6.28, 0)),
-            new THREE.Vector3(r * (1 + Rs() * 0.25), 0.05, r)
-          );
-          list.push(m);
-        }
-      }
-    }
-    const stones = new THREE.InstancedMesh(geo, slab, list.length);
-    list.forEach((m, i) => stones.setMatrixAt(i, m));
-    stones.receiveShadow = true;
-    group.add(stones);
-  }
+  // （原来这里沿 STONE_PATHS 铺六角踏脚石；2026-11-19 院子改铺青砖后去掉了，STONE_PATHS 只用来让草丛避开小路）
 
   // —— 草丛与野花：前院两侧、墙根、树下、小路边，一丛一丛 ——
   {
