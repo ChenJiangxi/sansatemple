@@ -11,7 +11,7 @@ let poemFont: Promise<void> | null = null;
 // 印章和标题的字体很小，一开始就加载；签诗字体只在第一次求签时加载
 export function loadUiFonts() {
   sealFont ??= Promise.all(
-    [new FontFace('SansaSeal', fontUrl('seal.woff2')), new FontFace('SansaTitle', fontUrl('title.woff2'))].map((f) =>
+    [new FontFace('SansaSeal', fontUrl('seal.woff2')), new FontFace('SansaTitle', fontUrl('title.woff2')), new FontFace('SansaSealBold', fontUrl('seal-bold.woff2'), { weight: '900' })].map((f) =>
       f.load().then((ff) => {
         document.fonts.add(ff);
       })
@@ -41,63 +41,80 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
 
 // —— 印章：朱红方印，白文，边缘略有残破 ——
 const sealCache = new Map<string, string>();
-export function sealImage(text: string, size = 128, gold = false, font = 'SansaSeal'): string {
+// 一方印：白文印——字从朱红印面上镂空出来（透出下面的纸色）。
+// 字用思源宋体最粗的一档（只取印文用字），一字居中、两字上下排、四字两行两列；
+// 印面边缘略带手刻的不齐，朱泥有一点深浅。不再描内框、不再撒残破的小点（2026-11-19 用户嫌印章细节不够好）。
+export function sealImage(text: string, size = 128, gold = false, font = 'SansaSealBold'): string {
   const key = `${text}|${size}|${gold}|${font}`;
   const hit = sealCache.get(key);
   if (hit) return hit;
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
-  const pad = size * 0.06;
-  const r = size * 0.07;
-  const box = (x: number, y: number, w: number, h: number, rr: number) => {
-    g.beginPath();
-    g.moveTo(x + rr, y);
-    g.arcTo(x + w, y, x + w, y + h, rr);
-    g.arcTo(x + w, y + h, x, y + h, rr);
-    g.arcTo(x, y + h, x, y, rr);
-    g.arcTo(x, y, x + w, y, rr);
-    g.closePath();
-  };
-  g.fillStyle = gold ? '#b8862d' : '#b3261e';
-  box(pad, pad, size - pad * 2, size - pad * 2, r);
+  let seed = [...text].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
+  const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pad = size * 0.07;
+  const S = size - pad * 2;
+  // 印面：四条边各取几个点，往里往外抖一点点，看起来是手刻的
+  g.beginPath();
+  const pts: [number, number][] = [];
+  const n = 6;
+  const j = size * 0.008;
+  for (let side = 0; side < 4; side++)
+    for (let k = 0; k < n; k++) {
+      const t = k / n;
+      const off = (rnd() - 0.5) * 2 * j;
+      const [x, y] = side === 0 ? [pad + S * t, pad + off] : side === 1 ? [pad + S + off, pad + S * t] : side === 2 ? [pad + S * (1 - t), pad + S + off] : [pad + off, pad + S * (1 - t)];
+      pts.push([x, y]);
+    }
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.closePath();
+  const base = gold ? '#b0832e' : '#b5302a';
+  g.fillStyle = base;
   g.fill();
-  g.strokeStyle = '#f6ecd8';
-  g.lineWidth = size * 0.035;
-  box(size * 0.14, size * 0.14, size * 0.72, size * 0.72, r * 0.5);
-  g.stroke();
-  g.fillStyle = '#f6ecd8';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  const chars = [...text];
-  if (chars.length === 1) {
-    g.font = `${size * 0.52}px ${font}, serif`;
-    g.fillText(chars[0], size / 2, size / 2 + size * 0.02);
-  } else {
-    // 两字竖排，每字压扁一点，填满印面
-    g.font = `${size * 0.31}px ${font}, serif`;
-    chars.slice(0, 2).forEach((ch, i) => {
-      g.save();
-      g.translate(size / 2, size * (0.355 + i * 0.29));
-      g.scale(1.45, 1);
-      g.fillText(ch, 0, size * 0.01);
-      g.restore();
-    });
+  // 朱泥的深浅：几团略亮、略暗的大晕
+  g.save();
+  g.clip();
+  for (let i = 0; i < 7; i++) {
+    const x = pad + rnd() * S, y = pad + rnd() * S, r = S * (0.25 + rnd() * 0.35);
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, rnd() < 0.5 ? 'rgba(255,255,255,0.07)' : 'rgba(60,0,0,0.08)');
+    gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr;
+    g.fillRect(0, 0, size, size);
   }
-  // 残破：按印文算的伪随机小点，同一方印每次都一样
+  g.restore();
+  // 镂空印文：每个字缩放到自己的格子里填满（印章里的字本来就按格子变形）
   g.globalCompositeOperation = 'destination-out';
-  let s = [...text].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
-  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-  for (let i = 0; i < 46; i++) {
-    const edge = rnd() < 0.6;
-    const x = edge ? (rnd() < 0.5 ? pad + rnd() * size * 0.08 : size - pad - rnd() * size * 0.08) : pad + rnd() * (size - pad * 2);
-    const y = pad + rnd() * (size - pad * 2);
-    g.beginPath();
-    g.arc(rnd() < 0.5 ? x : y, rnd() < 0.5 ? y : x, size * (0.006 + rnd() * 0.014), 0, Math.PI * 2);
-    g.fill();
+  g.fillStyle = '#000';
+  g.textAlign = 'center';
+  g.textBaseline = 'alphabetic';
+  const chars = [...text].slice(0, 4);
+  const inner = S * 0.82;
+  const ox = pad + (S - inner) / 2, oy = pad + (S - inner) / 2;
+  const cells: { ch: string; x: number; y: number; w: number; h: number }[] =
+    chars.length === 1
+      ? [{ ch: chars[0], x: ox, y: oy, w: inner, h: inner }]
+      : chars.length === 2
+        ? chars.map((ch, i) => ({ ch, x: ox, y: oy + (i * inner) / 2, w: inner, h: inner / 2 }))
+        : chars.map((ch, i) => ({ ch, x: ox + (i < 2 ? inner / 2 : 0), y: oy + ((i % 2) * inner) / 2, w: inner / 2, h: inner / 2 }));
+  const fs = size;
+  g.font = `900 ${fs}px ${font}, "Noto Serif TC", "Songti TC", serif`;
+  for (const cell of cells) {
+    const m = g.measureText(cell.ch);
+    const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || fs;
+    const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || fs;
+    const gap = size * 0.02;
+    const sx = (cell.w - gap) / gw, sy = (cell.h - gap) / gh;
+    g.save();
+    g.translate(cell.x + cell.w / 2, cell.y + cell.h / 2);
+    g.scale(sx, sy);
+    g.fillText(cell.ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+    g.restore();
   }
   const url = c.toDataURL();
-  sealCache.set(key, url);
+  // 印文字体还没下载完时画出来的是替代字体，不缓存，下次再画
+  if (document.fonts.check(`900 20px ${font}`)) sealCache.set(key, url);
   return url;
 }
 
@@ -129,7 +146,10 @@ export function sealBook(): HTMLElement {
       const d = new Date(progress.when(s.id));
       li.innerHTML = `<img alt="" src="${sealImage(s.text, 128)}"><b>${name}</b><small>${d.getMonth() + 1}/${d.getDate()}</small>`;
     } else {
-      li.innerHTML = `<span class="seal-empty">${s.text}</span><b>${name}</b><small>${hint}</small>`;
+      // 没盖的：一个浅浅的虚线印框，只写印名；点一下，怎么得这方印显示在顶上那一行
+      li.innerHTML = `<span class="seal-empty">${[...s.text].join('<br>')}</span><b>${name}</b>`;
+      li.tabIndex = 0;
+      li.onclick = () => (top.textContent = hint);
     }
     li.title = hint;
     grid.appendChild(li);

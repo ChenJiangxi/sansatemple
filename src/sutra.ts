@@ -819,7 +819,7 @@ export class SutraCopy {
     const seal = await new Promise<HTMLImageElement>((res) => {
       const im = new Image();
       im.onload = () => res(im);
-      im.src = sealImage('心經', 160, false, 'SansaSutra');
+      im.src = sealImage('心經', 160);
     });
     g.drawImage(seal, colX(sk) - 34, my + 52 + [...sign].length * 36, 68, 68);
     const url = c.toDataURL('image/jpeg', 0.9);

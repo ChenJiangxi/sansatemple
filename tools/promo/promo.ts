@@ -25,6 +25,7 @@ import { buildCafe } from '../../src/world/cafe';
 import { buildGarden } from '../../src/world/garden';
 import { CAFE, CAFE_SEATS, CAFE_BIN, cafeWorld, cafeLocal, planRoute, setSideHallOpen, WISH_ALLEY, PERSIMMON } from '../../src/layout';
 import { shareCard } from '../../src/coffee';
+import { releaseProps } from '../../src/world/glb';
 // @ts-ignore 共用的分镜表
 import { W, H, FPS, SHOTS, EVENTS, PROMPT_LINES, CUT, SUBS, WALK, COFFEE } from './timeline.mjs';
 
@@ -91,6 +92,7 @@ async function main() {
   const nature = buildNature(scene, { renderer, heightAt: terrain.heightAt, size: terrain.size, lite: false });
   buildShrines(scene);
   // 东院的咖啡馆、西院的祈福灯廊和柿饼架、石板小路和草花
+  releaseProps(); // 录宣传片不用等，模型马上下载
   const cafe = buildCafe(scene);
   const garden = buildGarden(scene, { lite: false });
   // 功能介绍：和游戏同一套后期（环境光遮蔽、泛光、调色）；别的版本照旧直接渲染
@@ -806,6 +808,7 @@ async function main() {
   let cardImg: HTMLImageElement | null = null;
   if (CUT === 'coffee') {
     document.fonts.add(await new FontFace('SansaSeal', 'url(/fonts/seal.woff2)').load());
+    document.fonts.add(await new FontFace('SansaSealBold', 'url(/fonts/seal-bold.woff2)', { weight: '900' }).load());
     cardImg = new Image();
     cardImg.src = await shareCard('latte', '静静的云', undefined, '', '');
     await cardImg.decode();

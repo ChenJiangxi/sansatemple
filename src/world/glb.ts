@@ -7,13 +7,19 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 const cache = new Map<string, Promise<THREE.Object3D>>();
+// 道具模型（咖啡馆、围炉，共约 2.5 MB）等进寺以后再下，不和加载画面里的贴图抢网速；主程序在第一帧画出来后放行
+let release!: () => void;
+const gate = new Promise<void>((r) => (release = r));
+export function releaseProps() {
+  release();
+}
 
 export function loadProp(name: string, shadow = true): Promise<THREE.Object3D> {
   if (!cache.has(name)) {
     const url = new URL(`models/props/${name}.glb`, document.baseURI).toString();
     cache.set(
       name,
-      loader.loadAsync(url).then((g) => {
+      gate.then(() => loader.loadAsync(url)).then((g) => {
         g.scene.traverse((o) => {
           const m = o as THREE.Mesh;
           if (!m.isMesh) return;

@@ -4,6 +4,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
 
@@ -202,12 +203,29 @@ function broadcast(room, obj, except) {
   for (const p of room.players.values()) if (p.ws !== except && p.ws.readyState === 1) p.ws.send(data);
 }
 
-// —— 祈福灯廊的心愿：所有房间共用一份，挂七天，最多留 WISH_MAX 条（存在内存里；
-// 服务器重启后，作者再进来时客户端会把自己七天内挂的补交回来）——
+// —— 祈福灯廊的心愿：所有房间共用一份，挂七天，最多留 WISH_MAX 条。
+// 2026-11-19 起存盘：systemd 的 StateDirectory（/var/lib/santemple/wishes.json）；本机开发时存在系统临时目录。
+// 有变动后等 2 秒合并写一次，先写临时文件再改名，写到一半断电也不会坏。客户端重连补交自己挂的那套照旧保留 ——
 const WISH_MAX = 240;
 const WISH_MS = 7 * 24 * 3600 * 1000;
 const WISH_ID = /^[0-9a-f]{8}$/;
 let wishes = [];
+const STATE_DIR = (process.env.STATE_DIRECTORY || '').split(':')[0] || path.join(os.tmpdir(), 'santemple-state');
+const WISH_FILE = path.join(STATE_DIR, 'wishes.json');
+let wishSaveTimer = null;
+function saveWishes() {
+  clearTimeout(wishSaveTimer);
+  wishSaveTimer = setTimeout(() => {
+    try {
+      fs.mkdirSync(STATE_DIR, { recursive: true });
+      const tmp = WISH_FILE + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(wishes.map((w) => ({ id: w.id, by: w.by, owner: w.owner, text: w.text, c: w.c, k: w.k, at: w.at, likes: w.likes, reports: [...w.reports] }))));
+      fs.renameSync(tmp, WISH_FILE);
+    } catch (e) {
+      console.error('心愿存盘失败', e.message);
+    }
+  }, 2000);
+}
 function cleanWish(s) {
   if (typeof s !== 'string') return '';
   const t = [...s.replace(/[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]/g, '').replace(/\s+/g, ' ').trim()].slice(0, 24).join('');
@@ -216,6 +234,20 @@ function cleanWish(s) {
   return t;
 }
 const wishOut = (w) => ({ id: w.id, by: w.by, text: w.text, c: w.c, k: w.k, at: w.at, likes: w.likes });
+// 启动时读回上次存的心愿（过期的、格式不对的丢掉）
+try {
+  const now = Date.now();
+  const arr = JSON.parse(fs.readFileSync(WISH_FILE, 'utf8'));
+  if (Array.isArray(arr))
+    wishes = arr
+      .filter((w) => w && WISH_ID.test(w.id) && Number.isFinite(w.at) && now - w.at < WISH_MS)
+      .map((w) => ({ id: w.id, by: String(w.by || '').slice(0, 24), owner: String(w.owner || ''), text: cleanWish(w.text), c: Math.floor(num(w.c, 0, 5)), k: Math.floor(num(w.k, 0, 6)), at: w.at, likes: Math.max(0, Math.floor(Number(w.likes) || 0)), likedBy: new Set(), reports: new Set(Array.isArray(w.reports) ? w.reports.slice(0, 4) : []) }))
+      .filter((w) => w.text)
+      .slice(-WISH_MAX);
+  console.log(`读回 ${wishes.length} 条心愿`);
+} catch {
+  /* 第一次启动还没有文件 */
+}
 function broadcastAll(obj) {
   for (const room of rooms.values()) broadcast(room, obj);
 }
@@ -230,6 +262,7 @@ function addWish(me, m, at) {
     broadcastAll({ t: 'wishDel', id: old.id });
   }
   broadcastAll({ t: 'wishAdd', w: wishOut(w) });
+  saveWishes();
   return true;
 }
 
@@ -358,6 +391,7 @@ wss.on('connection', (ws) => {
         w.likedBy.add(me.id);
         w.likes++;
         broadcastAll({ t: 'wishLike', id: w.id, n: w.likes });
+        saveWishes();
         break;
       }
       case 'report': {
@@ -369,6 +403,7 @@ wss.on('connection', (ws) => {
           wishes = wishes.filter((x) => x !== w);
           broadcastAll({ t: 'wishDel', id: w.id });
         }
+        saveWishes();
         break;
       }
       case 'give': {
@@ -406,11 +441,13 @@ wss.on('connection', (ws) => {
 // 定时广播房间快照
 setInterval(() => {
   const now = Date.now();
+  const wishCount = wishes.length;
   wishes = wishes.filter((w) => {
     if (now - w.at < WISH_MS) return true;
     broadcastAll({ t: 'wishDel', id: w.id });
     return false;
   });
+  if (wishes.length !== wishCount) saveWishes();
   for (const room of rooms.values()) {
     const before = room.incense.length;
     room.incense = room.incense.filter((i) => i.until > now);

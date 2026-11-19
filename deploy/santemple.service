@@ -12,8 +12,9 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=4318
 Environment=PROMO_DIR=/opt/santemple/promo
-# 服务不写任何文件：用临时用户、只读系统目录
+# 临时用户、只读系统目录；唯一可写的是 StateDirectory（/var/lib/santemple，存祈福灯廊的心愿）
 DynamicUser=yes
+StateDirectory=santemple
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

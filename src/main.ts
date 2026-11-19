@@ -31,6 +31,7 @@ import { Radio, type StationId } from './radio';
 import { mountRadioUI } from './radio-ui';
 import { PolaroidUI } from './polaroid';
 import { buildTea, ROAST_SECONDS } from './world/tea';
+import { releaseProps } from './world/glb';
 import { TeaUI } from './tea-ui';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
@@ -2117,6 +2118,9 @@ async function start() {
       applyLook(me, myLook);
     }
     if (sp.get('panel') === 'practice') setTimeout(() => ui.openPractice((sp.get('ptab') as 'progress' | 'sutras' | 'rules' | 'look' | null) ?? 'progress'), 1500);
+    // 调试：&seals=gate,bow 先盖上这些印；&panel=seals 打开印谱
+    for (const id of (sp.get('seals') ?? '').split(',')) if (id && !progress.has(id as SealId)) progress.stamp(id as SealId);
+    if (sp.get('panel') === 'seals') setTimeout(() => ui.togglePanel('seals', ui.sealsBtn), 1500);
     // 调试：&daily=bow:6,incense:1 设今天各项功课的次数（录宣传片的界面截图用）
     for (const kv of (sp.get('daily') ?? '').split(',')) {
       const [k, v] = kv.split(':');
@@ -2813,6 +2817,7 @@ async function start() {
     net.sendState({ x: player.x, z: player.z, yaw: player.yaw, a: me.action, s: player.seat?.id ?? claimed?.id ?? null, n: bowsToday, k: lookCode(myLook, levelOf(progress.points())), c: cupCode(cup), h: radio.station ?? '' });
     if (!booted) {
       booted = true;
+      setTimeout(releaseProps, 1200);
       bootEl.classList.add('gone');
       if (intro) setTimeout(() => titleCard(app, isTouch, enterTemple), 500);
       setTimeout(() => bootEl.remove(), 1000);

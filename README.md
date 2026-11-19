@@ -96,6 +96,16 @@ npm start                      # node server/server.mjs → http://127.0.0.1:431
 
 调试：`&panel=practice&ptab=sutras|rules|look` 打开修行面板的某一页，`&read=pumen` 直接打开某部经（编号：heart、eight、amitabha、pumen、forty2、diamond）。
 
+### 印章、分享卡、加载与心愿存盘（2026-11-19）
+
+- **印章**（`ui-extra.ts` 的 `sealImage`）：改成白文印，字从朱红印面上镂空，用思源宋体最粗的一档；一字居中、两字上下、四字两行两列，每个字缩放到自己的格子里；印面边缘略带手刻的不齐，朱泥有一点深浅。不再描内框、不再撒残破的小点。
+- **印谱**：没盖的格子只有一个淡淡的虚线印框和印名，点一下，怎么得这方印显示在顶上一行。调试参数 `&seals=gate,bow` 先盖上这些印，`&panel=seals` 打开印谱。
+- **分享卡**：`index.html` 加了 og 和 twitter 标签，分享图 `public/og.jpg`（白天的半山咖啡和围炉，1200×630，不加字）；描述改成「喝杯咖啡、围炉煮茶、挂一盏心愿灯、拍张拍立得」。
+- **首次加载**：
+  - 凹凸贴图全部降到 512，屋顶、墙基石、花岗岩的颜色贴图也降到 512，加载画面要下的贴图从 6.1 MB 降到 4.1 MB；院子地面、石板路、青砖、殿内地面的颜色贴图保持 1024；
+  - 道具模型（咖啡馆、围炉，约 2.5 MB）等第一帧画出来后才开始下载（`glb.ts` 的 `releaseProps`）。
+- **心愿存盘**：服务器把心愿写进 systemd 的 StateDirectory（`/var/lib/santemple/wishes.json`），启动时读回。有变动后 2 秒合并写一次，先写临时文件再改名。服务配置里加了 `StateDirectory=santemple`，其余仍只读。
+
 ### 界面排布（2026-11-19）
 
 用户喜欢磨砂玻璃的质感，也认可新排布，所以保留磨砂玻璃（玻璃更透、模糊更重、顶边一道高光），只重排了布局、换了一整套图标：
@@ -275,6 +285,7 @@ src/ui.ts           顶栏、底栏、面板；src/i18n.ts 四种语言文案
 | `public/models/props/coffee_machine.glb`、`grinder.glb` | [Canarian Cafe - Coffee Machine](https://sketchfab.com/3d-models/17042d9af8c5461e98876064fd80385d)、[Coffee Grinder](https://sketchfab.com/3d-models/78d7e61da65c4b368074c978e742bdfc) by Lanzaman (lanzaboy) | CC BY 4.0 | 半山咖啡吧台 |
 | `public/models/props/parasol.glb` | [Umbrella](https://sketchfab.com/3d-models/ae0abff9bb9d4bb3b2ef634b8bc539d5) by Tatiana Sumarokova (Milight) | CC BY 4.0 | 红色梅花油纸伞，放大当露台遮阳伞，游戏里接长了伞杆 |
 | `public/models/props/tea_table.glb` | Poly Haven：chinese_tea_table | [CC0](https://polyhaven.com/license) | 围炉的茶几（放宽了桌面） |
+| `public/fonts/seal-bold.woff2` | [Noto Serif TC](https://fonts.google.com/noto/specimen/Noto+Serif+TC)（思源宋体繁体，Black 900） | SIL OFL | 只取印文用字，画白文印用（2026-11-19） |
 | `public/fonts/hand.woff2` | [Zhi Mang Xing](https://fonts.google.com/specimen/Zhi+Mang+Xing)（志莽行书） | SIL OFL | 只取拍立得相纸题字用到的字（十二处地名、山寺、数字），2026-11-19 |
 | `public/fonts/poem.woff2` | [Ma Shan Zheng](https://fonts.google.com/specimen/Ma+Shan+Zheng)（马善政楷书） | SIL OFL | 只取二十四支签诗用到的字，求签时才加载 |
 | `public/tex/sky.jpg` | Poly Haven HDRI：autumn_forest_04（色调映射后的 JPG） | CC0 | 缩到 2048×1024 |
