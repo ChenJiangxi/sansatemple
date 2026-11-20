@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { ribbedLantern } from './garden';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
+import { HALL, COURT, GATE, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng, geshanTexture } from '../textures';
 import { mesh, worldBox, lathe, carvedBlock } from './util';
 import { buildRoof, buildPolyEave, beamRing, chineseMats, meterUV, aged, addTileRuns, type SlopeFn } from './hall';
@@ -821,8 +821,58 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   // —— 山门：三开间，朱红柱，彩画梁，带鸱吻的屋顶，挂寺名匾 ——
+  // 2026-11-21 整座门立到一层青灰条石台基上（原来柱子直接立在地上、门洞空着）：门洞那一间往院里伸出一块，开着的两扇门落在上面；
+  // 前后各两级踏步，两侧象眼石压垂带。门洞装抱框、上槛、走马板，两块门枕石之间架一道朱漆门槛
   {
+    const P = GATE.base;
+    const SX = gateX + 2.75, Z1 = z1 - 0.6, Z2 = z1 + 1.2;
+    // 台基平面：横跨整座门的一条，加门洞那一间往院里伸出的一块；o 是往外放宽多少（负数往里收）
+    const plan = (o: number) =>
+      [
+        [-SX - o, Z2 + o], [SX + o, Z2 + o], [SX + o, Z1 - o], [GATE.hx + o, Z1 - o],
+        [GATE.hx + o, GATE.z0 - o], [-GATE.hx - o, GATE.z0 - o], [-GATE.hx - o, Z1 - o], [-SX - o, Z1 - o],
+      ].map(([x, z]) => new THREE.Vector2(x, -z));
+    // 平面在 xy 里画，挤出 h 后转成竖着的：形状的 y 对应 -z
+    const slab = (shape: THREE.Shape, h: number) => new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false }).rotateX(-Math.PI / 2);
+    const platTop = pbr('granite', { metersPerTile: 1.1, color: new THREE.Color().setRGB(2.7, 2.6, 2.44) });
+    const platSide = pbr('granite', { metersPerTile: 0.9, color: new THREE.Color().setRGB(2.25, 2.17, 2.03) });
+    const edgeMat = pbr('granite', { metersPerTile: 0.8, color: new THREE.Color().setRGB(3.0, 2.9, 2.72) });
+    aged(platTop, 0.1, 0.28);
+    aged(platSide, 0.1, 0.32);
+    aged(edgeMat, 0.1, 0.25);
+    const plat = mesh(slab(new THREE.Shape(plan(0)), P), [platTop, platSide]);
+    plat.name = 'walkable';
+    group.add(plat);
+    group.add(mesh(slab(new THREE.Shape(plan(0.12)), 0.06), platSide, false));
+    // 台面一圈压阑石
+    const rim = new THREE.Shape(plan(0));
+    rim.holes.push(new THREE.Path(plan(-0.42)));
+    const rimMesh = mesh(slab(rim, 0.012), edgeMat, false);
+    rimMesh.position.y = P;
+    group.add(rimMesh);
+    // 踏步：前后各两级，前沿一道圆棱；两侧三角形象眼石，上压斜的垂带石
+    const treads: THREE.BufferGeometry[] = [];
+    const cheeks: THREE.BufferGeometry[] = [];
+    const W = GATE.stepHX * 2, run = GATE.run;
+    for (const [edge, dir] of [[Z2, 1], [GATE.z0, -1]] as [number, number][]) {
+      for (let k = 0; k < 2; k++) {
+        const h = (P * (k + 1)) / 2, d = (run / 2) * (2 - k);
+        treads.push(worldBox(W, h, d, 1).translate(0, h / 2, edge + (dir * d) / 2).toNonIndexed());
+        treads.push(new THREE.CylinderGeometry(0.03, 0.03, W, 8).rotateZ(Math.PI / 2).translate(0, h - 0.03, edge + dir * (d - 0.01)).toNonIndexed());
+      }
+      const tri = new THREE.Shape([new THREE.Vector2(edge + dir * run, 0), new THREE.Vector2(edge, 0), new THREE.Vector2(edge, P)]);
+      for (const s of [-1, 1]) {
+        const sx = s * (GATE.stepHX + 0.23);
+        cheeks.push(new THREE.ExtrudeGeometry(tri, { depth: 0.44, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(sx + 0.22, 0, 0));
+        treads.push(worldBox(0.46, 0.14, Math.hypot(run, P), 1).rotateX(dir * Math.atan2(P, run)).translate(sx, P / 2 + 0.07, edge + (dir * run) / 2).toNonIndexed());
+      }
+    }
+    const stepMesh = mesh(mergeGeometries(treads)!, edgeMat);
+    stepMesh.name = 'walkable';
+    group.add(stepMesh, mesh(mergeGeometries(cheeks)!, platSide));
+
     const g = new THREE.Group();
+    g.position.y = P;
     const xs = [-gateX - 2.2, -gateX, gateX, gateX + 2.2];
     const colH = 4.6;
     for (const x of xs) {
@@ -839,10 +889,25 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       g.add(w);
     }
     beamRing(g, 0, z1, gateX + 2.2, 0.6, colH, M, 0.9, false);
-    // 中间一对朱漆大门：门钉九路、铺首衔环，往院里开着；门轴下垫门枕石
+    // 门框：贴着柱子的两根抱框，门洞顶上一道上槛，上槛到额枋之间封一块走马板；都在门扇外侧
+    const OH = 3.75; // 门洞净高
+    const fx = gateX - 0.34;
+    const fz = z1 + 0.04;
+    const frame = [
+      ...[-1, 1].map((s) => worldBox(0.16, OH + 0.24, 0.2, 1).translate(s * fx, (OH + 0.24) / 2, fz)),
+      worldBox(fx * 2 + 0.16, 0.24, 0.22, 1).translate(0, OH + 0.12, fz),
+      worldBox(fx * 2 + 0.16, colH + 0.28 - OH - 0.24, 0.07, 1).translate(0, (OH + 0.24 + colH + 0.28) / 2, fz),
+    ];
+    g.add(mesh(mergeGeometries(frame)!, M.red));
+    // 门枕石：抱框底下两块，上沿抹一道斜边；中间架一道圆角朱漆门槛
+    g.add(mesh(mergeGeometries([-1, 1].map((s) => carvedBlock(0.16, 0.42, [[0, 0], [0.3, 0], [0.34, 0.03], [0.36, 0.06]]).translate(s * (fx - 0.04), 0, z1)))!, stoneMat));
+    const sill = mesh(new RoundedBoxGeometry(fx * 2 - 0.32, 0.3, 0.18, 2, 0.03), M.redDark);
+    sill.position.set(0, 0.15, fz);
+    g.add(sill);
+    // 中间一对朱漆大门：门钉九路、铺首衔环，往院里开着，门顶藏在上槛后面
     // 一扇门铺一整张门面贴图；右扇左右镜像，让两边的铺首都靠在门缝一侧
     const doorTex = gateDoorTexture();
-    const doorW = gateX - 0.2, doorH = colH - 0.45;
+    const doorW = gateX - 0.2, doorH = OH + 0.1;
     for (const s of [-1, 1]) {
       const pivot = new THREE.Group();
       pivot.position.set(s * (gateX - 0.12), 0, z1 - 0.12);
@@ -857,9 +922,6 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
       pivot.add(leaf);
       pivot.rotation.y = s * -1.25;
       g.add(pivot);
-      const pier = mesh(worldBox(0.36, 0.38, 0.9, 1), stoneMat);
-      pier.position.set(s * (gateX - 0.12), 0.19, z1);
-      g.add(pier);
     }
     g.add(buildRoof({ cx: 0, cz: z1, W: gateX + 4.0, D: 2.4, rx: gateX + 1.2, eaveY: colH + 1.15, ridgeY: colH + 3.0, lift: 0.7, ornate: true }));
     const pw = 3.6;

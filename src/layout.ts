@@ -26,6 +26,8 @@ export const ALTAR_SPOT = { x: 0, z: -16.75 };
 export const ALTAR_BURNER = { x: 0, z: HALL.tableZ1 - 0.32 };
 
 export const COURT = { x0: -44, x1: 44, z0: -50, z1: 68, gateX: 3.2 };
+// 山门台基：高 base 米；门洞那一间（|x| < hx）往院里伸到 z0，开着的两扇门落在上面；往院里下两级踏步，宽 ±stepHX、进深 run
+export const GATE = { base: 0.3, hx: 3.75, z0: COURT.z1 - 3.25, stepHX: 2.3, run: 0.6 };
 
 // 放生池在中轴线上，参道从石拱桥上过
 export const POND = { x: 0, z: 52, rx: 11, rz: 5.2 };
@@ -267,6 +269,8 @@ for (const s of [-1, 1]) {
   const tipX = hx - s * Math.cos(1.25) * (COURT.gateX - 0.2), tipZ = COURT.z1 - 0.12 - Math.sin(1.25) * (COURT.gateX - 0.2);
   boxes.push({ x0: Math.min(hx, tipX) - 0.1, x1: Math.max(hx, tipX) + 0.1, z0: tipZ, z1: COURT.z1 });
 }
+// 山门台基伸进院里那块的两侧边和垂带：只能从正中的踏步上去
+for (const s of [-1, 1]) boxes.push({ x0: Math.min(s * GATE.stepHX, s * GATE.hx), x1: Math.max(s * GATE.stepHX, s * GATE.hx), z0: GATE.z0 - GATE.run, z1: COURT.z1 });
 for (const p of PAGODAS) {
   circles.push({ x: p.x, z: p.z, r: 1.65 * p.s });
   // 塔门前的三级石阶（朝中轴线），两个碰撞圆盖住台阶宽度
@@ -366,6 +370,9 @@ export function heightAt(x: number, z: number): number {
     const b = T.size / 2 + 0.6;
     if (Math.abs(x - T.x) < b && Math.abs(z - T.z) < b) return T.platform;
   }
+  // 山门台基和往院里下的踏步
+  if (Math.abs(x) < GATE.hx && z > GATE.z0 && z < COURT.z1 + 1.2) return GATE.base;
+  if (Math.abs(x) < GATE.stepHX && z > GATE.z0 - GATE.run && z <= GATE.z0) return (GATE.base * (z - GATE.z0 + GATE.run)) / GATE.run;
   // 石拱桥
   if (x > BRIDGE.x0 && x < BRIDGE.x1 && z > BRIDGE.z0 && z < BRIDGE.z1) return BRIDGE.h * Math.sin(((z - BRIDGE.z0) / (BRIDGE.z1 - BRIDGE.z0)) * Math.PI);
   const sh = sideHallHeight(x, z);
