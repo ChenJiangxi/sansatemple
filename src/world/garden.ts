@@ -4,9 +4,12 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { WISH_ALLEY, WISH_DESK, PERSIMMON, STONE_PATHS, COURT, CAFE, blocked, inPond } from '../layout';
-import { plaqueTexture } from '../textures';
-import { mesh } from './util';
-import { chineseMats } from './hall';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mesh, lathe, grainUV } from './util';
+import { chineseMats, fruitGeometry } from './hall';
+import { pbr } from './pbr';
+import { paint } from './lotus';
+import { standSign, bambooTexture } from './shrines';
 
 export const LANTERN_COLORS = ['#b83a2a', '#d4a043', '#5a8c7c', '#eadfc8', '#cf8e88', '#4d6890'];
 
@@ -194,6 +197,17 @@ function flowerSkin(kind: 'cosmos' | 'daisy') {
   });
 }
 
+// 牙头：贴在腿边、牙条下面的一块小花牙，上沿平、外沿一道内凹的弧收到腿上。dir 朝哪边伸，s 是大小
+function spandrel(dir: number, s: number) {
+  const sh = new THREE.Shape();
+  sh.moveTo(0, 0);
+  sh.lineTo(dir * 0.1 * s, 0);
+  sh.bezierCurveTo(dir * 0.07 * s, -0.004 * s, dir * 0.035 * s, -0.02 * s, dir * 0.02 * s, -0.05 * s);
+  sh.quadraticCurveTo(dir * 0.008 * s, -0.075 * s, 0, -0.085 * s);
+  sh.lineTo(0, 0);
+  return new THREE.ExtrudeGeometry(sh, { depth: 0.016, bevelEnabled: false, curveSegments: 6 });
+}
+
 export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBuild {
   const M = chineseMats();
   const group = new THREE.Group();
@@ -202,22 +216,38 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
   const hitMat = new THREE.MeshBasicMaterial({ visible: false });
   const std = (p: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.7, ...p });
   const darkWood = std({ color: '#3b2a1f', roughness: 0.75 });
-  const wood = std({ color: '#6a4a30', roughness: 0.7 });
   const cordMat = std({ color: '#2a201a', roughness: 0.9 });
 
   // —— 灯廊：木杆、杆头的小帽、绳子 ——
+  // 每根杆：古镜式石柱础，八棱木杆，杆头一个斗、一顶四角攒尖小帽和铜宝珠；拉绳的三处各缠一圈麻绳
   const A = WISH_ALLEY;
-  const postGeo: THREE.BufferGeometry[] = [];
-  const capGeo: THREE.BufferGeometry[] = [];
+  const flat = (g: THREE.BufferGeometry) => {
+    const n = g.toNonIndexed();
+    n.computeVertexNormals();
+    return n;
+  };
+  const baseGeo = lathe([[0, 0], [0.165, 0], [0.165, 0.05], [0.15, 0.075], [0.12, 0.1], [0.095, 0.112], [0, 0.112]], 16);
+  const shaftGeo = grainUV(flat(new THREE.CylinderGeometry(0.066, 0.074, A.h - 0.1, 8).rotateY(Math.PI / 8).translate(0, 0.1 + (A.h - 0.1) / 2, 0)), 'y');
+  const douGeo = flat(new THREE.CylinderGeometry(0.14, 0.105, 0.07, 4).rotateY(Math.PI / 4).translate(0, A.h + 0.035, 0));
+  const hatGeo = flat(lathe([[0, 0], [0.2, 0], [0.24, 0.022], [0.17, 0.05], [0.11, 0.085], [0.065, 0.125], [0.035, 0.16], [0, 0.185]], 4).rotateY(Math.PI / 4).translate(0, A.h + 0.07, 0));
+  const pearlGeo = lathe([[0, 0], [0.03, 0], [0.03, 0.012], [0.018, 0.02], [0.03, 0.04], [0.033, 0.055], [0.022, 0.075], [0, 0.09]], 12).translate(0, A.h + 0.245, 0);
+  const baseG: THREE.BufferGeometry[] = [], shaftG: THREE.BufferGeometry[] = [], capG: THREE.BufferGeometry[] = [], pearlG: THREE.BufferGeometry[] = [], wraps: THREE.BufferGeometry[] = [];
   for (const x of [A.xE, A.xW])
     for (const z of A.zs) {
-      postGeo.push(new THREE.BoxGeometry(0.15, A.h, 0.15).translate(x, A.h / 2, z));
-      capGeo.push(new THREE.ConeGeometry(0.16, 0.16, 4).rotateY(Math.PI / 4).translate(x, A.h + 0.08, z));
-      capGeo.push(new THREE.BoxGeometry(0.24, 0.05, 0.24).translate(x, A.h - 0.02, z));
+      baseG.push(baseGeo.clone().translate(x, 0, z));
+      shaftG.push(shaftGeo.clone().translate(x, 0, z));
+      capG.push(douGeo.clone().translate(x, 0, z), hatGeo.clone().translate(x, 0, z));
+      pearlG.push(pearlGeo.clone().translate(x, 0, z));
+      for (const dy of [0.55, 0.85, 1.2]) wraps.push(new THREE.CylinderGeometry(0.08, 0.08, 0.035, 10).translate(x, A.h - dy, z));
     }
-  const posts = mesh(mergeGeometries(postGeo), darkWood);
+  const posts = mesh(mergeGeometries(shaftG)!, pbr('wood', { metersPerTile: 1.2, color: '#6e5442' }));
   posts.userData.interact = { type: 'wishDesk' };
-  group.add(posts, mesh(mergeGeometries(capGeo), darkWood));
+  group.add(
+    posts,
+    mesh(mergeGeometries(baseG)!, pbr('granite', { metersPerTile: 0.6, color: new THREE.Color().setRGB(2.3, 2.2, 2.05) })),
+    mesh(mergeGeometries(capG)!, darkWood),
+    mesh(mergeGeometries(pearlG)!, M.gold)
+  );
   interactives.push(posts);
 
   const hooks: Hook[] = [];
@@ -246,7 +276,7 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
   for (const [side, x] of [[1, A.xE], [-1, A.xW]] as [number, number][])
     for (let i = 0; i < A.zs.length - 1; i++)
       wire(x, A.h - 1.2, A.zs[i], x, A.h - 1.2, A.zs[i + 1], 0.34, 10, [0.2, 0.4, 0.6, 0.8], (t) => ({ x: x - side * 0.7, z: A.zs[i] + (A.zs[i + 1] - A.zs[i]) * t }));
-  group.add(mesh(mergeGeometries(wires), cordMat, false));
+  group.add(mesh(mergeGeometries([...wires, ...wraps]), cordMat, false));
 
   // —— 灯笼：灯身、上下木帽、吊绳、纸签，都用实例化（一盏灯一个实例） ——
   const H = hooks.length;
@@ -270,7 +300,8 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
     H
   );
   const cords = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.004, 0.004, 1, 4).translate(0, -0.5, 0), cordMat, H);
-  const tagMat = new THREE.MeshStandardMaterial({ map: tagSkin(), roughness: 0.9, side: THREE.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0 });
+  const tagTex = tagSkin();
+  const tagMat = new THREE.MeshStandardMaterial({ map: tagTex, roughness: 0.9, side: THREE.DoubleSide, emissive: '#ffffff', emissiveIntensity: 0 });
   const tags = new THREE.InstancedMesh(mergeGeometries([new THREE.PlaneGeometry(0.095, 0.25).translate(0, -0.125, 0), new THREE.PlaneGeometry(0.095, 0.25).translate(0, -0.125, 0).rotateY(Math.PI / 2)]), tagMat, H);
   bodies.castShadow = caps.castShadow = true;
   for (const m of [bodies, caps, cords, tags]) {
@@ -337,52 +368,100 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
   place(0, 0);
   bodies.computeBoundingSphere();
 
-  // —— 祈福台：木案，上面一摞叠好的纸灯笼、一叠纸签、笔筒、砚台；旁边立一块「祈福燈廊」木牌 ——
+  // —— 祈福台：明式平头案（圆腿、夹头榫的牙条和牙头、两侧双枨）。案上两摞叠好的纸灯笼、一盘纸签、砚台和墨、笔筒；
+  //    左头立「祈福燈廊」立牌，和河灯台、签筒桌的立牌同一式样 ——
   const desk = new THREE.Group();
   desk.position.set(WISH_DESK.x, 0, WISH_DESK.z);
   desk.rotation.y = WISH_DESK.yaw;
-  const top = mesh(new THREE.BoxGeometry(1.6, 0.06, 0.62), wood);
-  top.position.y = 0.8;
-  desk.add(top);
-  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const leg = mesh(new THREE.BoxGeometry(0.07, 0.77, 0.07), darkWood);
-    leg.position.set(sx * 0.72, 0.385, sz * 0.25);
-    desk.add(leg);
-  }
-  const apron = mesh(new THREE.BoxGeometry(1.5, 0.12, 0.02), darkWood);
-  apron.position.set(0, 0.72, 0.3);
-  desk.add(apron);
-  // 叠好的纸灯笼：扁扁的一摞，各色
-  LANTERN_COLORS.forEach((c, k) => {
-    const flat = mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.035, 16), std({ color: c, roughness: 0.85 }));
-    flat.position.set(-0.45 + (k % 3) * 0.06, 0.85 + Math.floor(k / 1) * 0.036, -0.05 + (k % 2) * 0.03);
-    desk.add(flat);
-  });
-  const paper = std({ color: '#f3ede0', roughness: 0.95 });
-  const stack = mesh(new THREE.BoxGeometry(0.22, 0.05, 0.1), paper);
-  stack.position.set(0.12, 0.855, 0.05);
-  const brushPot = mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.15, 14), std({ color: '#3f5a52', roughness: 0.35 }));
-  brushPot.position.set(0.5, 0.905, -0.12);
-  desk.add(stack, brushPot);
-  for (let k = 0; k < 3; k++) {
-    const brush = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.3, 6), std({ color: '#b39a5c' }));
-    brush.position.set(0.5 + (k - 1) * 0.02, 1.0, -0.12);
-    brush.rotation.z = (k - 1) * 0.15;
-    desk.add(brush);
-  }
-  const inkstone = mesh(new THREE.BoxGeometry(0.16, 0.03, 0.22), std({ color: '#24221f', roughness: 0.4 }));
-  inkstone.position.set(0.32, 0.845, 0.1);
-  desk.add(inkstone);
-  // 竖牌
+  const Y = 0.82; // 案面高
   {
-    const tex = plaqueTexture('祈福燈廊', true);
-    const w = 0.34, h = w * ((250 * 4 + 140) / 300);
-    const board = mesh(new THREE.BoxGeometry(w, h, 0.06), [M.gold, M.gold, M.gold, M.gold, std({ map: tex, roughness: 0.5, metalness: 0.2 }), M.redDark]);
-    board.position.set(-0.98, 0.6 + h / 2, 0.08);
-    const pole = mesh(new THREE.BoxGeometry(0.07, 0.62, 0.07), darkWood);
-    pole.position.set(-0.98, 0.31, 0.04);
-    desk.add(board, pole);
+    const deskWood = pbr('wood', { metersPerTile: 0.8, color: '#a07a58' });
+    deskWood.roughness = 0.6;
+    const parts: THREE.BufferGeometry[] = [];
+    const add = (g: THREE.BufferGeometry, axis: 'x' | 'y' | 'z') => parts.push(grainUV(g.index ? g.toNonIndexed() : g, axis));
+    add(new RoundedBoxGeometry(1.6, 0.045, 0.62, 2, 0.012).translate(0, Y - 0.0225, 0), 'x');
+    const lx = 0.66, lz = 0.22;
+    for (const sx of [-1, 1]) {
+      for (const sz of [-1, 1]) add(new THREE.CylinderGeometry(0.022, 0.025, Y - 0.04, 12).translate(sx * lx, (Y - 0.04) / 2, sz * lz), 'y');
+      for (const y of [0.16, 0.27]) add(new THREE.CylinderGeometry(0.012, 0.012, lz * 2, 8).rotateX(Math.PI / 2).translate(sx * lx, y, 0), 'z');
+    }
+    // 牙条前后各一根，两头出腿；每条腿两边各一个牙头，里侧大、外侧小
+    for (const sz of [-1, 1]) {
+      add(new THREE.BoxGeometry(lx * 2 + 0.16, 0.05, 0.016).translate(0, Y - 0.07, sz * lz), 'x');
+      for (const sx of [-1, 1])
+        for (const [dir, s] of [[-sx, 1], [sx, 0.55]] as [number, number][]) add(spandrel(dir, s).translate(sx * lx + dir * 0.02, Y - 0.095, sz * lz - 0.008), 'x');
+    }
+    desk.add(mesh(mergeGeometries(parts)!, deskWood));
   }
+  // 叠好的纸灯笼：上下木圈压着折起来的皮纸，侧面一道道褶；一盏一个实例、一个颜色
+  {
+    const prof: [number, number][] = [[0, 0], [0.072, 0], [0.078, 0.005]];
+    for (let k = 0; k <= 8; k++) prof.push([k % 2 ? 0.14 : 0.152, 0.008 + k * 0.0045]);
+    prof.push([0.078, 0.047], [0.072, 0.052], [0, 0.052]);
+    const woodC = new THREE.Color('#4a3527'), paperC = new THREE.Color('#ffffff');
+    const geo = paint(lathe(prof, 32), (x, _y, z) => (Math.hypot(x, z) < 0.08 ? woodC : paperC));
+    const spots: [number, number, number][] = [[-0.56, -0.1, 0], [-0.56, -0.1, 1], [-0.56, -0.1, 2], [-0.3, -0.05, 0], [-0.3, -0.05, 1]];
+    const folded = new THREE.InstancedMesh(geo, std({ map: skin, vertexColors: true, roughness: 0.88 }), spots.length);
+    const pick = [0, 3, 1, 4, 5];
+    spots.forEach(([x, z, k], i) => {
+      mtx.compose(new THREE.Vector3(x + (i % 2) * 0.01, Y + k * 0.052, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), i * 1.3), one);
+      folded.setMatrixAt(i, mtx);
+      folded.setColorAt(i, colors[pick[i]]);
+    });
+    folded.castShadow = folded.receiveShadow = true;
+    desk.add(folded);
+  }
+  // 一盘空白纸签：朱漆托盘，纸签散开着
+  {
+    const tray: THREE.BufferGeometry[] = [new RoundedBoxGeometry(0.34, 0.014, 0.2, 2, 0.004).translate(0, 0.007, 0)];
+    for (const sz of [-1, 1]) tray.push(new THREE.BoxGeometry(0.34, 0.022, 0.012).translate(0, 0.011, sz * 0.094));
+    for (const sx of [-1, 1]) tray.push(new THREE.BoxGeometry(0.012, 0.022, 0.2).translate(sx * 0.164, 0.011, 0));
+    const t = mesh(mergeGeometries(tray.map((g) => g.toNonIndexed()))!, M.redDark);
+    t.position.set(0.02, Y, 0.06);
+    const tg: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 5; k++)
+      tg.push(new THREE.PlaneGeometry(0.095, 0.25).rotateX(-Math.PI / 2).rotateY(Math.PI / 2 + (k - 2) * 0.12).translate((k - 2) * 0.012, 0.016 + k * 0.0012, (k % 2) * 0.01));
+    t.add(mesh(mergeGeometries(tg)!, std({ map: tagTex, roughness: 0.9 }), false));
+    desk.add(t);
+  }
+  // 砚台和墨：长方砚，砚头一汪墨；一锭墨搁在旁边
+  {
+    const ink = new THREE.Group();
+    ink.position.set(0.3, Y, 0.1);
+    ink.rotation.y = 0.12;
+    ink.add(
+      mesh(new RoundedBoxGeometry(0.13, 0.026, 0.19, 2, 0.006).translate(0, 0.013, 0), std({ color: '#2d2b29', roughness: 0.55 })),
+      mesh(new THREE.CircleGeometry(1, 24).scale(0.045, 0.028, 1).rotateX(-Math.PI / 2).translate(0, 0.0265, -0.055), std({ color: '#0c0b0b', roughness: 0.08 }), false),
+      mesh(new THREE.BoxGeometry(0.02, 0.013, 0.075).rotateY(0.5).translate(0.095, 0.0065, 0.02), std({ color: '#171515', roughness: 0.5 }))
+    );
+    desk.add(ink);
+  }
+  // 笔筒和毛笔：青瓷笔筒，四支笔笔头朝上，两支蘸过墨
+  {
+    const pot = mesh(lathe([[0, 0], [0.052, 0], [0.056, 0.004], [0.054, 0.13], [0.058, 0.14], [0.058, 0.147], [0.05, 0.147], [0.048, 0.012], [0, 0.012]], 24), std({ color: '#3f5a52', roughness: 0.3 }));
+    pot.position.set(0.52, Y, -0.14);
+    const handle = new THREE.Color('#b39a5c'), inked = new THREE.Color('#2b2621'), newHair = new THREE.Color('#e4d9c2');
+    const bs: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 4; k++) {
+      const a = k * 1.7 + 0.4, tilt = 0.1 + (k % 2) * 0.06, len = 0.19 + (k % 3) * 0.02;
+      const hair = k < 2 ? inked : newHair;
+      const b = [
+        paint(new THREE.CylinderGeometry(0.0045, 0.005, len, 6).translate(0, len / 2 + 0.012, 0), () => handle),
+        paint(lathe([[0, 0], [0.0062, 0], [0.0082, 0.009], [0.0075, 0.022], [0.004, 0.036], [0, 0.046]], 8).translate(0, len + 0.012, 0), () => hair),
+      ].map((g) => {
+        const n = g.toNonIndexed();
+        n.deleteAttribute('uv');
+        return n;
+      });
+      bs.push(mergeGeometries(b)!.rotateZ(tilt).rotateY(a).translate(Math.cos(a) * 0.015, 0, Math.sin(a) * 0.015));
+    }
+    pot.add(mesh(mergeGeometries(bs)!, std({ vertexColors: true, roughness: 0.6 })));
+    desk.add(pot);
+  }
+  const deskSign = standSign('祈福燈廊', 0.3);
+  deskSign.scale.setScalar(2);
+  deskSign.position.set(-0.98, 0, 0.08);
+  desk.add(deskSign);
   const deskHit = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.4, 1.0), hitMat);
   deskHit.position.set(-0.2, 1.1, 0);
   deskHit.userData.interact = { type: 'wishDesk' };
@@ -390,68 +469,154 @@ export function buildGarden(scene: THREE.Scene, o: { lite: boolean }): GardenBui
   interactives.push(deskHit);
   group.add(desk);
 
-  // —— 柿饼架：两头 A 字木腿，顶上一根横梁，挂一串串柿子；地上一只竹篮装着新摘的 ——
+  // —— 柿饼架：两头各一副交叉的竹腿（A 字，叉口麻绳捆住），一根竹竿架在叉口上，下面前后两道横档；
+  //    竿上吊一串串正在晾的柿子，顶上搭一溜人字形竹帘挡雨；地上一只竹篮装着新摘的 ——
   const P = PERSIMMON;
   const rack = new THREE.Group();
   rack.position.set(P.x, 0, P.z);
-  const rackH = 2.0;
-  for (const sx of [-1, 1]) {
-    for (const sz of [-1, 1]) {
-      const leg = mesh(new THREE.CylinderGeometry(0.035, 0.045, rackH + 0.15, 7), wood);
-      leg.position.set(sx * P.len / 2, rackH / 2, sz * 0.24);
-      leg.rotation.x = sz * 0.13;
-      rack.add(leg);
+  const rackH = 2.0; // 竹竿底下的高度（两腿交叉处）
+  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  {
+    const bambooTex = bambooTexture();
+    bambooTex.repeat.set(2, 1);
+    const poles: THREE.BufferGeometry[] = [];
+    const ties: THREE.BufferGeometry[] = [];
+    const up = new THREE.Vector3(0, 1, 0);
+    // 一根竹子：从 a 到 b、半径 r，每 0.42 米一道竹节
+    const bamboo = (a: THREE.Vector3, b: THREE.Vector3, r: number) => {
+      const d = b.clone().sub(a), L = d.length();
+      const qq = new THREE.Quaternion().setFromUnitVectors(up, d.clone().normalize());
+      const put = (g: THREE.BufferGeometry, t: number) => g.applyQuaternion(qq).translate(a.x + d.x * t, a.y + d.y * t, a.z + d.z * t);
+      poles.push(put(new THREE.CylinderGeometry(r, r, L, 10, 1), 0.5));
+      for (let s = 0.3; s < L - 0.1; s += 0.42) poles.push(put(new THREE.TorusGeometry(r * 1.02, r * 0.16, 4, 12).rotateX(Math.PI / 2), s / L));
+    };
+    for (const sx of [-1, 1]) {
+      const x = (sx * P.len) / 2;
+      // 两条腿在 rackH 处交叉，叉口往上再出一小截
+      for (const s of [-1, 1]) bamboo(V(x + s * 0.03, 0, s * 0.5), V(x + s * 0.03, rackH + 0.17, -s * 0.0425), 0.03);
+      ties.push(new THREE.CylinderGeometry(0.05, 0.05, 0.13, 10).rotateZ(Math.PI / 2).translate(x, rackH, 0));
     }
+    bamboo(V(-P.len / 2 - 0.25, rackH + 0.035, 0), V(P.len / 2 + 0.25, rackH + 0.035, 0), 0.035);
+    for (const s of [-1, 1]) bamboo(V(-P.len / 2 - 0.12, 0.4, s * 0.4), V(P.len / 2 + 0.12, 0.4, s * 0.4), 0.022);
+    rack.add(mesh(mergeGeometries(poles)!, std({ map: bambooTex, color: '#d6c39c', roughness: 0.6 })), mesh(mergeGeometries(ties)!, cordMat));
+    // 人字形竹帘：竹篾顺着坡往下，三道麻绳编住
+    const blind = canvasTex(256, 64, (g) => {
+      g.fillStyle = '#a88d5c';
+      g.fillRect(0, 0, 256, 64);
+      const R = rand(31);
+      for (let x = 0; x < 256; x += 4) {
+        g.fillStyle = `rgba(${R() < 0.5 ? '60,40,20' : '255,235,190'},${0.08 + R() * 0.12})`;
+        g.fillRect(x, 0, 3, 64);
+        g.fillStyle = 'rgba(50,35,20,0.45)';
+        g.fillRect(x + 3, 0, 1, 64);
+      }
+      g.fillStyle = 'rgba(55,40,25,0.8)';
+      for (const y of [9, 31, 53]) g.fillRect(0, y, 256, 2);
+    });
+    blind.wrapS = THREE.RepeatWrapping;
+    blind.repeat.set((P.len + 0.7) / 0.25, 1);
+    const ridge = rackH + 0.2;
+    const slope = [-1, 1].map((s) => new THREE.PlaneGeometry(P.len + 0.7, 0.5).rotateX(-s * Math.acos(0.28)).translate(0, ridge - 0.07, s * 0.24));
+    rack.add(mesh(mergeGeometries(slope)!, std({ map: blind, roughness: 0.95, side: THREE.DoubleSide })));
   }
-  for (const rz of [-0.12, 0.12]) {
-    const beam = mesh(new THREE.CylinderGeometry(0.04, 0.04, P.len + 0.4, 8), wood);
-    beam.rotation.z = Math.PI / 2;
-    beam.position.set(0, rackH, rz);
-    rack.add(beam);
-  }
-  // 顶上搭一溜竹帘挡雨
-  const roof = mesh(new THREE.BoxGeometry(P.len + 0.7, 0.03, 0.9), std({ color: '#9c8556', roughness: 0.95 }));
-  roof.position.y = rackH + 0.2;
-  roof.rotation.x = 0.08;
-  rack.add(roof);
-  const fruitGeo = new THREE.SphereGeometry(0.075, 12, 8);
-  fruitGeo.scale(1, 0.78, 1);
-  const fruitMat = std({ color: '#e0661c', roughness: 0.45 });
-  const dried = std({ color: '#b5501c', roughness: 0.6 });
-  const calyxGeo = new THREE.CylinderGeometry(0.035, 0.02, 0.018, 4);
-  const strings = 12, per = 8, rows = [-0.12, 0.12];
-  const fruits = new THREE.InstancedMesh(fruitGeo, dried, strings * per * rows.length);
-  const calyx = new THREE.InstancedMesh(calyxGeo, std({ color: '#3d4a24' }), strings * per * rows.length);
+  // 晾着的柿子（原点在果柄顶上，果子往下吊）：尖底长圆、捏出的皱褶、颜色发暗；顶上干萼、果柄和拴绳的一小截 T 形枝
+  const driedGeo = (() => {
+    const body = lathe([[0, -0.135], [0.012, -0.132], [0.028, -0.118], [0.042, -0.095], [0.05, -0.068], [0.052, -0.045], [0.048, -0.025], [0.036, -0.012], [0.018, -0.006], [0, -0.005]], 18);
+    const p = body.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(p.count * 3);
+    const c1 = new THREE.Color('#b4561f'), c2 = new THREE.Color('#6a2c12'), c = new THREE.Color();
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i), th = Math.atan2(x, z);
+      const w = Math.sin(5 * th + y * 70) * 0.6 + Math.sin(9 * th - y * 110) * 0.4;
+      const k = 1 + 0.06 * w;
+      p.setXYZ(i, x * k * 1.08, y, z * k * 0.88);
+      c.copy(c1).lerp(c2, Math.min(1, Math.max(0, 0.3 - w * 0.3 + (-y - 0.07) * 3)));
+      col.set([c.r, c.g, c.b], i * 3);
+    }
+    body.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    body.computeVertexNormals();
+    const calyx = new THREE.Shape();
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2, rr = 0.01 + 0.014 * Math.pow(Math.abs(Math.cos(a * 2)), 1.5);
+      if (i === 0) calyx.moveTo(Math.cos(a) * rr, Math.sin(a) * rr);
+      else calyx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    const stem = new THREE.Color('#3e3018');
+    const parts = [
+      body,
+      paint(new THREE.ShapeGeometry(calyx, 1).rotateX(-Math.PI / 2).translate(0, -0.004, 0), () => new THREE.Color('#4a3d1e')),
+      paint(new THREE.CylinderGeometry(0.003, 0.0035, 0.024, 5).translate(0, 0.008, 0), () => stem),
+      paint(new THREE.CylinderGeometry(0.0025, 0.0025, 0.035, 4).rotateZ(Math.PI / 2).translate(0, 0.019, 0), () => stem),
+    ].map((g) => {
+      const n = g.index ? g.toNonIndexed() : g;
+      n.deleteAttribute('uv');
+      return n;
+    });
+    return mergeGeometries(parts)!;
+  })();
+  const strings = 12, per = 8, rows = [-0.045, 0.045], gap = 0.18, top = rackH + 0.035;
+  const fruits = new THREE.InstancedMesh(driedGeo, std({ vertexColors: true, roughness: 0.5 }), strings * per * rows.length);
   const strGeo: THREE.BufferGeometry[] = [];
   const Rp = rand(5);
   let n = 0;
   for (const [ri, rz] of rows.entries())
     for (let s = 0; s < strings; s++) {
       const x = -P.len / 2 + 0.18 + ((s + ri * 0.5) / strings) * (P.len - 0.36);
-      const len = per - (s + ri) % 3;
-      strGeo.push(new THREE.CylinderGeometry(0.003, 0.003, len * 0.17 + 0.05, 3).translate(x, rackH - (len * 0.17) / 2, rz));
+      const len = per - ((s + ri) % 3);
+      const low = rackH - 0.06 - (len - 1) * gap;
+      strGeo.push(new THREE.CylinderGeometry(0.003, 0.003, top - low, 3).translate(x, (top + low) / 2, rz));
       for (let k = 0; k < per; k++) {
-        const y = rackH - 0.1 - k * 0.17;
-        // 短的那几串少挂两个
-        const sc = k < len ? 0.85 + Rp() * 0.25 : 0.0001;
-        mtx.compose(new THREE.Vector3(x + (Rp() - 0.5) * 0.02, y, rz + (Rp() - 0.5) * 0.02), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Rp() * 6, (Rp() - 0.5) * 0.3)), new THREE.Vector3(1, 1, 1).multiplyScalar(sc));
+        // 短的那几串少挂一两个
+        const sc = k < len ? 0.88 + Rp() * 0.22 : 0.0001;
+        mtx.compose(V(x + (Rp() - 0.5) * 0.015, rackH - 0.06 - k * gap, rz), new THREE.Quaternion().setFromEuler(new THREE.Euler((Rp() - 0.5) * 0.12, Rp() * 6.28, (Rp() - 0.5) * 0.12)), V(sc, sc, sc));
         fruits.setMatrixAt(n, mtx);
-        mtx.compose(new THREE.Vector3(x, y + 0.06, rz), new THREE.Quaternion(), new THREE.Vector3(1, 1, 1).multiplyScalar(k < len ? 1 : 0.0001));
-        calyx.setMatrixAt(n, mtx);
+        fruits.setColorAt(n, new THREE.Color().setScalar(0.82 + Rp() * 0.26));
         n++;
       }
     }
   fruits.castShadow = true;
-  rack.add(fruits, calyx, mesh(mergeGeometries(strGeo), cordMat, false));
-  // 竹篮和新柿子
-  const basket = mesh(new THREE.CylinderGeometry(0.3, 0.22, 0.24, 16, 1, true), std({ color: '#b08a52', roughness: 0.95, side: THREE.DoubleSide }));
-  basket.position.set(P.len / 2 + 0.55, 0.12, 0.25);
-  rack.add(basket);
-  for (let k = 0; k < 9; k++) {
-    const f = mesh(fruitGeo, fruitMat);
-    f.scale.setScalar(1.25);
-    f.position.set(P.len / 2 + 0.55 + Math.cos(k * 2.4) * 0.14 * (k % 3) * 0.6, 0.2 + (k > 5 ? 0.06 : 0), 0.25 + Math.sin(k * 2.4) * 0.14 * (k % 3) * 0.6);
-    rack.add(f);
+  rack.add(fruits, mesh(mergeGeometries(strGeo)!, cordMat, false));
+  // 竹篮：篾片编的斜壁圆篮，卷边、提梁；里面八个新摘的柿子
+  {
+    const weave = canvasTex(256, 128, (g) => {
+      g.fillStyle = '#8a6a3c';
+      g.fillRect(0, 0, 256, 128);
+      for (let r = 0; r < 16; r++)
+        for (let c = 0; c < 16; c++) {
+          const x = c * 16, y = r * 8;
+          const gr = g.createLinearGradient(0, y, 0, y + 8);
+          gr.addColorStop(0, '#9c7a46');
+          gr.addColorStop(0.5, '#c9a46a');
+          gr.addColorStop(1, '#8a6a3c');
+          g.fillStyle = gr;
+          g.fillRect(x, y + 1, 16, 6);
+          // 竖篾一格压在横篾上、一格钻到底下
+          if ((r + c) % 2 === 0) {
+            const gv = g.createLinearGradient(x + 5, 0, x + 11, 0);
+            gv.addColorStop(0, '#a07c48');
+            gv.addColorStop(0.5, '#d2ae74');
+            gv.addColorStop(1, '#a07c48');
+            g.fillStyle = gv;
+            g.fillRect(x + 5, y, 6, 8);
+          }
+        }
+    });
+    weave.wrapS = weave.wrapT = THREE.RepeatWrapping;
+    const body = lathe([[0, 0], [0.2, 0], [0.215, 0.012], [0.27, 0.16], [0.283, 0.215], [0.272, 0.222], [0.258, 0.17], [0.205, 0.032], [0, 0.032]], 32);
+    const bp = body.attributes.position as THREE.BufferAttribute, buv = body.attributes.uv as THREE.BufferAttribute;
+    for (let i = 0; i < bp.count; i++) buv.setXY(i, buv.getX(i) * 10, bp.getY(i) * 6);
+    const basket = mesh(
+      mergeGeometries([body, new THREE.TorusGeometry(0.278, 0.013, 6, 40).rotateX(Math.PI / 2).translate(0, 0.218, 0), new THREE.TorusGeometry(0.27, 0.011, 6, 24, Math.PI).translate(0, 0.218, 0)])!,
+      std({ map: weave, roughness: 0.9 })
+    );
+    basket.position.set(P.len / 2 + 0.55, 0, 0.25);
+    basket.rotation.y = 0.6;
+    const fresh = fruitGeometry('persimmon');
+    const spots: [number, number, number][] = [];
+    for (let k = 0; k < 5; k++) spots.push([Math.cos(k * 1.2566) * 0.135, 0.034, Math.sin(k * 1.2566) * 0.135]);
+    for (let k = 0; k < 3; k++) spots.push([Math.cos(k * 2.094 + 0.6) * 0.08, 0.085, Math.sin(k * 2.094 + 0.6) * 0.08]);
+    basket.add(mesh(mergeGeometries(spots.map(([x, y, z], k) => fresh.clone().scale(1.25, 1.25, 1.25).rotateX(((k % 3) - 1) * 0.15).rotateY(k * 2.3).translate(x, y, z)))!, std({ vertexColors: true, roughness: 0.4 })));
+    rack.add(basket);
   }
   // 小木牌「柿柿如意」
   {

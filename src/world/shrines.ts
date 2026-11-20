@@ -17,7 +17,7 @@ function sign(text: string) {
 }
 
 // 立牌：牌面装进一圈木框，两根立柱落在一对抱鼓座上。legH 是牌面底边离地（或离桌面）的高度
-function standSign(text: string, legH: number) {
+export function standSign(text: string, legH: number) {
   const M = chineseMats();
   const g = new THREE.Group();
   const { m, w, h } = sign(text);
@@ -86,7 +86,7 @@ function table(w: number, d: number, h: number) {
 }
 
 // 竹筒的皮：竖向细纤维，深浅不一，带一点点青
-function bambooTexture() {
+export function bambooTexture() {
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 128;

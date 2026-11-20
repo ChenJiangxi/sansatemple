@@ -1021,7 +1021,7 @@ function candleGeometry(h: number) {
 }
 
 // 供果（底在原点，顶点色）：苹果顶上一个窝和一截果柄；柿子扁圆、四道浅棱，顶上一枚四瓣的干萼
-function fruitGeometry(kind: 'apple' | 'persimmon') {
+export function fruitGeometry(kind: 'apple' | 'persimmon') {
   const parts: THREE.BufferGeometry[] = [];
   const add = (geo: THREE.BufferGeometry, f: (x: number, y: number, z: number) => THREE.Color) => {
     const g = geo.index ? geo.toNonIndexed() : geo;
