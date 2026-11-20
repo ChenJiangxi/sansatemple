@@ -11,7 +11,7 @@ let poemFont: Promise<void> | null = null;
 // 印章和标题的字体很小，一开始就加载；签诗字体只在第一次求签时加载
 export function loadUiFonts() {
   sealFont ??= Promise.all(
-    [new FontFace('SansaSeal', fontUrl('seal.woff2')), new FontFace('SansaTitle', fontUrl('title.woff2')), new FontFace('SansaSealBold', fontUrl('seal-bold.woff2'), { weight: '900' })].map((f) =>
+    [new FontFace('SansaSeal', fontUrl('seal.woff2')), new FontFace('SansaTitle', fontUrl('title.woff2')), new FontFace('SansaSealSong', fontUrl('seal-song.woff2'), { weight: '600' })].map((f) =>
       f.load().then((ff) => {
         document.fonts.add(ff);
       })
@@ -41,10 +41,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
 
 // —— 印章：朱红方印，白文，边缘略有残破 ——
 const sealCache = new Map<string, string>();
-// 一方印：白文印——字从朱红印面上镂空出来（透出下面的纸色）。
-// 字用思源宋体最粗的一档（只取印文用字），一字居中、两字上下排、四字两行两列；
-// 印面边缘略带手刻的不齐，朱泥有一点深浅。不再描内框、不再撒残破的小点（2026-11-19 用户嫌印章细节不够好）。
-export function sealImage(text: string, size = 128, gold = false, font = 'SansaSealBold'): string {
+// 一方印：白文长方印——竖长的朱红印面，两个字上下排（从上往下读），字从印面上镂空出来。
+// 字用思源宋体中粗（600，只取印文用字），每个字接近正方形，不再压扁；印面四角略圆，朱泥只有一点点深浅。
+// 2026-11-20 用户两次说印章不好看：原来是最粗的字硬塞进正方形，每个字被压成扁条；改成传统的长方印。
+export function sealImage(text: string, size = 128, gold = false, font = 'SansaSealSong'): string {
   const key = `${text}|${size}|${gold}|${font}`;
   const hit = sealCache.get(key);
   if (hit) return hit;
@@ -53,74 +53,50 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
   const g = c.getContext('2d')!;
   let seed = [...text].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
   const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const pad = size * 0.07;
-  const S = size - pad * 2;
-  // 印面：四条边各取几个点，往里往外抖一点点，看起来是手刻的
+  const chars = [...text].slice(0, 2);
+  const H = size * 0.86;
+  const W = chars.length === 1 ? H : H * 0.66;
+  const x0 = (size - W) / 2, y0 = (size - H) / 2;
   g.beginPath();
-  const pts: [number, number][] = [];
-  const n = 6;
-  const j = size * 0.008;
-  for (let side = 0; side < 4; side++)
-    for (let k = 0; k < n; k++) {
-      const t = k / n;
-      const off = (rnd() - 0.5) * 2 * j;
-      const [x, y] = side === 0 ? [pad + S * t, pad + off] : side === 1 ? [pad + S + off, pad + S * t] : side === 2 ? [pad + S * (1 - t), pad + S + off] : [pad + off, pad + S * (1 - t)];
-      pts.push([x, y]);
-    }
-  pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
-  g.closePath();
-  const base = gold ? '#b0832e' : '#b5302a';
-  g.fillStyle = base;
+  g.roundRect(x0, y0, W, H, size * 0.06);
+  g.fillStyle = gold ? '#b0832e' : '#b5302a';
   g.fill();
-  // 朱泥的深浅：几团略亮、略暗的大晕
   g.save();
   g.clip();
-  for (let i = 0; i < 7; i++) {
-    const x = pad + rnd() * S, y = pad + rnd() * S, r = S * (0.25 + rnd() * 0.35);
+  for (let i = 0; i < 4; i++) {
+    const x = x0 + rnd() * W, y = y0 + rnd() * H, r = H * (0.3 + rnd() * 0.3);
     const gr = g.createRadialGradient(x, y, 0, x, y, r);
-    gr.addColorStop(0, rnd() < 0.5 ? 'rgba(255,255,255,0.07)' : 'rgba(60,0,0,0.08)');
+    gr.addColorStop(0, rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(60,0,0,0.06)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.fillRect(0, 0, size, size);
   }
   g.restore();
-  // 镂空印文：每个字缩放到自己的格子里填满（印章里的字本来就按格子变形）
+  // 镂空印文
   g.globalCompositeOperation = 'destination-out';
   g.fillStyle = '#000';
   g.textAlign = 'center';
   g.textBaseline = 'alphabetic';
-  const chars = [...text].slice(0, 4);
-  const inner = S * 0.82;
-  const ox = pad + (S - inner) / 2, oy = pad + (S - inner) / 2;
-  const cells: { ch: string; x: number; y: number; w: number; h: number }[] =
-    chars.length === 1
-      ? [{ ch: chars[0], x: ox, y: oy, w: inner, h: inner }]
-      : chars.length === 2
-        ? chars.map((ch, i) => ({ ch, x: ox, y: oy + (i * inner) / 2, w: inner, h: inner / 2 }))
-        : chars.map((ch, i) => ({ ch, x: ox + (i < 2 ? inner / 2 : 0), y: oy + ((i % 2) * inner) / 2, w: inner / 2, h: inner / 2 }));
-  const fs = size;
-  g.font = `900 ${fs}px ${font}, "Noto Serif TC", "Songti TC", serif`;
-  for (const cell of cells) {
-    const m = g.measureText(cell.ch);
-    const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || fs;
-    const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || fs;
-    const gap = size * 0.02;
-    const sx = (cell.w - gap) / gw, sy = (cell.h - gap) / gh;
+  g.font = `600 ${size}px ${font}, "Noto Serif TC", "Songti TC", serif`;
+  const innerW = W * 0.84, innerH = H * 0.84;
+  const ix = x0 + (W - innerW) / 2, iy = y0 + (H - innerH) / 2;
+  const cellH = innerH / chars.length;
+  chars.forEach((ch, i) => {
+    const m = g.measureText(ch);
+    const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || size;
+    const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || size;
+    const gap = size * 0.025;
+    const sx = (innerW - gap) / gw, sy = (cellH - gap) / gh;
     g.save();
-    g.translate(cell.x + cell.w / 2, cell.y + cell.h / 2);
+    g.translate(ix + innerW / 2, iy + cellH * (i + 0.5));
     g.scale(sx, sy);
-    g.fillText(cell.ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+    g.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
     g.restore();
-  }
-  // 四角稍微圆一点，柔和些（2026-11-20 用户：很多地方适合圆角）
-  g.globalCompositeOperation = 'destination-in';
-  g.beginPath();
-  g.roundRect(pad - j * 2, pad - j * 2, S + j * 4, S + j * 4, size * 0.085);
-  g.fill();
+  });
   g.globalCompositeOperation = 'source-over';
   const url = c.toDataURL();
   // 印文字体还没下载完时画出来的是替代字体，不缓存，下次再画
-  if (document.fonts.check(`900 20px ${font}`)) sealCache.set(key, url);
+  if (document.fonts.check(`600 20px ${font}`)) sealCache.set(key, url);
   return url;
 }
 

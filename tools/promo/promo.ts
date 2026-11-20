@@ -808,7 +808,7 @@ async function main() {
   let cardImg: HTMLImageElement | null = null;
   if (CUT === 'coffee') {
     document.fonts.add(await new FontFace('SansaSeal', 'url(/fonts/seal.woff2)').load());
-    document.fonts.add(await new FontFace('SansaSealBold', 'url(/fonts/seal-bold.woff2)', { weight: '900' }).load());
+    document.fonts.add(await new FontFace('SansaSealSong', 'url(/fonts/seal-song.woff2)', { weight: '600' }).load());
     cardImg = new Image();
     cardImg.src = await shareCard('latte', '静静的云', undefined, '', '');
     await cardImg.decode();
