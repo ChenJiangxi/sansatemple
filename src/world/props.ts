@@ -189,7 +189,7 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   };
 
   // —— 红灯笼：参道两侧各四根灯杆拉灯绳，大殿屋檐下每间一盏大的 ——
-  type L = { p: THREE.Vector3; s: number };
+  type L = { p: THREE.Vector3; s: number; cord?: number; red?: boolean };
   const lanterns: L[] = [];
   const poleZ = [11, 22, 33, 43.5];
   const poleH = 4.1;
@@ -231,6 +231,9 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     const x = (HALL.colX[i] + HALL.colX[i + 1]) / 2;
     lanterns.push({ p: new THREE.Vector3(x, HALL.baseH + HALL.colH - 0.9, HALL.colZFront + 1.2), s: 1.9 });
   }
+  // 配殿檐下、钟楼四角的灯笼：位置由夜灯模块给出，造型和参道的一样，只是大一圈、吊绳长
+  const night = buildNightLights(scene);
+  for (const p of night.lanterns) lanterns.push({ p, s: 1.3, cord: 1.05, red: true });
   const ltex = lanternTexture();
   const lanternMat = glowMaterial({ map: ltex, emissiveMap: ltex, roughness: 0.55 });
   // 瓜棱形：16 道竹骨处往里收，骨与骨之间鼓出来（和祈福灯廊的纸灯同一个生成函数）
@@ -257,10 +260,11 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     const sc = new THREE.Vector3(L.s, L.s, L.s);
     m4.compose(L.p, q, sc);
     lm.setMatrixAt(i, m4);
-    lm.setColorAt(i, new THREE.Color(r() > 0.12 ? '#d8361a' : '#e0a030'));
+    const roll = r();
+    lm.setColorAt(i, new THREE.Color(L.red || roll > 0.12 ? '#d8361a' : '#e0a030'));
     caps.setMatrixAt(i, m4);
     tassels.setMatrixAt(i, m4);
-    const len = 0.45 - 0.19 * L.s;
+    const len = L.cord ?? 0.45 - 0.19 * L.s;
     if (len > 0.02) cords.push(new THREE.CylinderGeometry(0.006, 0.006, len, 4).translate(L.p.x, L.p.y + 0.19 * L.s + len / 2, L.p.z));
   });
   group.add(lm, caps, tassels);
@@ -851,7 +855,6 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   }
 
   scene.add(group);
-  const night = buildNightLights(scene);
 
   return {
     interactives,

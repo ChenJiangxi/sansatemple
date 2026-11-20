@@ -1,5 +1,5 @@
 // 寺院两侧的夜间灯火：配殿门窗透出暖光、檐下红灯笼、钟楼四角灯笼、配殿前一排石灯，
-// 以及地上的一圈圈光晕。大多用自发光和贴地光晕来「假装」照亮，只给两座配殿各配一盏真实点光源，手机也跑得动。
+// 以及地上的一圈圈光晕。檐下和钟楼的灯笼本身由 props.ts 和参道灯笼一起画（同一种瓜棱绸面灯），这里只给出位置和光晕。大多用自发光和贴地光晕来「假装」照亮，只给两座配殿各配一盏真实点光源，手机也跑得动。
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { SIDE_HALLS, SIDE_LAMPS, BELL } from '../layout';
@@ -19,27 +19,10 @@ function radialTexture(stops: [number, string][]) {
   return t;
 }
 
-// 红灯笼：椭圆灯身、上下金色箍、下垂流苏，顶上一根吊绳
-function lanternGeos(hang: number) {
-  const body = new THREE.LatheGeometry(
-    [[0.0, -0.25], [0.12, -0.24], [0.22, -0.17], [0.27, -0.05], [0.27, 0.05], [0.22, 0.17], [0.12, 0.24], [0, 0.25]].map(([x, y]) => new THREE.Vector2(x, y)),
-    16
-  );
-  const gold = mergeGeometries([
-    new THREE.CylinderGeometry(0.12, 0.13, 0.06, 12).translate(0, 0.27, 0),
-    new THREE.CylinderGeometry(0.13, 0.12, 0.06, 12).translate(0, -0.27, 0),
-    new THREE.CylinderGeometry(0.008, 0.008, hang, 4).translate(0, 0.3 + hang / 2, 0),
-  ].map((g) => g.toNonIndexed()))!;
-  const tassel = new THREE.ConeGeometry(0.06, 0.26, 8).rotateX(Math.PI).translate(0, -0.43, 0);
-  return { body, gold, tassel };
-}
-
 export function buildNightLights(scene: THREE.Scene) {
   const group = new THREE.Group();
   const M = chineseMats();
-  const lanternMat = new THREE.MeshStandardMaterial({ color: '#c8281c', roughness: 0.6, emissive: '#ff4410', emissiveIntensity: 0.15 });
   const lampLightMat = new THREE.MeshStandardMaterial({ color: '#f3dfb5', roughness: 0.8, emissive: '#ffbe6a', emissiveIntensity: 0.1 });
-  const tasselMat = new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.8 });
   const glowMat = new THREE.SpriteMaterial({
     map: radialTexture([[0, 'rgba(255,214,150,1)'], [0.3, 'rgba(255,170,90,0.4)'], [1, 'rgba(255,140,60,0)']]),
     transparent: true,
@@ -70,13 +53,12 @@ export function buildNightLights(scene: THREE.Scene) {
     sp.scale.setScalar(s);
     parent.add(sp);
   };
-  const L = lanternGeos(1.0);
+  // 灯笼只记下世界坐标（交给 props.ts 画），这里放光晕
+  const lanterns: THREE.Vector3[] = [];
   const lantern = (parent: THREE.Object3D, x: number, y: number, z: number) => {
-    const g = new THREE.Group();
-    g.add(new THREE.Mesh(L.body, lanternMat), new THREE.Mesh(L.gold, M.gold), new THREE.Mesh(L.tassel, tasselMat));
-    g.position.set(x, y, z);
-    parent.add(g);
     glow(parent, x, y, z, 1.6);
+    parent.updateMatrixWorld(true);
+    lanterns.push(new THREE.Vector3(x, y, z).applyMatrix4(parent.matrixWorld));
   };
 
   // —— 配殿：格扇门透出屋里的灯光、檐下四盏红灯笼、门前一盏暖色点光源 ——
@@ -141,10 +123,10 @@ export function buildNightLights(scene: THREE.Scene) {
 
   scene.add(group);
   return {
+    lanterns,
     // level：环境给出的灯笼亮度（白天约 0.25，黄昏 1.3，夜里 2.4）
     setLevel(level: number) {
       const n = Math.min(1, Math.max(0, (level - 0.6) / 1.8));
-      lanternMat.emissiveIntensity = 0.15 + n * 1.05;
       lampLightMat.emissiveIntensity = 0.1 + n * 1.1;
       geshan.emissiveIntensity = n * 0.75;
       glowMat.opacity = n * 0.85;
