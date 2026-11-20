@@ -7,7 +7,7 @@ import { rng } from '../textures';
 
 const WATER = -0.16;
 
-function leafTexture() {
+export function leafTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
   const g = c.getContext('2d')!;
@@ -59,7 +59,7 @@ function leafTexture() {
 }
 
 // 极坐标网格做的叶子：半径 1，cup 控制碗形，wave 控制边缘起伏
-function leafGeometry(seed: number, cup: number, wave: number) {
+export function leafGeometry(seed: number, cup: number, wave: number) {
   const r = rng(seed);
   const R = 6, S = 40;
   const ph = r() * 6, ph2 = r() * 6;
@@ -92,7 +92,7 @@ function leafGeometry(seed: number, cup: number, wave: number) {
   return g;
 }
 
-function paint(g: THREE.BufferGeometry, f: (x: number, y: number, z: number) => THREE.Color) {
+export function paint(g: THREE.BufferGeometry, f: (x: number, y: number, z: number) => THREE.Color) {
   const p = g.attributes.position as THREE.BufferAttribute;
   const col = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) {
@@ -128,7 +128,7 @@ function petal(len: number, wid: number) {
   return paint(g, (_x, y) => base.clone().lerp(tip, Math.pow(Math.min(1, y / len), 1.8)));
 }
 
-function flowerGeometry() {
+export function flowerGeometry() {
   const parts: THREE.BufferGeometry[] = [];
   const ring = (n: number, len: number, wid: number, tilt: number, off: number, y: number) => {
     for (let k = 0; k < n; k++) {
@@ -162,7 +162,7 @@ function flowerGeometry() {
   }))!;
 }
 
-function budGeometry() {
+export function budGeometry() {
   const pts: THREE.Vector2[] = [];
   for (let i = 0; i <= 12; i++) {
     const t = i / 12;

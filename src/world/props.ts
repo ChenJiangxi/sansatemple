@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { ribbedLantern } from './garden';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng, geshanTexture } from '../textures';
 import { mesh, worldBox, lathe } from './util';
@@ -11,6 +12,47 @@ import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
 import { buildDing } from './bronze';
 import { buildNightLights } from './nightlights';
+
+// 按法线朝向把 UV 投到真实尺寸（米），石材贴图在倒圆的石板上不拉伸
+function boxUV(geo: THREE.BufferGeometry) {
+  const p = geo.attributes.position as THREE.BufferAttribute, n = geo.attributes.normal as THREE.BufferAttribute;
+  const uv = geo.attributes.uv as THREE.BufferAttribute;
+  for (let i = 0; i < p.count; i++) {
+    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), az = Math.abs(n.getZ(i));
+    if (ay >= ax && ay >= az) uv.setXY(i, p.getX(i), p.getZ(i));
+    else if (ax >= az) uv.setXY(i, p.getZ(i), p.getY(i));
+    else uv.setXY(i, p.getX(i), p.getY(i));
+  }
+  return geo;
+}
+
+// 四面同一条线脚的石块：prof 是 [高度, 内收]，每层是比外框（半宽 hx、半深 hz）缩进的矩形，
+// 层层相连成四个侧面；平面着色，线脚的棱角分明。顶面加盖，底面贴地不画
+function carvedBlock(hx: number, hz: number, prof: [number, number][]) {
+  const pos: number[] = [], uv: number[] = [];
+  const ring = (y: number, k: number) => [[-(hx - k), y, hz - k], [hx - k, y, hz - k], [hx - k, y, -(hz - k)], [-(hx - k), y, -(hz - k)]];
+  const along = (v: number[], s: number) => (s % 2 === 0 ? v[0] : v[2]);
+  for (let j = 0; j < prof.length - 1; j++) {
+    const a = ring(...prof[j]), b = ring(...prof[j + 1]);
+    for (let s = 0; s < 4; s++) {
+      const s1 = (s + 1) % 4;
+      for (const v of [a[s], a[s1], b[s1], a[s], b[s1], b[s]]) {
+        pos.push(...v);
+        uv.push(along(v, s), v[1]);
+      }
+    }
+  }
+  const t = ring(...prof[prof.length - 1]);
+  for (const v of [t[0], t[1], t[2], t[0], t[2], t[3]]) {
+    pos.push(...v);
+    uv.push(v[0], v[2]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.computeVertexNormals();
+  return g;
+}
 
 export interface PropsBuild {
   interactives: THREE.Object3D[];
@@ -546,29 +588,25 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
     group.add(rack);
   }
 
-  // —— 石凳 ——
-  for (const b of [...BENCHES, ...NPC_BENCHES]) {
-    const g = new THREE.Group();
-    // 凳面：一块石板，前后两道圆边
-    const top = mesh(worldBox(2.2, 0.1, 0.5, 1), stoneMat);
-    top.position.y = 0.42;
-    g.add(top);
-    for (const sz of [-0.25, 0.25]) {
-      const edge = mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 10).rotateZ(Math.PI / 2), stoneMat, false);
-      edge.position.set(0, 0.42, sz);
-      g.add(edge);
+  // —— 石凳：一块倒了圆角的石板，架在两只整块雕出的须弥座凳脚上；所有石凳合成一个网格 ——
+  {
+    const slab = new RoundedBoxGeometry(2.2, 0.11, 0.5, 3, 0.03).toNonIndexed();
+    boxUV(slab);
+    slab.translate(0, 0.415, 0);
+    // 凳脚轮廓 [高度, 比外框内收]：圭脚、下枭、束腰、上枭、上枋，上枋顶到石板底 0.36
+    const legProf: [number, number][] = [
+      [0, 0], [0.05, 0], [0.05, 0.014], [0.064, 0.02], [0.078, 0.031], [0.094, 0.041], [0.11, 0.047], [0.11, 0.056],
+      [0.25, 0.056], [0.25, 0.047], [0.266, 0.041], [0.282, 0.031], [0.296, 0.02], [0.31, 0.014], [0.31, 0], [0.36, 0],
+    ];
+    const leg = carvedBlock(0.17, 0.23, legProf);
+    const parts: THREE.BufferGeometry[] = [];
+    const m4 = new THREE.Matrix4();
+    for (const b of [...BENCHES, ...NPC_BENCHES]) {
+      m4.makeRotationY(b.yaw).setPosition(b.x, 0, b.z);
+      parts.push(slab.clone().applyMatrix4(m4));
+      for (const lx of [-0.78, 0.78]) parts.push(leg.clone().translate(lx, 0, 0).applyMatrix4(m4));
     }
-    // 凳脚：上下宽、中间收腰，像一个小须弥座
-    for (const lx of [-0.78, 0.78]) {
-      for (const [w, h, d, y] of [[0.36, 0.08, 0.5, 0.04], [0.26, 0.2, 0.38, 0.18], [0.32, 0.06, 0.46, 0.34]] as [number, number, number, number][]) {
-        const leg = mesh(worldBox(w, h, d, 1), stoneMat);
-        leg.position.set(lx, y, 0);
-        g.add(leg);
-      }
-    }
-    g.position.set(b.x, 0, b.z);
-    g.rotation.y = b.yaw;
-    group.add(g);
+    group.add(mesh(mergeGeometries(parts)!, stoneMat));
   }
   for (const s of BENCH_SEATS) {
     const hit = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.7, 0.75), new THREE.MeshBasicMaterial({ visible: false }));
