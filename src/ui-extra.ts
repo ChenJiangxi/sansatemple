@@ -39,11 +39,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 }
 
-// —— 印章：朱红方印，白文，边缘略有残破 ——
+// —— 印章：朱红圆印，白文，只刻一个字 ——
 const sealCache = new Map<string, string>();
-// 一方印：白文长方印——竖长的朱红印面，两个字上下排（从上往下读），字从印面上镂空出来。
-// 字用思源宋体中粗（600，只取印文用字），每个字接近正方形，不再压扁；印面四角略圆，朱泥只有一点点深浅。
-// 2026-11-20 用户两次说印章不好看：原来是最粗的字硬塞进正方形，每个字被压成扁条；改成传统的长方印。
+// 每方印只刻一个代表字，字不压扁；印名写在印下面。
+// 2026-11-20 用户先后否掉了「正方形里硬塞两个粗字」和「竖长方印」，定为圆形单字印。
+const SEAL_MARK: Record<string, string> = {
+  入山: '山', 禮佛: '禮', 心香: '香', 晨鐘: '鐘', 心願: '願', 木魚: '魚', 百八: '珠', 靜坐: '坐',
+  渡橋: '橋', 觀魚: '觀', 河燈: '燈', 靈籤: '籤', 圓滿: '圓', 靜山: '靜', 心經: '經',
+};
+export const sealMark = (text: string) => SEAL_MARK[text] ?? [...text].pop() ?? '';
 export function sealImage(text: string, size = 128, gold = false, font = 'SansaSealSong'): string {
   const key = `${text}|${size}|${gold}|${font}`;
   const hit = sealCache.get(key);
@@ -53,46 +57,39 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
   const g = c.getContext('2d')!;
   let seed = [...text].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
   const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const chars = [...text].slice(0, 2);
-  const H = size * 0.86;
-  const W = chars.length === 1 ? H : H * 0.66;
-  const x0 = (size - W) / 2, y0 = (size - H) / 2;
+  const r = size * 0.43;
+  const cx = size / 2, cy = size / 2;
   g.beginPath();
-  g.roundRect(x0, y0, W, H, size * 0.06);
+  g.arc(cx, cy, r, 0, Math.PI * 2);
   g.fillStyle = gold ? '#b0832e' : '#b5302a';
   g.fill();
+  // 朱泥一点点深浅
   g.save();
   g.clip();
   for (let i = 0; i < 4; i++) {
-    const x = x0 + rnd() * W, y = y0 + rnd() * H, r = H * (0.3 + rnd() * 0.3);
-    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    const x = cx + (rnd() - 0.5) * r * 1.6, y = cy + (rnd() - 0.5) * r * 1.6, rr = r * (0.6 + rnd() * 0.6);
+    const gr = g.createRadialGradient(x, y, 0, x, y, rr);
     gr.addColorStop(0, rnd() < 0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(60,0,0,0.06)');
     gr.addColorStop(1, 'rgba(0,0,0,0)');
     g.fillStyle = gr;
     g.fillRect(0, 0, size, size);
   }
   g.restore();
-  // 镂空印文
+  // 镂空印文：字按原比例放大到印面直径的 56%
+  const ch = sealMark(text);
   g.globalCompositeOperation = 'destination-out';
   g.fillStyle = '#000';
   g.textAlign = 'center';
   g.textBaseline = 'alphabetic';
   g.font = `600 ${size}px ${font}, "Noto Serif TC", "Songti TC", serif`;
-  const innerW = W * 0.84, innerH = H * 0.84;
-  const ix = x0 + (W - innerW) / 2, iy = y0 + (H - innerH) / 2;
-  const cellH = innerH / chars.length;
-  chars.forEach((ch, i) => {
-    const m = g.measureText(ch);
-    const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || size;
-    const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || size;
-    const gap = size * 0.025;
-    const sx = (innerW - gap) / gw, sy = (cellH - gap) / gh;
-    g.save();
-    g.translate(ix + innerW / 2, iy + cellH * (i + 0.5));
-    g.scale(sx, sy);
-    g.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
-    g.restore();
-  });
+  const m = g.measureText(ch);
+  const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || size;
+  const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || size;
+  const k = (r * 2 * 0.56) / Math.max(gw, gh);
+  g.translate(cx, cy);
+  g.scale(k, k);
+  g.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
+  g.setTransform(1, 0, 0, 1, 0, 0);
   g.globalCompositeOperation = 'source-over';
   const url = c.toDataURL();
   // 印文字体还没下载完时画出来的是替代字体，不缓存，下次再画
@@ -128,8 +125,8 @@ export function sealBook(): HTMLElement {
       const d = new Date(progress.when(s.id));
       li.innerHTML = `<img alt="" src="${sealImage(s.text, 128)}"><b>${name}</b><small>${d.getMonth() + 1}/${d.getDate()}</small>`;
     } else {
-      // 没盖的：一个浅浅的虚线印框，只写印名；点一下，怎么得这方印显示在顶上那一行
-      li.innerHTML = `<span class="seal-empty">${[...s.text].join('<br>')}</span><b>${name}</b>`;
+      // 没盖的：一个浅浅的虚线圆，里面淡淡的印文；点一下，怎么得这方印显示在顶上那一行
+      li.innerHTML = `<span class="seal-empty">${sealMark(s.text)}</span><b>${name}</b>`;
       li.tabIndex = 0;
       li.onclick = () => (top.textContent = hint);
     }
