@@ -394,7 +394,8 @@ export class UI {
     this.panel.hidden = false;
     this.panel.className = `panel panel-${kind}`;
     this.renderPanel();
-    (this.panel.querySelector('button, input, select') as HTMLElement | null)?.focus({ preventScroll: true });
+    // 焦点放进面板方便键盘操作，但不画焦点框（鼠标、手指打开时那圈框很突兀）
+    (this.panel.querySelector('button, input, select') as HTMLElement | null)?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
   }
 
   // 进寺后重新显示一次操作提示
@@ -533,7 +534,13 @@ export class UI {
         input.max = '1';
         input.step = '0.01';
         input.value = String(vols[bus]);
-        input.oninput = () => this.h.setVolume(bus, Number(input.value));
+        // 轨道上拉到的那一段填深色（iOS 滑块的样子）
+        const fill = () => input.style.setProperty('--v', `${Number(input.value) * 100}%`);
+        fill();
+        input.oninput = () => {
+          fill();
+          this.h.setVolume(bus, Number(input.value));
+        };
         row.appendChild(input);
         body.appendChild(row);
       }
@@ -574,7 +581,8 @@ export class UI {
         sw.setAttribute('role', 'switch');
         sw.setAttribute('aria-checked', String(on));
         sw.setAttribute('aria-label', t('shadows'));
-        sw.textContent = t(on ? 'on' : 'off');
+        // iOS 式开关：只有滑块，不写字（读屏照样读 aria-checked）
+        sw.textContent = '';
       };
       setSw(this.h.getShadows());
       sw.onclick = () => {

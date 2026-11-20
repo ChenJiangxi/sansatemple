@@ -112,6 +112,12 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
     g.fillText(cell.ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);
     g.restore();
   }
+  // 四角稍微圆一点，柔和些（2026-11-20 用户：很多地方适合圆角）
+  g.globalCompositeOperation = 'destination-in';
+  g.beginPath();
+  g.roundRect(pad - j * 2, pad - j * 2, S + j * 4, S + j * 4, size * 0.085);
+  g.fill();
+  g.globalCompositeOperation = 'source-over';
   const url = c.toDataURL();
   // 印文字体还没下载完时画出来的是替代字体，不缓存，下次再画
   if (document.fonts.check(`900 20px ${font}`)) sealCache.set(key, url);

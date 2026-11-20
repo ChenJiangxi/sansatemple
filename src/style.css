@@ -735,3 +735,67 @@ canvas.main.point { cursor: pointer; }
 
 .seal-grid li.todo { cursor: pointer; }
 .seal-grid li.todo b { color: var(--ink-muted); font-weight: 500; }
+
+/* —— 2026-11-20 苹果风格的一轮（用户：很多地方适合圆角、苹果的一些设计）——
+   圆角统一四级：小控件 10、卡片 14、面板 20、手机底部面板 28；面板用更通透的浅色毛玻璃；
+   手机上面板从底部弹起、顶上一根拖动条；设置做成 iOS 设置那样的分组卡片，开关、滑块、下拉框换成 iOS 的样子。
+   HUD 仍是深色磨砂玻璃（用户喜欢），这里不动。 */
+:root {
+  --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-xl: 28px;
+  --glass-light: rgba(250, 248, 243, 0.8);
+  --sheet-blur: blur(28px) saturate(1.8);
+  --sheet-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 18px 50px rgba(0, 0, 0, 0.22);
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ios-green: #34c759;
+}
+.panel { border-radius: var(--r-lg); background: var(--glass-light); backdrop-filter: var(--sheet-blur); -webkit-backdrop-filter: var(--sheet-blur); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: var(--sheet-shadow); padding: 8px 0 14px; animation: sheet-pop 0.24s var(--ease-out); }
+@keyframes sheet-pop { from { opacity: 0; transform: translateY(-6px) scale(0.98); } to { opacity: 1; transform: none; } }
+.panel-head { padding: 2px 8px 4px 20px; }
+.panel-head h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+.room-item, .visitor-list li { border-radius: var(--r-md); }
+
+/* 设置：分组的圆角卡片，行与行之间一道细线 */
+.settings { padding: 6px 14px 0; }
+.set-row { padding: 0 14px; min-height: 50px; background: rgba(255, 255, 255, 0.66); border-bottom: 0; }
+.set-row + .set-row { box-shadow: inset 0 1px 0 rgba(60, 60, 67, 0.12); }
+.settings > .set-row:first-child { border-radius: var(--r-md) var(--r-md) 0 0; }
+.settings > .set-row:has(+ :not(.set-row)), .settings > .set-row:last-child { border-radius: 0 0 var(--r-md) var(--r-md); }
+.set-label strong { font-size: 15px; font-weight: 400; }
+.set-label small { font-size: 12px; }
+.set-row select, .text-input { height: 32px; border: 0; border-radius: var(--r-sm); background: rgba(118, 118, 128, 0.12); padding: 0 12px; font-size: 14px; }
+/* iOS 开关 */
+.switch { position: relative; width: 51px; min-width: 51px; height: 31px; padding: 0; border-radius: 16px; background: rgba(120, 120, 128, 0.24); font-size: 0; transition: background 0.2s var(--ease-out); }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16); transition: transform 0.22s var(--ease-out); }
+.switch[aria-checked='true'] { background: var(--ios-green); }
+.switch[aria-checked='true']::after { transform: translateX(20px); }
+/* iOS 滑块：细轨道，拉到的一段填深色，白色圆钮 */
+.set-row input[type='range'] { -webkit-appearance: none; appearance: none; width: 140px; height: 28px; background: transparent; --v: 50%; }
+.set-row input[type='range']::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #3a3d33 var(--v), rgba(120, 120, 128, 0.22) var(--v)); }
+.set-row input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2), 0 0 0 0.5px rgba(0, 0, 0, 0.06); }
+.set-row input[type='range']::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(120, 120, 128, 0.22); }
+.set-row input[type='range']::-moz-range-progress { height: 4px; border-radius: 2px; background: #3a3d33; }
+.set-row input[type='range']::-moz-range-thumb { width: 24px; height: 24px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
+.controls { margin: 14px 4px 0; }
+
+/* 纸面卡片：保留纸的质感，圆角放大 */
+.cafe-sheet, .wish-sheet, .fortune, .sutra-sheet, .reader-sheet { border-radius: var(--r-lg); }
+.wish-card { border-radius: var(--r-lg); }
+.cafe-share img, .sutra-scroll img { border-radius: var(--r-md); }
+.sutra-grade { border-radius: var(--r-sm); }
+.sutra-compose { border-radius: var(--r-sm); }
+.pola-album { border-radius: var(--r-xl); }
+.pola-mini { border-radius: 4px; }
+.radio-pop { border-radius: var(--r-lg); }
+.toast { border-radius: var(--r-lg); padding: 11px 18px; }
+.tooltip { border-radius: var(--r-sm); }
+
+/* 手机：面板从底部弹起，四周留一点边，顶上一根拖动条 */
+@media (max-width: 560px) {
+  .panel { left: 8px !important; right: 8px !important; top: auto; bottom: calc(8px + var(--safe-b)); width: auto; max-height: 78vh; border-radius: var(--r-xl); animation: sheet-up 0.3s var(--ease-out); }
+  .panel::before { content: ''; display: block; width: 36px; height: 5px; margin: 0 auto 6px; border-radius: 3px; background: rgba(60, 60, 67, 0.22); }
+  @keyframes sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .cafe-sheet, .wish-sheet { border-radius: var(--r-xl); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel, .switch, .switch::after { animation: none; transition: none; }
+}
