@@ -5,10 +5,12 @@
 import * as THREE from 'three';
 import { loadProp } from './glb';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { CAFE, CAFE_TABLE_LOCAL, CAFE_SEATS, CAFE_COLS, cafeWorld } from '../layout';
 import { plaqueTexture } from '../textures';
 import { mesh, worldBox, lathe } from './util';
-import { buildRoof, chineseMats, meterUV, aged } from './hall';
+import { buildRoof, chineseMats, meterUV, aged, fruitGeometry } from './hall';
+import { bambooTexture } from './shrines';
 import { pbr } from './pbr';
 
 export interface CafeBuild {
@@ -79,7 +81,8 @@ function flagTexture() {
     g.fillRect(0, 0, 256, 26);
     g.fillRect(0, 0, 18, 640);
     g.fillRect(238, 0, 18, 640);
-    // 下摆的三角牙子
+    // 下摆剪成三角牙子：牙子之间透明，材质用 alphaTest 裁掉
+    g.clearRect(0, 600, 256, 40);
     for (let k = 0; k < 4; k++) {
       g.beginPath();
       g.moveTo(k * 64, 600);
@@ -218,6 +221,23 @@ function plankTexture() {
   return t;
 }
 
+// 合并前统一成非索引几何体
+const merge = (list: THREE.BufferGeometry[]) => mergeGeometries(list.map((x) => (x.index ? x.toNonIndexed() : x)))!;
+
+// 一摞套在一起的纸杯（底在原点）：最底下一只整杯，上面每只只露出 step 高的一截和一道卷边
+function cupStack(n: number, r0: number, r1: number, h: number, step: number) {
+  const rAt = (y: number) => r0 + ((r1 - r0) * y) / h;
+  const pts: [number, number][] = [[0, 0], [r0, 0]];
+  for (let i = 0; i < n; i++) {
+    const top = i * step + h;
+    if (i > 0) pts.push([rAt(h - step + 0.002), top - step + 0.002]);
+    pts.push([rAt(h - 0.004), top - 0.004], [r1 + 0.003, top - 0.002], [r1 + 0.003, top + 0.001], [r1 - 0.001, top + 0.002]);
+  }
+  const top = (n - 1) * step + h;
+  pts.push([r1 - 0.003, top], [r0 - 0.002, top - h + 0.005], [0, top - h + 0.005]);
+  return lathe(pts, 18);
+}
+
 export function buildCafe(scene: THREE.Scene): CafeBuild {
   const M = chineseMats();
   const g = new THREE.Group();
@@ -336,28 +356,45 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
       g.add(low, win, sill, head);
     }
   }
-  // 后墙上：三层木架摆豆罐、杯子；架子上方三块菜单牌
-  for (const [k, y] of [0.92].entries()) {
-    const shelf = mesh(new THREE.BoxGeometry(7.6, 0.04, 0.3), wood);
-    shelf.position.set(0, b + CAFE.inner + y, -HD + 0.42);
+  // 后墙上：一条木架，三只铁托架撑着；架上豆罐（玻璃罐、牛皮纸标签、木盖带钮，豆子装得有多有少）和几摞纸杯
+  {
+    const sy = b + CAFE.inner + 0.92, sz = -HD + 0.42, top = sy + 0.02;
+    const shelf = mesh(new RoundedBoxGeometry(7.6, 0.04, 0.3, 2, 0.008), wood);
+    shelf.position.set(0, sy, sz);
     g.add(shelf);
+    const iron: THREE.BufferGeometry[] = [];
+    for (const x of [-3.2, 0, 3.2]) {
+      iron.push(new THREE.BoxGeometry(0.025, 0.22, 0.01).translate(x, sy - 0.13, -HD + 0.276));
+      iron.push(new THREE.BoxGeometry(0.025, 0.01, 0.26).translate(x, sy - 0.025, -HD + 0.4));
+      iron.push(new THREE.BoxGeometry(0.02, 0.01, 0.28).rotateX(-0.657).translate(x, sy - 0.115, -HD + 0.39));
+    }
+    g.add(mesh(merge(iron), black));
+    const jar = lathe([[0, 0.002], [0.066, 0], [0.072, 0.008], [0.072, 0.16], [0.064, 0.184], [0.05, 0.192], [0.05, 0.205]], 18);
+    const lid = lathe([[0, 0.2], [0.054, 0.2], [0.057, 0.204], [0.057, 0.222], [0.05, 0.227], [0.018, 0.229], [0.015, 0.236], [0.02, 0.244], [0, 0.249]], 18);
+    const label = new THREE.CylinderGeometry(0.0735, 0.0735, 0.06, 18, 1, true).translate(0, 0.09, 0);
+    const jars: THREE.BufferGeometry[] = [], lids: THREE.BufferGeometry[] = [], fills: THREE.BufferGeometry[] = [], labels: THREE.BufferGeometry[] = [], stacks: THREE.BufferGeometry[] = [];
     for (let i = 0; i < 12; i++) {
-      const x = -3.5 + i * 0.64 + (k % 2) * 0.2;
-      if ((i + k) % 3 === 1) {
-        const stack = mesh(new THREE.CylinderGeometry(0.045, 0.036, 0.22, 14), paperCup);
-        stack.position.set(x, b + CAFE.inner + y + 0.13, -HD + 0.42);
-        g.add(stack);
+      const x = -3.5 + i * 0.64;
+      if (i % 3 === 1) {
+        stacks.push(cupStack(7, 0.034, 0.045, 0.09, 0.013).translate(x, top, sz));
         continue;
       }
-      const jar = mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.22, 14), glass);
-      jar.position.set(x, b + CAFE.inner + y + 0.13, -HD + 0.42);
-      const fill = mesh(new THREE.CylinderGeometry(0.066, 0.066, 0.14, 12), beans);
-      fill.position.set(x, b + CAFE.inner + y + 0.095, -HD + 0.42);
-      const cap = mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.03, 14), wood);
-      cap.position.set(x, b + CAFE.inner + y + 0.255, -HD + 0.42);
-      g.add(fill, jar, cap);
+      const h = 0.07 + ((i * 37) % 9) * 0.011;
+      jars.push(jar.clone().translate(x, top, sz));
+      lids.push(lid.clone().translate(x, top, sz));
+      labels.push(label.clone().translate(x, top, sz));
+      fills.push(lathe([[0, 0.006], [0.066, 0.006], [0.068, 0.012], [0.068, h], [0.045, h + 0.008], [0, h + 0.012]], 14).translate(x, top, sz));
     }
+    g.add(mesh(merge(fills), beans), mesh(merge(jars), glass, false), mesh(merge(lids), darkWood), mesh(merge(labels), std({ color: '#b8956a', roughness: 0.9 })), mesh(merge(stacks), paperCup));
   }
+  // 架子上方三块菜单牌，各镶一圈浅色木框
+  const frameGeo = merge([
+    new THREE.BoxGeometry(1.55, 0.05, 0.07).translate(0, 0.525, 0.01),
+    new THREE.BoxGeometry(1.55, 0.05, 0.07).translate(0, -0.525, 0.01),
+    new THREE.BoxGeometry(0.05, 1.0, 0.07).translate(-0.75, 0, 0.01),
+    new THREE.BoxGeometry(0.05, 1.0, 0.07).translate(0.75, 0, 0.01),
+  ]);
+  const frames: THREE.BufferGeometry[] = [];
   const boards: THREE.MeshStandardMaterial[] = [];
   ([
     [-2.6, '咖 啡', ['山霧拿鐵', '清醒美式', '上岸冷萃', '桂花拿鐵', '放下 · 低因']],
@@ -371,7 +408,9 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     board.position.set(x, b + CAFE.inner + 1.98, -HD + 0.32);
     board.rotation.x = -0.08;
     g.add(board);
+    frames.push(frameGeo.clone().rotateX(-0.08).translate(x, b + CAFE.inner + 1.98, -HD + 0.32));
   });
+  g.add(mesh(merge(frames), wood));
 
   // —— 吧台：竖条木板台身、胡桃木台面，七米六长 ——
   const bz = CAFE.bar - 0.3, ch = 0.85, cl = 7.6;
@@ -444,60 +483,86 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
     }
     g.remove(grindG);
   });
-  // 手冲架：一条木架上三只白瓷滤杯，下面三只玻璃壶；旁边一把细嘴铜壶
+  // 手冲架：两块侧板夹一条圆角木横板，板上三只白瓷锥形滤杯卡在铜圈里、杯里一层咖啡粉，
+  // 下面三只细腰玻璃分享壶各接了一些咖啡；旁边一把紫铜细嘴壶，黑把手、黑盖钮。同料的部件各合成一个网格
   {
-    const stand = mesh(new THREE.BoxGeometry(0.9, 0.03, 0.18), darkWood);
-    stand.position.set(0.3, T + 0.24, bz);
-    g.add(stand);
-    for (const sx of [-1, 1]) {
-      const leg = mesh(new THREE.BoxGeometry(0.03, 0.24, 0.16), darkWood);
-      leg.position.set(0.3 + sx * 0.43, T + 0.12, bz);
-      g.add(leg);
-    }
+    const sx0 = 0.3, sy = T + 0.24, top = sy + 0.0175;
+    const standG: THREE.BufferGeometry[] = [
+      new RoundedBoxGeometry(0.92, 0.035, 0.18, 2, 0.01).translate(sx0, sy, bz),
+      new RoundedBoxGeometry(0.92, 0.02, 0.2, 2, 0.006).translate(sx0, T + 0.01, bz),
+    ];
+    for (const s of [-1, 1]) standG.push(new RoundedBoxGeometry(0.035, 0.24, 0.16, 2, 0.008).translate(sx0 + s * 0.43, T + 0.13, bz));
+    g.add(mesh(merge(standG), darkWood));
+    const dripper = lathe([[0.012, -0.036], [0.03, -0.012], [0.04, 0], [0.062, 0], [0.062, 0.006], [0.046, 0.009], [0.068, 0.072], [0.072, 0.076], [0.066, 0.078], [0.014, 0.004], [0, 0.004]], 22);
+    const server = lathe([[0, 0], [0.048, 0], [0.054, 0.008], [0.056, 0.05], [0.048, 0.085], [0.036, 0.1], [0.036, 0.135], [0.041, 0.14]], 20);
+    const drippers: THREE.BufferGeometry[] = [], rings: THREE.BufferGeometry[] = [], servers: THREE.BufferGeometry[] = [], grounds: THREE.BufferGeometry[] = [], brews: THREE.BufferGeometry[] = [];
     for (let k = 0; k < 3; k++) {
-      const x = 0.02 + k * 0.28;
-      const dripper = mesh(new THREE.CylinderGeometry(0.07, 0.03, 0.08, 18), std({ color: '#f3f0ea', roughness: 0.3 }));
-      dripper.position.set(x, T + 0.29, bz);
-      const server = mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.12, 16, 1, true), glass);
-      server.position.set(x, T + 0.06, bz);
-      const brew = mesh(new THREE.CylinderGeometry(0.046, 0.05, 0.04 + k * 0.015, 14), std({ color: '#4a2a18', roughness: 0.15 }));
-      brew.position.set(x, T + 0.025, bz);
-      g.add(dripper, server, brew);
+      const x = 0.02 + k * 0.28, h = 0.03 + k * 0.016;
+      drippers.push(dripper.clone().translate(x, top, bz));
+      rings.push(new THREE.TorusGeometry(0.058, 0.005, 6, 24).rotateX(Math.PI / 2).translate(x, top + 0.002, bz));
+      grounds.push(new THREE.CylinderGeometry(0.03, 0.014, 0.026, 14).translate(x, top + 0.018, bz));
+      servers.push(server.clone().translate(x, T + 0.02, bz));
+      brews.push(lathe([[0, 0.004], [0.046, 0.004], [0.051, 0.011], [0.053, h], [0, h]], 16).translate(x, T + 0.02, bz));
     }
-    const kb = mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 18), std({ color: '#b06a3c', metalness: 0.85, roughness: 0.3 }));
-    kb.position.set(0.95, T + 0.06, bz + 0.05);
-    const spout = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0.05, 0.03, 0), new THREE.Vector3(0.12, 0.08, 0), new THREE.Vector3(0.15, 0.17, 0), new THREE.Vector3(0.2, 0.18, 0)]), 12, 0.008, 6), kb.material);
-    spout.position.set(0.95, T, bz + 0.05);
-    spout.rotation.y = Math.PI;
-    g.add(kb, spout);
+    const kettle = new THREE.Group();
+    const copper = std({ color: '#b06a3c', metalness: 0.85, roughness: 0.3 });
+    kettle.add(mesh(merge([
+      lathe([[0, 0], [0.058, 0], [0.068, 0.012], [0.07, 0.085], [0.062, 0.112], [0.04, 0.124], [0.022, 0.126], [0, 0.126]], 22),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0.06, 0.02, 0), new THREE.Vector3(0.1, 0.035, 0), new THREE.Vector3(0.125, 0.11, 0), new THREE.Vector3(0.16, 0.17, 0), new THREE.Vector3(0.205, 0.165, 0)]), 16, 0.0075, 6),
+    ]), copper));
+    kettle.add(mesh(merge([
+      new THREE.SphereGeometry(0.016, 10, 8).translate(0, 0.138, 0),
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(-0.055, 0.105, 0), new THREE.Vector3(-0.1, 0.11, 0), new THREE.Vector3(-0.118, 0.07, 0), new THREE.Vector3(-0.1, 0.03, 0), new THREE.Vector3(-0.064, 0.024, 0)]), 14, 0.009, 6),
+    ]), black));
+    kettle.position.set(0.98, T, bz + 0.06);
+    kettle.rotation.y = Math.PI + 0.6;
+    g.add(mesh(merge(drippers), std({ color: '#f3f0ea', roughness: 0.25 })), mesh(merge(rings), brass), mesh(merge(grounds), beans));
+    g.add(mesh(merge(brews), std({ color: '#4a2a18', roughness: 0.15 })), mesh(merge(servers), glass, false), kettle);
   }
-  // 点心柜：玻璃罩里两层，桂花糕（黄方块）、素月饼（棕圆饼）、柿饼（橙扁圆）
+  // 点心柜：圆角木底座、四根细木柱、木顶框夹着玻璃，中间一层玻璃隔板；
+  // 上层两碟桂花糕、两碟柿饼，下层两碟素月饼（花边）、两碟枣泥酥，都盛在白瓷碟里
   {
-    const cx = 2.0;
-    const caseG = mesh(new THREE.BoxGeometry(1.1, 0.46, 0.5), glass);
-    caseG.position.set(cx, T + 0.23, bz);
-    const frame = mesh(new THREE.BoxGeometry(1.12, 0.03, 0.52), darkWood);
-    frame.position.set(cx, T + 0.47, bz);
-    const mid = mesh(new THREE.BoxGeometry(1.06, 0.015, 0.46), std({ color: '#f1ece2', roughness: 0.4 }));
-    mid.position.set(cx, T + 0.22, bz);
-    g.add(mid, frame, caseG);
-    const cake = std({ color: '#e7c35a', roughness: 0.6 });
-    const moon = std({ color: '#a8652e', roughness: 0.55 });
-    const kaki = std({ color: '#c85a1c', roughness: 0.5 });
-    for (let k = 0; k < 5; k++) {
-      const c1 = mesh(new THREE.BoxGeometry(0.1, 0.05, 0.1), cake);
-      c1.position.set(cx - 0.4 + k * 0.2, T + 0.255, bz - 0.08);
-      const c2 = mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16), k % 2 ? moon : kaki);
-      c2.position.set(cx - 0.4 + k * 0.2, T + 0.035, bz + 0.06);
-      g.add(c1, c2);
+    const cx = 2.0, H = 0.46, base = T + 0.05, shelfY = base + 0.22;
+    const frameG: THREE.BufferGeometry[] = [
+      new RoundedBoxGeometry(1.16, 0.05, 0.54, 2, 0.012).translate(cx, T + 0.025, bz),
+      new RoundedBoxGeometry(1.16, 0.03, 0.54, 2, 0.008).translate(cx, base + H + 0.015, bz),
+    ];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) frameG.push(new THREE.BoxGeometry(0.024, H, 0.024).translate(cx + sx * 0.55, base + H / 2, bz + sz * 0.25));
+    g.add(mesh(merge(frameG), darkWood));
+    const caseG = mesh(new THREE.BoxGeometry(1.1, H, 0.5), glass, false);
+    caseG.position.set(cx, base + H / 2, bz);
+    const mid = mesh(new THREE.BoxGeometry(1.08, 0.008, 0.48), std({ color: '#dfeeee', transparent: true, opacity: 0.45, roughness: 0.1, depthWrite: false }), false);
+    mid.position.set(cx, shelfY, bz);
+    const plate = lathe([[0, 0], [0.07, 0], [0.074, 0.004], [0.088, 0.012], [0.092, 0.016], [0.086, 0.016], [0.07, 0.007], [0, 0.007]], 24);
+    const moon = lathe([[0, 0], [0.034, 0], [0.037, 0.004], [0.037, 0.018], [0.033, 0.022], [0, 0.022]], 36);
+    {
+      const p = moon.attributes.position as THREE.BufferAttribute;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), z = p.getZ(i), k = Math.hypot(x, z) > 0.03 ? 1 + 0.045 * Math.cos(12 * Math.atan2(x, z)) : 1;
+        p.setXYZ(i, x * k, p.getY(i), z * k);
+      }
+      moon.computeVertexNormals();
     }
+    const kaki = fruitGeometry('persimmon').scale(0.85, 0.42, 0.85);
+    const plates: THREE.BufferGeometry[] = [], cakes: THREE.BufferGeometry[] = [], moons: THREE.BufferGeometry[] = [], sus: THREE.BufferGeometry[] = [], kakis: THREE.BufferGeometry[] = [];
+    const tri: [number, number][] = [[-0.032, -0.022], [0.032, -0.022], [0, 0.032]];
+    [-0.39, -0.13, 0.13, 0.39].forEach((dx, i) => {
+      const px = cx + dx, pz = bz + 0.03;
+      for (const [y, upper] of [[base, false], [shelfY + 0.004, true]] as [number, boolean][]) {
+        plates.push(plate.clone().translate(px, y, pz));
+        const yt = y + 0.007;
+        if (upper && i < 2) for (const [ox, oz] of [[-0.029, -0.029], [0.029, -0.029], [-0.029, 0.029], [0.029, 0.029]]) cakes.push(new RoundedBoxGeometry(0.052, 0.032, 0.052, 2, 0.006).translate(px + ox, yt + 0.016, pz + oz));
+        else if (upper) for (const [ox, oz] of tri) kakis.push(kaki.clone().rotateY(ox * 40).translate(px + ox, yt, pz + oz));
+        else if (i < 2) for (const [ox, oz] of tri) moons.push(moon.clone().translate(px + ox * 1.1, yt, pz + oz * 1.1));
+        else for (const [ox, oz] of tri) sus.push(new THREE.SphereGeometry(0.03, 14, 8).scale(1, 0.55, 1).translate(px + ox, yt + 0.014, pz + oz));
+      }
+    });
+    g.add(mesh(merge(plates), std({ color: '#f4f1ea', roughness: 0.25 })), mesh(merge(cakes), std({ color: '#e7c35a', roughness: 0.6 })), mesh(merge(moons), std({ color: '#a8652e', roughness: 0.55 })));
+    g.add(mesh(merge(sus), std({ color: '#d9b06a', roughness: 0.7 })), mesh(mergeGeometries(kakis)!, std({ vertexColors: true, roughness: 0.55 })), mid, caseG);
   }
-  // 纸杯、杯盖、「隨喜」小木箱、一盆小松
-  for (const [x, n] of [[2.95, 8], [3.1, 6]] as [number, number][]) {
-    const st = mesh(new THREE.CylinderGeometry(0.045, 0.034, 0.1 + n * 0.018, 14), paperCup);
-    st.position.set(x, T + (0.1 + n * 0.018) / 2, bz + 0.12);
-    g.add(st);
-  }
+  // 两摞纸杯、一摞黑杯盖（一道道卷边露出来）、「隨喜」小木箱、一盆小松
+  g.add(mesh(merge([cupStack(9, 0.034, 0.045, 0.09, 0.013).translate(2.95, T, bz + 0.12), cupStack(6, 0.034, 0.045, 0.09, 0.013).translate(3.08, T, bz + 0.16)]), paperCup));
+  g.add(mesh(cupStack(10, 0.044, 0.047, 0.012, 0.006).translate(3.2, T, bz + 0.08), black));
   {
     const box = mesh(new THREE.BoxGeometry(0.22, 0.16, 0.16), std({ color: '#8e2a1e', roughness: 0.55 }));
     box.position.set(3.45, T + 0.08, bz + 0.1);
@@ -703,23 +768,51 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
   menu.add(menuHit);
   interactives.push(menuHit);
 
-  // —— 布幌子：平台左前角的竹竿，横杆朝外挑，布面朝西 ——
-  const bamboo = std({ color: '#b39a5c', roughness: 0.6 });
+  // —— 布幌子：平台左前角，竹竿插在圆角石墩里，竿上一节节竹节；顶上横挑一根细竹，交接处麻绳捆扎；
+  // 布用四个红布襻挂在横竹上，布面朝西，下摆剪成牙子，风吹时整幅轻轻起伏 ——
+  const bambooMap = bambooTexture();
+  const bamboo = std({ map: bambooMap, roughness: 0.55 });
   const fw = cafeWorld(-5.15, 8.15);
   const flagG = new THREE.Group();
   flagG.position.set(fw.x, b, fw.z);
   flagG.rotation.y = Math.PI / 2;
-  const pole = mesh(new THREE.CylinderGeometry(0.035, 0.045, 4.2, 8), bamboo);
-  pole.position.y = 2.1;
-  const bar = mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.86, 6), bamboo);
-  bar.rotation.z = Math.PI / 2;
-  bar.position.set(0.4, 4.0, 0);
+  {
+    const poleH = 4.25, barY = 4.0;
+    const cane: THREE.BufferGeometry[] = [meterUV(new THREE.CylinderGeometry(0.036, 0.046, poleH, 12), 2, 1).translate(0, poleH / 2, 0)];
+    for (let y = 0.62; y < poleH - 0.1; y += 0.47) cane.push(new THREE.TorusGeometry(0.046 - (y / poleH) * 0.01 + 0.002, 0.005, 5, 16).rotateX(Math.PI / 2).translate(0, y, 0));
+    cane.push(meterUV(new THREE.CylinderGeometry(0.017, 0.02, 0.92, 8), 1, 1).rotateZ(Math.PI / 2).translate(0.4, barY, 0));
+    for (const x of [0.3, 0.68]) cane.push(new THREE.TorusGeometry(0.02, 0.003, 4, 10).rotateY(Math.PI / 2).translate(x, barY, 0));
+    flagG.add(mesh(merge(cane), bamboo));
+    const rope: THREE.BufferGeometry[] = [];
+    for (let k = 0; k < 4; k++) rope.push(new THREE.TorusGeometry(0.044, 0.006, 5, 14).rotateX(Math.PI / 2 + (k % 2 ? 0.35 : -0.35)).translate(0, barY - 0.03 + k * 0.02, 0));
+    for (let k = 0; k < 3; k++) rope.push(new THREE.TorusGeometry(0.024, 0.005, 5, 10).rotateY(Math.PI / 2).translate(0.05 + k * 0.016, barY, 0));
+    flagG.add(mesh(merge(rope), std({ color: '#8a7356', roughness: 0.95 })));
+    const foot = mesh(new RoundedBoxGeometry(0.4, 0.22, 0.4, 2, 0.035), platSide);
+    foot.position.y = 0.11;
+    flagG.add(foot);
+    const tabs: THREE.BufferGeometry[] = [];
+    for (const dx of [-0.3, -0.1, 0.1, 0.3]) tabs.push(new THREE.TorusGeometry(0.027, 0.009, 5, 10, Math.PI).rotateY(Math.PI / 2).translate(0.42 + dx, barY - 0.008, 0));
+    flagG.add(mesh(merge(tabs), std({ color: '#9e2a1e', roughness: 0.9 })));
+  }
   const cloth = new THREE.Group();
   cloth.position.set(0.42, 3.98, 0);
-  const clothM = mesh(new THREE.PlaneGeometry(0.7, 1.75, 1, 6).translate(0, -0.875, 0), std({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.95 }));
+  const clothGeo = new THREE.PlaneGeometry(0.7, 1.75, 10, 20).translate(0, -0.875, 0);
+  const clothPos = clothGeo.attributes.position as THREE.BufferAttribute;
+  const clothBase = Float32Array.from(clothPos.array as Float32Array);
+  const clothM = mesh(clothGeo, std({ map: flagTexture(), side: THREE.DoubleSide, roughness: 0.95, alphaTest: 0.5 }));
   clothM.rotation.y = Math.PI;
   cloth.add(clothM);
-  flagG.add(pole, bar, cloth);
+  // 布面起伏：静止的几道竖褶，加一道从上往下走的风浪，越往下摆幅越大
+  const ripple = (time: number) => {
+    for (let i = 0; i < clothPos.count; i++) {
+      const x = clothBase[i * 3], y = clothBase[i * 3 + 1], t = -y / 1.75;
+      clothPos.setZ(i, 0.02 * Math.sin((x / 0.7) * Math.PI * 3 + 0.6) * (0.4 + 0.6 * t) + 0.035 * t * Math.sin(time * 1.7 - t * 3.2 + x * 4));
+    }
+    clothPos.needsUpdate = true;
+    clothGeo.computeVertexNormals();
+  };
+  ripple(0);
+  flagG.add(cloth);
   scene.add(flagG);
 
   // —— 空杯回收桶：平台右前角一只半人高的大纸杯 ——
@@ -780,6 +873,7 @@ export function buildCafe(scene: THREE.Scene): CafeBuild {
         (p.s.material as THREE.SpriteMaterial).opacity = brewing * Math.sin(k * Math.PI) * 0.45;
       }
       cloth.rotation.x = Math.sin(time * 0.9) * 0.05 + Math.sin(time * 2.3) * 0.02;
+      ripple(time);
       cloth.rotation.z = Math.sin(time * 0.7 + 1) * 0.03;
       lanterns.forEach((l, i) => (l.rotation.z = Math.sin(time * 0.8 + i) * 0.03));
     },

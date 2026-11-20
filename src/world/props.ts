@@ -316,41 +316,53 @@ export function buildProps(scene: THREE.Scene): PropsBuild {
   pathLights[1].position.set(0, 3.4, 36);
   group.add(...pathLights);
 
-  // —— 宫灯：六角红框、黄绢灯罩，立在矮红柱上 ——
-  // 六根红框柱夹着六面画了纹样的黄绢，上下两圈框、顶上六角攒尖加一颗宝珠，六个角各垂一条红穗
+  // —— 宫灯：方石座上的八角石鼓托一根红漆八棱柱，柱头一只六角托盘；六根红框柱夹六面黄绢，绢面上下各一道金线；
+  // 顶上内凹的六角攒尖，六个角各挑出一只上翘的金角，角下垂长红穗；顶心覆莲托宝珠。同料部件全部合成网格 ——
   const silk = new THREE.MeshStandardMaterial({ map: silkTexture(), color: '#ffffff', roughness: 0.85, emissive: '#ffcf80', emissiveIntensity: 0.2, emissiveMap: null, side: THREE.DoubleSide });
+  const lampStone: THREE.BufferGeometry[] = [];
   const lampFrame: THREE.BufferGeometry[] = [];
+  const lampGold: THREE.BufferGeometry[] = [];
   const lampSilk: THREE.BufferGeometry[] = [];
   const lampTassel: THREE.BufferGeometry[] = [];
+  const Y0 = 0.9, Y1 = 1.32; // 绢面的下沿、上沿
+  const roof = lathe([[0, 0], [0.3, 0], [0.262, 0.03], [0.19, 0.068], [0.115, 0.105], [0.06, 0.14], [0.035, 0.158], [0, 0.162]], 6);
+  const tray = lathe([[0.07, -0.1], [0.09, -0.07], [0.15, -0.035], [0.25, -0.012], [0.272, 0], [0.272, 0.02], [0, 0.02]], 6);
+  const finial = mergeGeometries([
+    lathe([[0, 0], [0.06, 0], [0.07, 0.015], [0.05, 0.035], [0.03, 0.045], [0, 0.048]], 12),
+    new THREE.SphereGeometry(0.042, 12, 10).translate(0, 0.085, 0),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
+  const lampTasselGeo = mergeGeometries([
+    new THREE.CylinderGeometry(0.004, 0.004, 0.09, 5).translate(0, -0.045, 0),
+    new THREE.SphereGeometry(0.018, 8, 6).translate(0, -0.1, 0),
+    new THREE.CylinderGeometry(0.012, 0.032, 0.2, 10, 1, true).translate(0, -0.21, 0),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)))!;
   for (const [x, z] of GROUND_LAMPS) {
-    const post = new THREE.CylinderGeometry(0.06, 0.07, 0.9, 8);
-    post.translate(x, 0.45, z);
-    lampFrame.push(post);
-    const shade = new THREE.CylinderGeometry(0.22, 0.22, 0.42, 6, 1, true);
-    shade.translate(x, 0.9 + 0.21, z);
-    lampSilk.push(shade);
-    for (const [y, r, h] of [[0.9, 0.26, 0.05], [1.32, 0.26, 0.05], [0.86, 0.17, 0.05]] as [number, number, number][]) {
-      const ring = new THREE.CylinderGeometry(r, r, h, 6);
-      ring.translate(x, y, z);
-      lampFrame.push(ring);
-    }
+    lampStone.push(new THREE.BoxGeometry(0.4, 0.1, 0.4).translate(x, 0.05, z));
+    lampStone.push(lathe([[0.15, 0.1], [0.17, 0.13], [0.17, 0.2], [0.13, 0.235], [0.09, 0.25], [0, 0.25]], 8).rotateY(Math.PI / 8).translate(x, 0, z));
+    lampFrame.push(meterUV(new THREE.CylinderGeometry(0.055, 0.065, Y0 - 0.1 - 0.25, 8), 0.4, 0.6).translate(x, 0.25 + (Y0 - 0.35) / 2, z));
+    lampGold.push(new THREE.CylinderGeometry(0.072, 0.072, 0.03, 8).translate(x, 0.27, z));
+    lampFrame.push(tray.clone().translate(x, Y0 - 0.02, z));
+    lampSilk.push(new THREE.CylinderGeometry(0.22, 0.22, Y1 - Y0, 6, 1, true).translate(x, (Y0 + Y1) / 2, z));
+    for (const y of [Y0 + 0.02, Y1 - 0.02]) lampGold.push(new THREE.CylinderGeometry(0.226, 0.226, 0.012, 6, 1, true).translate(x, y, z));
+    lampFrame.push(new THREE.CylinderGeometry(0.262, 0.262, 0.04, 6).translate(x, Y1 + 0.02, z));
+    lampFrame.push(roof.clone().translate(x, Y1 + 0.04, z));
+    lampGold.push(finial.clone().translate(x, Y1 + 0.2, z));
     for (let k = 0; k < 6; k++) {
       // 六角柱体的角在 (sin, cos) 的 k·60° 处
-      const a = (k / 6) * Math.PI * 2;
-      const cx = x + Math.sin(a) * 0.235, cz = z + Math.cos(a) * 0.235;
-      lampFrame.push(new THREE.BoxGeometry(0.035, 0.44, 0.035).translate(cx, 1.11, cz));
-      const ox = x + Math.sin(a) * 0.3, oz = z + Math.cos(a) * 0.3;
-      lampFrame.push(new THREE.BoxGeometry(0.03, 0.03, 0.09).rotateY(a).translate(ox, 1.43, oz));
-      lampTassel.push(new THREE.ConeGeometry(0.025, 0.16, 6).translate(ox, 1.33, oz));
+      const a = (k / 6) * Math.PI * 2, sa = Math.sin(a), ca = Math.cos(a);
+      lampFrame.push(new THREE.BoxGeometry(0.036, Y1 - Y0, 0.036).rotateY(a).translate(x + sa * 0.236, (Y0 + Y1) / 2, z + ca * 0.236));
+      // 翘角：沿屋角挑出去再往上翘，末端一颗小珠，穗子挂在珠下
+      const horn = [[0.27, 0.02], [0.33, 0.012], [0.37, 0.03], [0.39, 0.075]].map(([rr, yy]) => new THREE.Vector3(x + sa * rr, Y1 + 0.04 + yy, z + ca * rr));
+      lampGold.push(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(horn), 8, 0.011, 5));
+      lampGold.push(new THREE.SphereGeometry(0.018, 8, 6).translate(horn[3].x, horn[3].y + 0.01, horn[3].z));
+      lampTassel.push(lampTasselGeo.clone().translate(horn[3].x, horn[3].y - 0.008, horn[3].z));
     }
-    const top = new THREE.ConeGeometry(0.28, 0.16, 6);
-    top.translate(x, 1.42, z);
-    lampFrame.push(top);
-    lampFrame.push(new THREE.SphereGeometry(0.045, 10, 8).translate(x, 1.53, z));
   }
-  group.add(mesh(mergeGeometries(lampFrame.map((g) => g.toNonIndexed())), M.red));
+  group.add(mesh(mergeGeometries(lampStone.map((g) => g.toNonIndexed())), stoneMat));
+  group.add(mesh(mergeGeometries(lampFrame.map((g) => (g.index ? g.toNonIndexed() : g))), M.red));
+  group.add(mesh(mergeGeometries(lampGold.map((g) => (g.index ? g.toNonIndexed() : g))), M.gold));
   group.add(mesh(mergeGeometries(lampSilk), silk, false));
-  group.add(mesh(mergeGeometries(lampTassel.map((g) => g.toNonIndexed())), new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.8 }), false));
+  group.add(mesh(mergeGeometries(lampTassel), new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.8, side: THREE.DoubleSide }), false));
 
   // —— 八角七层楼阁塔：每层塔身 + 一圈出檐，顶上塔刹 ——
   const towerMat = pbr('plaster', { metersPerTile: 1.6, color: '#d8cfbf' });
