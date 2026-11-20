@@ -39,10 +39,10 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: 
   return e;
 }
 
-// —— 印章：朱红圆印，白文，只刻一个字 ——
+// —— 印章：朱红圆角方印，白文，只刻一个字 ——
 const sealCache = new Map<string, string>();
 // 每方印只刻一个代表字，字不压扁；印名写在印下面。
-// 2026-11-20 用户先后否掉了「正方形里硬塞两个粗字」和「竖长方印」，定为圆形单字印。
+// 2026-11-20 用户先后否掉了「正方形里硬塞两个粗字」和「竖长方印」，在四种单字印里选了圆角方白文。
 const SEAL_MARK: Record<string, string> = {
   入山: '山', 禮佛: '禮', 心香: '香', 晨鐘: '鐘', 心願: '願', 木魚: '魚', 百八: '珠', 靜坐: '坐',
   渡橋: '橋', 觀魚: '觀', 河燈: '燈', 靈籤: '籤', 圓滿: '圓', 靜山: '靜', 心經: '經',
@@ -57,10 +57,11 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
   const g = c.getContext('2d')!;
   let seed = [...text].reduce((a, ch) => a * 31 + ch.charCodeAt(0), 7) >>> 0;
   const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const r = size * 0.43;
+  const side = size * 0.86;
+  const r = side / 2;
   const cx = size / 2, cy = size / 2;
   g.beginPath();
-  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.roundRect(cx - r, cy - r, side, side, side * 0.22);
   g.fillStyle = gold ? '#b0832e' : '#b5302a';
   g.fill();
   // 朱泥一点点深浅
@@ -75,7 +76,7 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
     g.fillRect(0, 0, size, size);
   }
   g.restore();
-  // 镂空印文：字按原比例放大到印面直径的 56%
+  // 镂空印文：字按原比例放大到印面边长的 62%
   const ch = sealMark(text);
   g.globalCompositeOperation = 'destination-out';
   g.fillStyle = '#000';
@@ -85,7 +86,7 @@ export function sealImage(text: string, size = 128, gold = false, font = 'SansaS
   const m = g.measureText(ch);
   const gw = m.actualBoundingBoxLeft + m.actualBoundingBoxRight || size;
   const gh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent || size;
-  const k = (r * 2 * 0.56) / Math.max(gw, gh);
+  const k = (side * 0.62) / Math.max(gw, gh);
   g.translate(cx, cy);
   g.scale(k, k);
   g.fillText(ch, (m.actualBoundingBoxLeft - m.actualBoundingBoxRight) / 2, (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2);

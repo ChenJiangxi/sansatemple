@@ -183,9 +183,9 @@ canvas.main.point { cursor: pointer; }
 .seal-grid img { width: 66px; height: 66px; }
 .seal-grid img { filter: none; mix-blend-mode: multiply; }
 .seal-empty {
-  /* 和印章一样大的虚线圆（印面占 66px 图的 86%），里面淡淡的印文 */
-  display: grid; place-items: center; box-sizing: border-box; width: 57px; height: 57px; margin: 4.5px 0; border: 1.5px dashed rgba(181, 48, 42, 0.32); border-radius: 50%;
-  font: 600 27px/1 SansaSealSong, 'Noto Serif TC', serif; color: rgba(181, 48, 42, 0.26);
+  /* 和印章一样大的圆角方虚线框（印面占 66px 图的 86%，圆角是边长的 22%），里面淡淡的印文 */
+  display: grid; place-items: center; box-sizing: border-box; width: 57px; height: 57px; margin: 4.5px 0; border: 1.5px dashed rgba(181, 48, 42, 0.32); border-radius: 12.5px;
+  font: 600 33px/1 SansaSealSong, 'Noto Serif TC', serif; color: rgba(181, 48, 42, 0.26);
 }
 .seal-grid b { font-size: 12.5px; font-weight: 600; }
 .seal-grid small { font-size: 10.5px; line-height: 1.35; color: var(--ink-muted); }
