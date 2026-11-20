@@ -1,16 +1,18 @@
-// 两座配殿的殿内：佛坛、菩萨像（观音殿供宋代水月观音、地藏殿供地藏菩萨）、背光、供桌香炉蜡烛、暖灯；
+// 两座配殿的殿内：须弥座佛坛、菩萨像（观音殿供宋代水月观音、地藏殿供地藏菩萨）、背光、翘头供桌（铜鼎、红烛、青瓷瓶插荷、供果）、暖灯；
 // 地藏殿另有一架三层长明灯。殿门、佛坛、灯架各有一个点击用的隐形盒子。
 // 藏经阁（第三座）里是一排排经橱和三张抄经的经案。
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { SH, hallWorld, HALLS, LIB_DESKS, LIB_DESK_Z, LIB_SEAT_Z } from '../layout';
-import { chineseMats, cushionMesh } from './hall';
+import { chineseMats, cushionMesh, candleGeometry, candleTexture, candleStand, flameGeometry, vaseBouquet, plateGeometry, fruitPile } from './hall';
 import { buildDing } from './bronze';
-import { altarClothTexture, plaqueTexture } from '../textures';
+import { altarClothTexture, plaqueTexture, rng } from '../textures';
 import { mandorla } from './statues';
-import { mesh, worldBox, lathe } from './util';
+import { mesh, worldBox, lathe, carvedBlock, grainUV } from './util';
+import { paint } from './lotus';
 import { pbr } from './pbr';
 
 export const LAMPS = 36;
@@ -20,10 +22,8 @@ let clothMat: THREE.Material | null = null;
 let pewterMat: THREE.Material | null = null;
 let candleMatS: THREE.Material | null = null;
 let vaseMatS: THREE.Material | null = null;
-let lotusMatS: THREE.Material | null = null;
-let leafMatS: THREE.Material | null = null;
 let plateMatS: THREE.Material | null = null;
-const fruitMats: Record<string, THREE.Material> = {};
+let fruitMatS: THREE.Material | null = null;
 
 // 佛坛束腰的正面：朱漆底上三块描金的开光（圆角框），框里一朵金色卷云
 function altarPanelTexture() {
@@ -121,27 +121,25 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       doorHits.push(doorHit);
       return;
     }
-    // 须弥座佛坛（朱漆）：底座、束腰（正面三块描金开光）、上下两道金线、台面；台面高 1.03
+    // 须弥座佛坛（朱漆）：圭角、下枋、下枭一层层收进去，束腰正面三块描金开光，上枭、上枋再挑出来；
+    // 束腰上下两道金线，上枋正面一道金线。台面高 1.03
     {
-      const az = -d.hz + 0.95;
-      const plinth = mesh(worldBox(4.6, 0.16, 1.7, 1), M.redDark);
-      plinth.position.set(0, fy + 0.08, az);
-      g.add(plinth);
+      const az = -d.hz + 0.95, HX = 2.3, HZ = 0.82, IN = 0.15;
+      const low = mesh(carvedBlock(HX, HZ, [[0, 0], [0.07, 0], [0.07, 0.03], [0.13, 0.03], [0.15, 0.06], [0.175, 0.1], [0.2, IN]]), M.redDark);
+      low.position.set(0, fy, az);
+      g.add(low);
       // 束腰用 0–1 的贴图坐标，正面那张开光图正好铺满一面
-      const waist = mesh(new THREE.BoxGeometry(4.2, 0.72, 1.4), [M.red, M.red, M.red, M.red, (panelMat ??= new THREE.MeshStandardMaterial({ map: altarPanelTexture(), roughness: 0.55 })), M.red]);
-      waist.position.set(0, fy + 0.16 + 0.36, az);
+      const waist = mesh(new THREE.BoxGeometry(2 * (HX - IN), 0.56, 2 * (HZ - IN)), [M.red, M.red, M.red, M.red, (panelMat ??= new THREE.MeshStandardMaterial({ map: altarPanelTexture(), roughness: 0.55 })), M.red]);
+      waist.position.set(0, fy + 0.48, az);
       g.add(waist);
-      const top = mesh(worldBox(4.5, 0.15, 1.6, 1), M.red);
-      top.position.set(0, fy + 0.955, az);
-      g.add(top);
-      for (const y of [0.17, 0.87]) {
-        const bead = mesh(new THREE.CylinderGeometry(0.025, 0.025, 4.3, 8).rotateZ(Math.PI / 2), M.gold, false);
-        bead.position.set(0, fy + y, az + 0.71);
-        g.add(bead);
-      }
-      const edge = mesh(worldBox(4.52, 0.025, 0.02, 1), M.gold, false);
-      edge.position.set(0, fy + 0.93, az + 0.8);
-      g.add(edge);
+      const up = mesh(carvedBlock(HX, HZ, [[0, IN], [0.025, 0.1], [0.05, 0.06], [0.075, 0.035], [0.075, 0], [0.25, 0], [0.25, 0.012], [0.27, 0.012]]), M.red);
+      up.position.set(0, fy + 0.76, az);
+      g.add(up);
+      const trim = [0.21, 0.75].map((y) => new THREE.CylinderGeometry(0.02, 0.02, 2 * (HX - IN), 8).rotateZ(Math.PI / 2).translate(0, y, HZ - IN + 0.004).toNonIndexed());
+      trim.push(new THREE.BoxGeometry(2 * HX - 0.04, 0.022, 0.01).translate(0, 0.92, HZ + 0.003).toNonIndexed());
+      const gl = mesh(mergeGeometries(trim)!, M.gold, false);
+      gl.position.set(0, fy, az);
+      g.add(gl);
     }
     // 背光
     const back = mandorla(2.6, 3.3);
@@ -175,16 +173,36 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
         g.add(obj);
       })
       .catch((e) => console.warn('配殿佛像加载失败', e));
-    // 供桌：朱漆桌面、做旧带褶的桌围；桌上小铜鼎、一对烛台、一对青瓷瓶插莲花、两盘供果
+    // 供桌：朱漆翘头案（案面冰盘沿、两头上翘），四条圆腿、牙条、两侧双枨，正面垂做旧带褶的桌围；
+    // 桌上小铜鼎、一对铜烛台插红烛、一对青瓷玉壶春瓶插荷、两只高足盘供苹果和柿子
     const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.8, 0.6) });
     {
       const tz = -d.hz + 2.2, th = 0.8, ttop = fy + th;
-      const body = mesh(worldBox(2.0, th - 0.06, 0.55, 1), M.redDark);
-      body.position.set(0, fy + (th - 0.06) / 2, tz);
-      g.add(body);
-      const top = mesh(worldBox(2.2, 0.06, 0.66, 1), M.red);
-      top.position.set(0, ttop - 0.03, tz);
-      g.add(top);
+      const lx = 0.95, lz = 0.25, ny = (geo: THREE.BufferGeometry) => (geo.index ? geo.toNonIndexed() : geo);
+      const topParts = [ny(carvedBlock(1.1, 0.33, [[0, 0.03], [0.015, 0.012], [0.03, 0], [0.06, 0]]).translate(0, th - 0.06, 0))];
+      // 翘头：案面两端各一条，从案面里侧平平起来、到端头翘起 8 厘米
+      for (const dir of [-1, 1]) {
+        const sh = new THREE.Shape();
+        sh.moveTo(dir * 0.84, 0);
+        sh.quadraticCurveTo(dir * 1.04, 0, dir * 1.12, 0.075);
+        sh.lineTo(dir * 1.1, 0.082);
+        sh.quadraticCurveTo(dir * 1.02, 0.026, dir * 0.84, 0.016);
+        sh.closePath();
+        topParts.push(ny(new THREE.ExtrudeGeometry(sh, { depth: 0.56, bevelEnabled: false, curveSegments: 8 }).translate(0, th, -0.28)));
+      }
+      const top = mesh(mergeGeometries(topParts)!, M.red);
+      const frame: THREE.BufferGeometry[] = [];
+      for (const sx of [-1, 1]) {
+        for (const sz of [-1, 1]) frame.push(new THREE.CylinderGeometry(0.028, 0.032, th - 0.06, 12).translate(sx * lx, (th - 0.06) / 2, sz * lz));
+        for (const y of [0.12, 0.22]) frame.push(new THREE.CylinderGeometry(0.013, 0.013, lz * 2, 8).rotateX(Math.PI / 2).translate(sx * lx, y, 0));
+        frame.push(new THREE.BoxGeometry(0.02, 0.06, lz * 2).translate(sx * lx, th - 0.09, 0));
+        frame.push(new THREE.BoxGeometry(lx * 2, 0.06, 0.02).translate(0, th - 0.09, sx * lz));
+      }
+      const legs = mesh(mergeGeometries(frame.map(ny))!, M.redDark);
+      for (const o of [top, legs]) {
+        o.position.set(0, fy, tz);
+        g.add(o);
+      }
       const cg = new THREE.PlaneGeometry(2.08, th - 0.1, 40, 3);
       const cp = cg.attributes.position as THREE.BufferAttribute;
       for (let k = 0; k < cp.count; k++) cp.setZ(k, Math.sin((cp.getX(k) / 2.08) * Math.PI * 12) * 0.014 * (0.3 + 0.7 * ((th - 0.1) / 2 - cp.getY(k)) / (th - 0.1)));
@@ -196,50 +214,43 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
       ding.scale.setScalar(0.26);
       ding.position.set(0, ttop, tz);
       g.add(ding);
+      // 红烛：和大殿同一式样，烛台矮一些
       const pewter = (pewterMat ??= new THREE.MeshStandardMaterial({ color: '#a88848', metalness: 0.8, roughness: 0.4 }));
-      const candleMat = (candleMatS ??= new THREE.MeshStandardMaterial({ color: '#b3201a', roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.4 }));
-      for (const sx of [-0.78, 0.78]) {
-        const holder = mesh(lathe([[0, 0], [0.08, 0], [0.09, 0.03], [0.03, 0.07], [0.026, 0.2], [0.07, 0.23], [0.09, 0.27], [0.08, 0.28], [0, 0.28]], 14), pewter);
-        holder.position.set(sx, ttop, tz - 0.08);
+      const candleMat = (candleMatS ??= new THREE.MeshStandardMaterial({ map: candleTexture(), roughness: 0.45, emissive: '#3a0805', emissiveIntensity: 0.4 }));
+      const S = 0.3, CH = 0.22, flameGeo = flameGeometry();
+      for (const sx of [-0.76, 0.76]) {
+        const holder = mesh(candleStand(S), pewter);
+        holder.position.set(sx, ttop, tz - 0.1);
         g.add(holder);
-        const c = mesh(new THREE.CylinderGeometry(0.03, 0.034, 0.24, 10), candleMat, false);
-        c.position.set(sx, ttop + 0.28 + 0.12, tz - 0.08);
+        const c = mesh(candleGeometry(CH), candleMat);
+        c.position.set(sx, ttop + S - 0.01, tz - 0.1);
+        c.rotation.y = Math.PI; // 贴图上的金莲转到正面
         g.add(c);
-        const f = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6).scale(1, 2.3, 1), flameMat);
-        f.position.set(sx, ttop + 0.28 + 0.24 + 0.045, tz - 0.08);
+        const f = new THREE.Mesh(flameGeo, flameMat);
+        f.scale.set(1, 2.3, 1);
+        f.position.set(sx, ttop + S + CH + 0.055, tz - 0.1);
         g.add(f);
       }
-      const vaseMat = (vaseMatS ??= new THREE.MeshPhysicalMaterial({ color: '#6f9a8c', roughness: 0.25, clearcoat: 0.8 }));
-      const lotusMat = (lotusMatS ??= new THREE.MeshStandardMaterial({ color: '#f0a8b8', roughness: 0.55 }));
-      const leafMat = (leafMatS ??= new THREE.MeshStandardMaterial({ color: '#3f6a3a', roughness: 0.7, side: THREE.DoubleSide }));
-      for (const sx of [-0.45, 0.45]) {
-        const vase = mesh(lathe([[0, 0], [0.06, 0], [0.09, 0.06], [0.085, 0.16], [0.04, 0.24], [0.035, 0.29], [0.055, 0.32], [0, 0.32]], 18), vaseMat);
-        vase.position.set(sx, ttop, tz - 0.16);
-        g.add(vase);
-        const stem = mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.28, 5), leafMat, false);
-        stem.position.set(sx, ttop + 0.44, tz - 0.16);
-        g.add(stem);
-        const bud = mesh(new THREE.SphereGeometry(0.055, 10, 8).scale(1, 1.4, 1), lotusMat, false);
-        bud.position.set(sx, ttop + 0.6, tz - 0.16);
-        g.add(bud);
-        const leaf = mesh(new THREE.CircleGeometry(0.1, 12), leafMat, false);
-        leaf.rotation.set(-1.1, 0, sx * 0.8);
-        leaf.position.set(sx + Math.sign(sx) * 0.05, ttop + 0.4, tz - 0.12);
-        g.add(leaf);
+      // 青瓷玉壶春瓶插荷：和大殿的青花瓶同一套几何体，缩小两成；荷叶都朝外
+      const kit = vaseBouquet();
+      const vaseMat = (vaseMatS ??= new THREE.MeshPhysicalMaterial({ color: '#8db3a0', roughness: 0.22, clearcoat: 0.8, clearcoatRoughness: 0.15 }));
+      for (const sx of [-1, 1]) {
+        const v = new THREE.Group();
+        v.add(mesh(kit.vase, vaseMat), mesh(kit.bouquet, kit.flowerMat, false), mesh(kit.leaf, kit.leafMat, false));
+        v.scale.set(sx * 0.8, 0.8, 0.8);
+        v.position.set(sx * 0.42, ttop, tz - 0.16);
+        g.add(v);
       }
-      const plateMat = (plateMatS ??= new THREE.MeshStandardMaterial({ color: '#e9e2d0', roughness: 0.4 }));
-      const fruit = ['#e08a2a', '#c43f2b', '#e2b23f'].map((c) => (fruitMats[c] ??= new THREE.MeshStandardMaterial({ color: c, roughness: 0.5 })));
-      for (const [sx, kind] of [[-0.62, 0], [0.62, 1]] as [number, number][]) {
-        const plate = mesh(lathe([[0, 0], [0.05, 0], [0.045, 0.04], [0.14, 0.08], [0.15, 0.09], [0, 0.08]], 18), plateMat);
+      const plateMat = (plateMatS ??= new THREE.MeshStandardMaterial({ color: '#eceae2', roughness: 0.3 }));
+      const piles: THREE.BufferGeometry[] = [];
+      for (const [sx, kind] of [[-0.6, 'apple'], [0.6, 'persimmon']] as const) {
+        const plate = mesh(plateGeometry(), plateMat);
+        plate.scale.setScalar(0.8);
         plate.position.set(sx, ttop, tz + 0.15);
         g.add(plate);
-        for (let k = 0; k < 4; k++) {
-          const a = (k / 4) * Math.PI * 2;
-          const f = mesh(new THREE.SphereGeometry(0.05, 10, 8), fruit[(k + kind) % 3], false);
-          f.position.set(sx + (k < 3 ? Math.cos(a) * 0.06 : 0), ttop + 0.12 + (k < 3 ? 0 : 0.08), tz + 0.15 + (k < 3 ? Math.sin(a) * 0.06 : 0));
-          g.add(f);
-        }
+        piles.push(fruitPile(kind, 41 + i * 2 + (sx > 0 ? 1 : 0)).scale(0.8, 0.8, 0.8).translate(sx, ttop, tz + 0.15));
       }
+      g.add(mesh(mergeGeometries(piles)!, (fruitMatS ??= new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42 }))));
     }
     // 三个蒲团
     for (const sx of [-1.1, 0, 1.1]) {
@@ -252,31 +263,57 @@ export function furnishSideHalls(halls: HallBuild[], env: THREE.Texture) {
     light.position.set(0, fy + 3.0, -d.hz + 2.4);
     g.add(light);
     lights.push(light);
-    // 地藏殿的长明灯架：三层，每层十二盏
+    // 地藏殿的长明灯架：三级台阶式的朱漆木架，两侧台阶形侧板，每级前面一块挡板；每级一排十二盏铜莲花灯盏
     if (i === 1) {
-      const wood = new THREE.MeshStandardMaterial({ color: '#5a2d1e', roughness: 0.7 });
-      const cupGeo = new THREE.CylinderGeometry(0.045, 0.03, 0.05, 10);
+      const LX = -5.1, W = 3.0;
+      const tierY = (t: number) => 0.55 + t * 0.35; // 相对殿内地面
+      const tierZ = (t: number) => -d.hz + 1.45 - t * 0.33;
+      const wood: THREE.BufferGeometry[] = [];
+      const add = (geo: THREE.BufferGeometry, axis: 'x' | 'y' | 'z') => wood.push(grainUV(geo.index ? geo.toNonIndexed() : geo, axis));
+      // 侧板：形状的 x 是殿内 z，转过来立在架子两头
+      const side = new THREE.Shape();
+      side.moveTo(tierZ(0) + 0.17, 0);
+      for (let t = 0; t < 3; t++) {
+        side.lineTo(tierZ(t) + 0.17, tierY(t) + 0.07);
+        side.lineTo(t < 2 ? tierZ(t + 1) + 0.17 : tierZ(2) - 0.17, tierY(t) + 0.07);
+      }
+      side.lineTo(tierZ(2) - 0.17, 0);
+      side.closePath();
+      for (const sx of [-1, 1]) add(new THREE.ExtrudeGeometry(side, { depth: 0.05, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(LX + sx * (W / 2 + 0.025) + 0.025, 0, 0), 'z');
+      for (let t = 0; t < 3; t++) {
+        add(new RoundedBoxGeometry(W, 0.05, 0.34, 2, 0.012).translate(LX, tierY(t) + 0.015, tierZ(t)), 'x');
+        const y0 = t ? tierY(t - 1) + 0.04 : 0, y1 = tierY(t) - 0.01;
+        add(new THREE.BoxGeometry(W, y1 - y0, 0.025).translate(LX, (y0 + y1) / 2, tierZ(t) + 0.14), 'x');
+      }
+      add(new THREE.BoxGeometry(W, tierY(2), 0.025).translate(LX, tierY(2) / 2, tierZ(2) - 0.155), 'x');
+      const stand = mesh(mergeGeometries(wood)!, M.red);
+      stand.position.y = fy;
+      g.add(stand);
+      // 莲花灯盏：小圈足、细腰，盏口分八瓣、瓣尖微微上翘
+      const cupGeo = lathe([[0, 0], [0.026, 0], [0.028, 0.006], [0.012, 0.014], [0.011, 0.024], [0.03, 0.03], [0.046, 0.046], [0.05, 0.056], [0.044, 0.054], [0.03, 0.042], [0, 0.04]], 24);
+      {
+        const p = cupGeo.attributes.position as THREE.BufferAttribute;
+        for (let k = 0; k < p.count; k++) {
+          const y = p.getY(k);
+          if (y < 0.028) continue;
+          const lobe = Math.abs(Math.cos(4 * Math.atan2(p.getX(k), p.getZ(k))));
+          const w = Math.min(1, (y - 0.028) / 0.02);
+          const r = 1 + 0.1 * w * (lobe - 0.5);
+          p.setXYZ(k, p.getX(k) * r, y + 0.006 * w * lobe, p.getZ(k) * r);
+        }
+        cupGeo.computeVertexNormals();
+      }
       const cups: THREE.BufferGeometry[] = [];
-      for (let tier = 0; tier < 3; tier++) {
-        const step = mesh(worldBox(3.0, 0.08, 0.32, 1), wood);
-        const y = fy + 0.55 + tier * 0.35;
-        const z = -d.hz + 1.45 - tier * 0.33;
-        step.position.set(-5.1, y, z);
-        g.add(step);
-        const leg = mesh(worldBox(3.0, y - fy, 0.06, 1), wood);
-        leg.position.set(-5.1, fy + (y - fy) / 2, z - 0.13);
-        g.add(leg);
+      for (let t = 0; t < 3; t++) {
+        const y = fy + tierY(t);
         for (let k = 0; k < 12; k++) {
-          const x = -5.1 - 1.375 + k * 0.25;
-          const c = cupGeo.clone();
-          c.translate(x, y + 0.065, z);
-          cups.push(c);
-          flameAt.push(new THREE.Vector3(x, y + 0.12, z));
+          const x = LX - 1.375 + k * 0.25;
+          cups.push(cupGeo.clone().translate(x, y + 0.04, tierZ(t)));
+          flameAt.push(new THREE.Vector3(x, y + 0.12, tierZ(t)));
         }
       }
-      const cupMesh = mesh(mergeGeos(cups), M.gold, false);
-      g.add(cupMesh);
-      flames = new THREE.InstancedMesh(new THREE.ConeGeometry(0.016, 0.055, 6), flameMat, LAMPS);
+      g.add(mesh(mergeGeometries(cups)!, M.gold, false));
+      flames = new THREE.InstancedMesh(flameGeometry().scale(0.7, 1.6, 0.7), flameMat, LAMPS);
       flames.frustumCulled = false;
       g.add(flames);
       const lampHit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.6, 1.4), hitMat);
@@ -381,23 +418,85 @@ function shelfTexture() {
   return t;
 }
 
-// 藏经阁殿内：后墙一排经橱，两侧墙后半段也立着经橱；殿中三张矮经案，案上铺纸、笔架、砚台，案后一张坐垫
+// 《心经》抄经纸：米黄皮纸，淡朱色竖格（乌丝栏）；从右往左写，第一行是经名，写到一半，左边还空着
+function sutraPaperTexture() {
+  const W = 512, H = 340;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#efe5cc';
+  g.fillRect(0, 0, W, H);
+  const r = rng(77);
+  for (let i = 0; i < 400; i++) {
+    g.fillStyle = r() < 0.5 ? 'rgba(160,130,90,0.06)' : 'rgba(255,250,235,0.12)';
+    g.fillRect(r() * W, r() * H, 1 + r() * 8, 1);
+  }
+  const cols = 14, cw = 33, x0 = (W - cols * cw) / 2, top = 22, rows = 10, rh = (H - 44) / rows;
+  g.strokeStyle = 'rgba(176,72,52,0.55)';
+  g.lineWidth = 1.5;
+  for (let k = 0; k <= cols; k++) {
+    g.beginPath();
+    g.moveTo(x0 + k * cw, top - 6);
+    g.lineTo(x0 + k * cw, H - top + 6);
+    g.stroke();
+  }
+  g.strokeRect(x0 - 5, top - 6, cols * cw + 10, H - 2 * top + 12);
+  const text = ['般若波羅蜜多心經', '觀自在菩薩行深般若', '波羅蜜多時照見五蘊', '皆空度一切苦厄舍利', '子色不異空空不異色', '色即是空空即是色受', '想行識亦復如是舍利', '子是諸法空相'];
+  g.fillStyle = 'rgba(24,20,18,0.88)';
+  g.font = '500 23px "Songti TC","Songti SC","STSong","Noto Serif CJK TC","Noto Serif CJK SC","Source Han Serif","SimSun",serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  text.forEach((line, k) => {
+    const x = x0 + (cols - 0.5 - k) * cw;
+    [...line].forEach((ch, j) => g.fillText(ch, x, top + (j + 0.5 + (k === 0 ? 1 : 0)) * rh));
+  });
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+// 藏经阁殿内：后墙一排经橱，两侧墙后半段也立着经橱；殿中三张矮经案，案上抄经纸、镇尺、砚台、笔架，案后一张方坐垫
 function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, deskHits: THREE.Mesh[], hitMat: THREE.Material, M: ReturnType<typeof chineseMats>) {
-  const wood = new THREE.MeshStandardMaterial({ color: '#5a2a1a', roughness: 0.6 });
-  const front = new THREE.MeshStandardMaterial({ map: shelfTexture(), roughness: 0.75 });
-  const shelf = (x: number, z: number, w: number, yaw: number) => {
-    const b = mesh(worldBox(w, 2.7, 0.62, 1.3), [wood, wood, wood, wood, front, wood]);
-    b.position.set(x, fy + 1.35, z);
-    b.rotation.y = yaw;
-    g.add(b);
-    const cap = mesh(worldBox(w + 0.12, 0.1, 0.72, 1), wood);
-    cap.position.set(x, fy + 2.75, z);
-    cap.rotation.y = yaw;
-    g.add(cap);
-  };
-  const n = 6, sw = (d.hx * 2 - 0.6) / n;
-  for (let k = 0; k < n; k++) shelf(-d.hx + 0.3 + sw * (k + 0.5), -d.hz + 0.45, sw - 0.08, 0);
-  for (const sx of [-1, 1]) for (const z of [-2.0, -0.4]) shelf(sx * (d.hx - 0.45), z, 1.5, -sx * Math.PI / 2);
+  // 经橱：底座下收一道踢脚；橱身正面是一格格经函（贴图），格子之间的立柱和隔板做成真木条凸出来；顶帽一道线脚向外挑。
+  // 所有经橱的木作合成一个网格，正面经函合成一个网格
+  {
+    const woodParts: THREE.BufferGeometry[] = [], faceParts: THREE.BufferGeometry[] = [];
+    const D = 0.6, BH = 0.14, CH = 2.46;
+    const shelf = (x: number, z: number, w: number, yaw: number) => {
+      const m = new THREE.Matrix4().makeRotationY(yaw).setPosition(x, 0, z);
+      const wood = (geo: THREE.BufferGeometry, axis: 'x' | 'y' | 'z') => woodParts.push(grainUV(geo.index ? geo.toNonIndexed() : geo, axis).applyMatrix4(m));
+      wood(carvedBlock(w / 2, D / 2, [[0, 0.03], [0.1, 0.03], [0.1, 0], [BH, 0]]), 'x');
+      wood(worldBox(w, CH, D - 0.04).translate(0, BH + CH / 2, -0.02), 'y');
+      wood(carvedBlock(w / 2 + 0.06, D / 2 + 0.06, [[0, 0.06], [0.03, 0.06], [0.05, 0.04], [0.07, 0.015], [0.08, 0], [0.13, 0]]).translate(0, BH + CH, 0), 'x');
+      // 贴图是 4 列 × 6 层的格子，立柱、隔板压在格子之间的缝上
+      const fw = w - 0.02, fh = CH - 0.02;
+      faceParts.push(new THREE.PlaneGeometry(fw, fh).translate(0, BH + CH / 2, D / 2 - 0.035).applyMatrix4(m));
+      for (let k = 0; k <= 4; k++) {
+        const pw = k % 4 ? fw / 32 + 0.004 : 0.05;
+        const px = k === 0 ? -w / 2 + 0.025 : k === 4 ? w / 2 - 0.025 : -fw / 2 + (k * fw) / 4;
+        wood(new THREE.BoxGeometry(pw, CH, 0.05).translate(px, BH + CH / 2, D / 2 - 0.025), 'y');
+      }
+      for (let r = 0; r <= 6; r++) {
+        const v = r === 0 ? 4 : r === 6 ? 509 : (r * 512) / 6 + 1; // 贴图上从顶往下的像素
+        const rh = r % 6 ? (14 / 512) * fh : 0.04;
+        const y = Math.min(BH + CH - rh / 2, Math.max(BH + rh / 2, BH + 0.01 + fh * (1 - v / 512)));
+        wood(new THREE.BoxGeometry(w - 0.02, rh, 0.045).translate(0, y, D / 2 - 0.0275), 'x');
+      }
+    };
+    const n = 6, sw = (d.hx * 2 - 0.6) / n;
+    for (let k = 0; k < n; k++) shelf(-d.hx + 0.3 + sw * (k + 0.5), -d.hz + 0.45, sw - 0.08, 0);
+    for (const sx of [-1, 1]) for (const z of [-2.0, -0.4]) shelf(sx * (d.hx - 0.45), z, 1.5, -sx * Math.PI / 2);
+    const woodMat = pbr('wood', { metersPerTile: 0.9, color: '#6a3524' });
+    woodMat.roughness = 0.6;
+    const cab = mesh(mergeGeometries(woodParts)!, woodMat);
+    const face = mesh(mergeGeometries(faceParts)!, new THREE.MeshStandardMaterial({ map: shelfTexture(), roughness: 0.75 }), false);
+    for (const o of [cab, face]) {
+      o.position.y = fy;
+      g.add(o);
+    }
+  }
   // 后墙经橱上方一块匾「如是我聞」（佛经的开头四个字）
   {
     const pw = 3.0, ph = pw * (340 / (260 * 4 + 140));
@@ -429,37 +528,98 @@ function furnishLibrary(g: THREE.Group, d: ReturnType<typeof SH>, fy: number, de
     g.add(hit);
     deskHits.push(hit);
   }
-  const paper = new THREE.MeshStandardMaterial({ color: '#f1e8d2', roughness: 0.95 });
-  const ink = new THREE.MeshStandardMaterial({ color: '#1a1614', roughness: 0.35 });
-  const mat = new THREE.MeshStandardMaterial({ color: '#8a5a32', roughness: 0.95 });
-  LIB_DESKS.forEach((dx, k) => {
-    const top = mesh(worldBox(1.5, 0.06, 0.56, 1), M.redDark);
-    top.position.set(dx, fy + 0.4, LIB_DESK_Z);
-    g.add(top);
+  // 经案：朱漆矮案，案面冰盘沿；两侧板下沿挖出壶门、立在托泥上，前后各一条牙条。高 0.43
+  const deskGeo = (() => {
+    const parts: THREE.BufferGeometry[] = [carvedBlock(0.75, 0.28, [[0, 0.025], [0.015, 0.01], [0.025, 0], [0.045, 0]]).translate(0, 0.385, 0)];
+    const panel = new THREE.Shape();
+    panel.moveTo(-0.24, 0.05);
+    panel.lineTo(-0.16, 0.05);
+    panel.lineTo(-0.16, 0.2);
+    panel.quadraticCurveTo(-0.16, 0.28, -0.04, 0.285);
+    panel.quadraticCurveTo(-0.01, 0.287, 0, 0.305);
+    panel.quadraticCurveTo(0.01, 0.287, 0.04, 0.285);
+    panel.quadraticCurveTo(0.16, 0.28, 0.16, 0.2);
+    panel.lineTo(0.16, 0.05);
+    panel.lineTo(0.24, 0.05);
+    panel.lineTo(0.24, 0.385);
+    panel.lineTo(-0.24, 0.385);
+    panel.closePath();
     for (const sx of [-1, 1]) {
-      const leg = mesh(worldBox(0.08, 0.37, 0.5, 1), M.redDark);
-      leg.position.set(dx + sx * 0.66, fy + 0.185, LIB_DESK_Z);
-      g.add(leg);
+      parts.push(new THREE.ExtrudeGeometry(panel, { depth: 0.04, bevelEnabled: false, curveSegments: 6 }).rotateY(-Math.PI / 2).translate(sx * 0.66 + 0.02, 0, 0));
+      parts.push(new RoundedBoxGeometry(0.07, 0.05, 0.54, 2, 0.01).translate(sx * 0.66, 0.025, 0));
+      parts.push(new THREE.BoxGeometry(1.28, 0.045, 0.02).translate(0, 0.3625, sx * 0.2));
     }
-    const sheet = mesh(worldBox(0.62, 0.005, 0.4, 1), paper, false);
-    sheet.position.set(dx, fy + 0.433, LIB_DESK_Z + 0.02);
-    g.add(sheet);
-    // 纸上几行淡淡的字迹
-    for (let r = 0; r < 5; r++) {
-      const line = mesh(worldBox(0.012, 0.002, 0.3, 1), ink, false);
-      line.position.set(dx + 0.22 - r * 0.07, fy + 0.437, LIB_DESK_Z + 0.02);
-      g.add(line);
+    return mergeGeometries(parts.map((p) => (p.index ? p.toNonIndexed() : p)))!;
+  })();
+  // 案上的东西做成一组，三张案各复制一份（几何体和材质共用）
+  const items = new THREE.Group();
+  {
+    const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial(o);
+    const sheet = mesh(new THREE.PlaneGeometry(0.6, 0.4).rotateX(-Math.PI / 2), std({ map: sutraPaperTexture(), roughness: 0.95 }), false);
+    sheet.position.set(0, 0.002, 0.02);
+    // 镇尺压在纸的上端
+    const weight = mesh(new RoundedBoxGeometry(0.5, 0.014, 0.03, 2, 0.005), std({ color: '#2b1a12', roughness: 0.45 }));
+    weight.position.set(0, 0.009, -0.155);
+    // 砚台和墨：长方砚，砚头一汪墨；一锭墨搁在旁边
+    const ink = new THREE.Group();
+    ink.position.set(0.52, 0, -0.04);
+    ink.rotation.y = -0.1;
+    ink.add(
+      mesh(new RoundedBoxGeometry(0.13, 0.026, 0.19, 2, 0.006).translate(0, 0.013, 0), std({ color: '#2d2b29', roughness: 0.55 })),
+      mesh(new THREE.CircleGeometry(1, 24).scale(0.045, 0.028, 1).rotateX(-Math.PI / 2).translate(0, 0.0265, -0.055), std({ color: '#0c0b0b', roughness: 0.08 }), false),
+      mesh(new THREE.BoxGeometry(0.02, 0.013, 0.075).rotateY(0.5).translate(0.095, 0.0065, 0.04), std({ color: '#171515', roughness: 0.5 }))
+    );
+    // 山形笔架：三座峰，一支笔搁在右边的山口里，笔头朝坐垫这边
+    const rest = new THREE.Shape();
+    rest.moveTo(-0.07, 0);
+    rest.lineTo(0.07, 0);
+    rest.lineTo(0.07, 0.018);
+    rest.quadraticCurveTo(0.06, 0.045, 0.045, 0.042);
+    rest.quadraticCurveTo(0.03, 0.04, 0.022, 0.028);
+    rest.quadraticCurveTo(0.012, 0.035, 0.006, 0.05);
+    rest.quadraticCurveTo(0, 0.06, -0.006, 0.05);
+    rest.quadraticCurveTo(-0.012, 0.035, -0.022, 0.028);
+    rest.quadraticCurveTo(-0.03, 0.04, -0.045, 0.042);
+    rest.quadraticCurveTo(-0.06, 0.045, -0.07, 0.018);
+    rest.closePath();
+    const brushRest = new THREE.Group();
+    brushRest.position.set(-0.5, 0, -0.06);
+    const nonIdx = (geo: THREE.BufferGeometry) => {
+      const n = geo.toNonIndexed();
+      n.deleteAttribute('uv');
+      return n;
+    };
+    const brush = mergeGeometries([
+      paint(nonIdx(new THREE.CylinderGeometry(0.0045, 0.005, 0.2, 6).rotateX(Math.PI / 2)), () => new THREE.Color('#b39a5c')),
+      paint(nonIdx(lathe([[0, 0], [0.0062, 0], [0.0082, 0.009], [0.0075, 0.022], [0.004, 0.036], [0, 0.046]], 8).rotateX(Math.PI / 2).translate(0, 0, 0.1)), () => new THREE.Color('#2b2621')),
+    ])!;
+    brushRest.add(
+      mesh(new THREE.ExtrudeGeometry(rest, { depth: 0.022, bevelEnabled: false, curveSegments: 5 }).translate(0, 0, -0.011), std({ color: '#3a2418', roughness: 0.5 })),
+      mesh(brush.translate(0.022, 0.033, 0.03), std({ vertexColors: true, roughness: 0.6 }))
+    );
+    items.add(sheet, weight, ink, brushRest);
+  }
+  // 方坐垫：圆角厚垫，面上微微鼓起
+  const seatGeo = new RoundedBoxGeometry(0.6, 0.09, 0.5, 3, 0.035);
+  {
+    const p = seatGeo.attributes.position as THREE.BufferAttribute;
+    for (let k = 0; k < p.count; k++) {
+      if (p.getY(k) <= 0) continue;
+      const fx = Math.max(0, 1 - (p.getX(k) / 0.3) ** 2), fz = Math.max(0, 1 - (p.getZ(k) / 0.25) ** 2);
+      p.setY(k, p.getY(k) + 0.016 * fx * fz);
     }
-    const stone = mesh(worldBox(0.16, 0.03, 0.24, 1), ink, false);
-    stone.position.set(dx + 0.52, fy + 0.445, LIB_DESK_Z - 0.04);
-    g.add(stone);
-    const brush = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.26, 6), M.redDark, false);
-    brush.rotation.x = Math.PI / 2;
-    brush.position.set(dx - 0.5, fy + 0.445, LIB_DESK_Z);
-    g.add(brush);
-    const cushion = mesh(worldBox(0.62, 0.04, 0.5, 1), mat);
-    cushion.position.set(dx, fy + 0.02, LIB_SEAT_Z);
-    g.add(cushion);
+  }
+  const seatMat = new THREE.MeshStandardMaterial({ color: '#7d5232', roughness: 0.95 });
+  LIB_DESKS.forEach((dx, k) => {
+    const desk = mesh(deskGeo, M.redDark);
+    desk.position.set(dx, fy, LIB_DESK_Z);
+    g.add(desk);
+    const it = items.clone();
+    it.position.set(dx, fy + 0.43, LIB_DESK_Z);
+    g.add(it);
+    const seat = mesh(seatGeo, seatMat);
+    seat.position.set(dx, fy + 0.045, LIB_SEAT_Z);
+    g.add(seat);
     const hit = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.0, 1.5), hitMat);
     hit.position.set(dx, fy + 0.5, (LIB_DESK_Z + LIB_SEAT_Z) / 2);
     hit.userData.interact = { type: 'sutraDesk', desk: k };
@@ -489,23 +649,3 @@ function dropHugeTriangles(geo: THREE.BufferGeometry, limit: number, lowY = -Inf
 
 // 模型朝向：按截图校正后的绕 y 旋转（让菩萨面朝殿门，也就是本地 +z）
 const STATUE_YAW = [0, 0];
-
-function mergeGeos(gs: THREE.BufferGeometry[]) {
-  const out = new THREE.BufferGeometry();
-  const pos: number[] = [], nor: number[] = [], idx: number[] = [];
-  let off = 0;
-  for (const g0 of gs) {
-    const g = g0.index ? g0 : g0;
-    const p = g.attributes.position as THREE.BufferAttribute, n = g.attributes.normal as THREE.BufferAttribute;
-    for (let i = 0; i < p.count; i++) {
-      pos.push(p.getX(i), p.getY(i), p.getZ(i));
-      nor.push(n.getX(i), n.getY(i), n.getZ(i));
-    }
-    if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(g.index.getX(i) + off);
-    off += p.count;
-  }
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  out.setIndex(idx);
-  return out;
-}

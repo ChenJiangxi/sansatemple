@@ -6,7 +6,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { HALL, COURT, INCENSE, PAGODAS, BENCHES, NPC_BENCHES, BENCH_SEATS, GROUND_LAMPS, BRIDGE } from '../layout';
 import { plaqueTexture, rng, geshanTexture } from '../textures';
-import { mesh, worldBox, lathe } from './util';
+import { mesh, worldBox, lathe, carvedBlock } from './util';
 import { buildRoof, buildPolyEave, beamRing, chineseMats, meterUV, aged, addTileRuns, type SlopeFn } from './hall';
 import { IncenseSpot, type IncenseView } from './incense';
 import { pbr } from './pbr';
@@ -24,34 +24,6 @@ function boxUV(geo: THREE.BufferGeometry) {
     else uv.setXY(i, p.getX(i), p.getY(i));
   }
   return geo;
-}
-
-// 四面同一条线脚的石块：prof 是 [高度, 内收]，每层是比外框（半宽 hx、半深 hz）缩进的矩形，
-// 层层相连成四个侧面；平面着色，线脚的棱角分明。顶面加盖，底面贴地不画
-function carvedBlock(hx: number, hz: number, prof: [number, number][]) {
-  const pos: number[] = [], uv: number[] = [];
-  const ring = (y: number, k: number) => [[-(hx - k), y, hz - k], [hx - k, y, hz - k], [hx - k, y, -(hz - k)], [-(hx - k), y, -(hz - k)]];
-  const along = (v: number[], s: number) => (s % 2 === 0 ? v[0] : v[2]);
-  for (let j = 0; j < prof.length - 1; j++) {
-    const a = ring(...prof[j]), b = ring(...prof[j + 1]);
-    for (let s = 0; s < 4; s++) {
-      const s1 = (s + 1) % 4;
-      for (const v of [a[s], a[s1], b[s1], a[s], b[s1], b[s]]) {
-        pos.push(...v);
-        uv.push(along(v, s), v[1]);
-      }
-    }
-  }
-  const t = ring(...prof[prof.length - 1]);
-  for (const v of [t[0], t[1], t[2], t[0], t[2], t[3]]) {
-    pos.push(...v);
-    uv.push(v[0], v[2]);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.computeVertexNormals();
-  return g;
 }
 
 export interface PropsBuild {

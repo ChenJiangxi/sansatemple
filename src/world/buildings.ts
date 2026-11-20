@@ -1,9 +1,10 @@
 // 配殿（观音殿、地藏殿）与钟楼：朱红柱、格扇门、彩画梁、带鸱吻的屋顶
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { HALLS, BELL } from '../layout';
 import { plaqueTexture } from '../textures';
-import { worldBox, mesh, lathe } from './util';
+import { worldBox, mesh, lathe, grainUV } from './util';
 import { buildTempleBell } from './bronze';
 import { buildRoof, beamRing, chineseMats, meterUV, aged } from './hall';
 import { pbr } from './pbr';
@@ -289,27 +290,78 @@ function pavilion(T: { x: number; z: number; size: number; platform: number }, n
 function bellTower(group: THREE.Group): StrikeBuild {
   const { g, colTop } = pavilion(BELL, '鐘樓', group);
   const M = chineseMats();
-  const hanger = mesh(worldBox(BELL.size - 0.8, 0.34, 0.34, 1), M.red);
-  hanger.position.set(0, colTop - 0.5, 0);
-  g.add(hanger);
+  // 吊钟梁：圆角朱漆梁，两头架在左右的额枋上，梁下两头各一块雀替
+  const beamY = colTop - 0.5;
+  {
+    const parts: THREE.BufferGeometry[] = [new RoundedBoxGeometry(BELL.size - 0.8, 0.34, 0.3, 2, 0.03).toNonIndexed()];
+    for (const dir of [-1, 1]) {
+      const sh = new THREE.Shape();
+      const x0 = dir * 2.55;
+      sh.moveTo(x0, 0);
+      sh.lineTo(x0 - dir * 0.75, 0);
+      sh.bezierCurveTo(x0 - dir * 0.55, -0.02, x0 - dir * 0.4, -0.1, x0 - dir * 0.3, -0.16);
+      sh.quadraticCurveTo(x0 - dir * 0.15, -0.26, x0, -0.28);
+      sh.closePath();
+      parts.push(new THREE.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: false, curveSegments: 8 }).translate(0, -0.17, -0.06));
+    }
+    const beam = mesh(mergeGeometries(parts)!, M.red);
+    beam.position.set(0, beamY, 0);
+    g.add(beam);
+  }
   // 梵钟：波浪钟口、莲瓣、四区佛号铭文、莲花撞座、蒲牢钮，青铜带铜锈
-  const bronze = new THREE.MeshStandardMaterial({ color: '#4f5a48', metalness: 0.85, roughness: 0.42 });
+  const iron = new THREE.MeshStandardMaterial({ color: '#2f2c29', metalness: 0.7, roughness: 0.55 });
   const bell = buildTempleBell();
   bell.position.set(0, colTop - 1.2, 0);
   g.add(bell);
-  const chain = mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 8), bronze);
-  chain.position.set(0, colTop - 0.92, 0);
-  g.add(chain);
-  // 撞木
-  const logPivot = new THREE.Group();
-  logPivot.position.set(-1.25, colTop - 0.5, 0);
-  const log = mesh(new THREE.CylinderGeometry(0.15, 0.15, 2.0, 12), M.red);
-  log.rotation.z = Math.PI / 2;
-  log.position.set(-0.9, -2.27, 0);
-  logPivot.add(log);
-  const ropeMat = new THREE.LineBasicMaterial({ color: '#c9302a' });
-  for (const x of [-1.6, -0.2]) logPivot.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, -2.27, 0)]), ropeMat));
-  g.add(logPivot);
+  // 挂钟的铁件：梁上一道铁箍，箍下一只环，再一只竖环穿过蒲牢钮
+  {
+    const parts = [
+      new THREE.BoxGeometry(0.14, 0.38, 0.33),
+      new THREE.TorusGeometry(0.055, 0.02, 8, 18).translate(0, -0.2, 0),
+      new THREE.TorusGeometry(0.07, 0.024, 8, 18).scale(1, 1.5, 1).rotateY(Math.PI / 2).translate(0, -0.32, 0),
+    ].map((x) => x.toNonIndexed());
+    const hook = mesh(mergeGeometries(parts)!, iron);
+    hook.position.set(0, beamY, 0);
+    g.add(hook);
+  }
+  // 撞木：一整根原木，撞钟的一头平、后头收圆，两头各箍一道铁；两根红麻绳吊在梁上，后头垂一根拉绳带穗子。
+  // 两根吊绳一样长、一起摆，撞木摆起来始终是平的（平行四边形），撞钟时木头正面平平地撞上去
+  const ROPE = 2.27; // 吊点到撞木中心线
+  const rig = new THREE.Group();
+  rig.position.set(-1.25, beamY, 0);
+  g.add(rig);
+  const ropeMat = new THREE.MeshStandardMaterial({ color: '#9e2b22', roughness: 0.9 });
+  const log = new THREE.Group();
+  log.position.set(-0.9, -ROPE, 0);
+  rig.add(log);
+  {
+    const R = 0.15;
+    // 车削轴是 y，转成沿 x；y = -1 那头转到 +x，朝钟
+    const body = lathe([[0, -1], [0.12, -1], [0.14, -0.99], [R, -0.97], [R, 0.9], [0.145, 0.95], [0.125, 0.985], [0.08, 1], [0, 1]], 20).rotateZ(Math.PI / 2);
+    const wood = pbr('wood', { metersPerTile: 0.9, color: '#9a7a5a' });
+    wood.roughness = 0.75;
+    log.add(mesh(grainUV(body.toNonIndexed(), 'x'), wood));
+    const bands = [-0.85, 0.82].map((x) => lathe([[R - 0.004, -0.025], [R + 0.008, -0.022], [R + 0.008, 0.022], [R - 0.004, 0.025]], 20).rotateZ(Math.PI / 2).translate(x, 0, 0).toNonIndexed());
+    log.add(mesh(mergeGeometries(bands)!, iron));
+    // 绑绳：吊绳在撞木上绕一圈；拉绳从后头垂下来，末端一个结、一束穗子
+    const loops = [-0.7, 0.7, -0.93].map((x) => new THREE.TorusGeometry(R + 0.018, 0.018, 6, 20).rotateY(Math.PI / 2).translate(x, 0, 0).toNonIndexed());
+    const pull = new THREE.CylinderGeometry(0.016, 0.016, 0.95, 6).translate(-0.93, -R - 0.475, 0).toNonIndexed();
+    const knot = new THREE.SphereGeometry(0.04, 10, 8).translate(-0.93, -R - 0.97, 0).toNonIndexed();
+    const tassel = new THREE.CylinderGeometry(0.02, 0.055, 0.2, 10, 1, true).translate(-0.93, -R - 1.1, 0).toNonIndexed();
+    log.add(mesh(mergeGeometries([...loops, pull, knot, tassel].map((x) => (x.deleteAttribute('uv'), x)))!, ropeMat));
+  }
+  // 吊绳：各自绕吊点转，下端伸进撞木中心线（藏在木头里），摆到哪都连着
+  const ropes = [-1.6, -0.2].map((x) => {
+    const r = mesh(new THREE.CylinderGeometry(0.018, 0.018, ROPE, 6).translate(0, -ROPE / 2, 0), ropeMat);
+    r.position.x = x;
+    rig.add(r);
+    return r;
+  });
+  let ang = 0;
+  const pose = () => {
+    for (const r of ropes) r.rotation.z = ang;
+    log.position.set(-0.9 + Math.sin(ang) * ROPE, -Math.cos(ang) * ROPE, 0);
+  };
   const hit = new THREE.Mesh(new THREE.BoxGeometry(4.2, 3.2, 2.4), new THREE.MeshBasicMaterial({ visible: false }));
   hit.position.set(-0.8, colTop - 2.2, 0);
   hit.userData.interact = { type: 'bell' };
@@ -329,20 +381,22 @@ function bellTower(group: THREE.Group): StrikeBuild {
     },
     strike() {
       // 已经拉开了就直接从「往前撞」那一段开始
-      swing = pull > 0.05 || logPivot.rotation.z < -0.05 ? 0.55 : 1;
+      swing = pull > 0.05 || ang < -0.05 ? 0.55 : 1;
       pull = 0;
     },
     update(dt) {
       if (pull > 0) {
-        logPivot.rotation.z += (-pull * 0.5 - logPivot.rotation.z) * Math.min(1, dt * 10);
+        ang += (-pull * 0.5 - ang) * Math.min(1, dt * 10);
+        pose();
         return;
       }
       if (swing > 0) {
         swing = Math.max(0, swing - dt * 0.9);
         const t = 1 - swing;
-        logPivot.rotation.z = t < 0.45 ? -Math.sin((t / 0.45) * Math.PI * 0.5) * 0.35 : -0.35 + Math.sin(((t - 0.45) / 0.55) * Math.PI * 0.5) * 0.47;
+        ang = t < 0.45 ? -Math.sin((t / 0.45) * Math.PI * 0.5) * 0.35 : -0.35 + Math.sin(((t - 0.45) / 0.55) * Math.PI * 0.5) * 0.47;
         if (t > 0.98 && sway <= 0) sway = 1;
-      } else logPivot.rotation.z *= Math.pow(0.1, dt);
+      } else ang *= Math.pow(0.1, dt);
+      pose();
       if (sway > 0) {
         sway = Math.max(0, sway - dt * 0.12);
         phase += dt * 3.2;
