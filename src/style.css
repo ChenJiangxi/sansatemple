@@ -697,7 +697,6 @@ canvas.main.point { cursor: pointer; }
 .dock { padding: 6px; gap: 2px; border-radius: 28px; }
 .dock-btn { position: relative; width: 60px; height: 58px; gap: 4px; border-radius: 18px; font-size: 11.5px; }
 .dock-btn svg { stroke-width: 1.6; }
-.dock-btn kbd { display: none; }
 .dock-sep { height: 30px; margin: 0 6px; }
 .dock-extra { display: flex; align-items: center; gap: 4px; }
 .dock .radio-btn.on { color: var(--accent); background: rgba(234, 213, 138, 0.12); }
@@ -713,11 +712,10 @@ canvas.main.point { cursor: pointer; }
 .radio-pop { top: auto; right: auto; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--safe-b)); }
 .chant-st { border-top: 1px solid var(--line); border-radius: 0 0 12px 12px; margin-top: 4px; padding-top: 2px; }
 
-/* 电脑：操作栏大一点，动作右上角标快捷键；共修提示放到顶部正中 */
+/* 电脑：操作栏大一点；共修提示放到顶部正中 */
 @media (pointer: fine) and (min-width: 900px) {
   .dock { padding: 8px; gap: 4px; }
   .dock-btn { width: 66px; height: 64px; font-size: 12px; }
-  .dock-btn kbd { display: block; position: absolute; top: 6px; right: 8px; font: 600 9px/14px var(--font); min-width: 14px; padding: 0 3px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
   .shutter { width: 60px; height: 60px; }
   .hint, .status, .tea-bar { bottom: calc(112px + var(--safe-b)); }
   .radio-pop, .overlay-bar { bottom: calc(108px + var(--safe-b)); }
