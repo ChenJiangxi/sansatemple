@@ -1852,7 +1852,7 @@ async function start() {
   // —— 念珠 ——
   rosaryView.onBead = () => {
     beadCount++;
-    audio.bead();
+    audio.rosaryBead();
     ui.setRosary(beadCount);
     progress.add('beads');
     if (beadCount % 108 === 0) {
@@ -2560,20 +2560,21 @@ async function start() {
     }
     if (tg && tg.tagName === 'BUTTON' && (e.code === 'Space' || e.code === 'Enter')) return;
     switch (e.code) {
+      // 数字键和底部操作栏从左到右一一对应：1 合十、2 礼佛、3 木鱼、4 念珠（礼佛另有 E 和空格）
       case 'Digit1':
+        hapjang();
+        break;
+      case 'Digit2':
       case 'KeyE':
       case 'Space':
         e.preventDefault();
         toggleBow();
         break;
-      case 'Digit2':
-        overlay === 'rosary' ? closeRosary() : openRosary();
-        break;
       case 'Digit3':
-        hapjang();
-        break;
-      case 'Digit5':
         overlay === 'moktak' ? closeMoktak() : openMoktak();
+        break;
+      case 'Digit4':
+        overlay === 'rosary' ? closeRosary() : openRosary();
         break;
     }
   });

@@ -302,6 +302,58 @@ export class AudioEngine {
     }
   }
 
+  // 念珠：拇指拨过一颗，木珠顺着绳子滑下去（极轻的沙一下），「嗒」地碰上下一颗，再轻轻贴一下。
+  // 木头相碰短促发闷：一下很短的冲击，加三个衰减很快、略往下沉的木头共振（基音一千一二，泛音不成整数倍），没有长尾音。
+  // 原来用 bead() 的两千赫正弦，听着像电子「嘀」声（2026-11-21 用户说念珠声音不对）。bead() 还留给别处当轻轻的一声提示。
+  rosaryBead() {
+    if (!this.enabled || !this.ctx) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const out = ctx.createGain();
+    out.gain.value = 0.9;
+    out.connect(this.buses.effects);
+    const slide = this.noiseSource();
+    slide.playbackRate.value = 1.5;
+    const sbp = ctx.createBiquadFilter();
+    sbp.type = 'bandpass';
+    sbp.frequency.value = 4200;
+    sbp.Q.value = 0.9;
+    const sg = ctx.createGain();
+    sg.gain.setValueAtTime(0, t0);
+    sg.gain.linearRampToValueAtTime(0.03, t0 + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.06);
+    slide.connect(sbp).connect(sg).connect(out);
+    slide.start(t0, Math.random() * 3, 0.08);
+    const hit = (t: number, v: number) => {
+      const f = 1120 + Math.random() * 120;
+      for (const [m, a, d] of [[1, 1, 0.028], [2.63, 0.45, 0.016], [4.1, 0.22, 0.009]]) {
+        const o = ctx.createOscillator();
+        o.frequency.setValueAtTime(f * m, t);
+        o.frequency.exponentialRampToValueAtTime(f * m * 0.94, t + d);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.11 * v * a, t);
+        g.gain.exponentialRampToValueAtTime(0.0003, t + d);
+        o.connect(g).connect(out);
+        o.start(t);
+        o.stop(t + d + 0.02);
+      }
+      const n = this.noiseSource();
+      n.playbackRate.value = 4;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 3000;
+      bp.Q.value = 0.8;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.32 * v, t);
+      ng.gain.exponentialRampToValueAtTime(0.0005, t + 0.007);
+      n.connect(bp).connect(ng).connect(out);
+      n.start(t, Math.random() * 3, 0.02);
+    };
+    const t1 = t0 + 0.045;
+    hit(t1, 1);
+    hit(t1 + 0.028 + Math.random() * 0.014, 0.4);
+  }
+
   // 一段滤过的噪声：起音 a 秒、持续 len 秒；f 是中心频率（可以滑动到 f2），q 越大越窄
   private hiss(o: { at?: number; len: number; a?: number; f: number; f2?: number; q?: number; gain: number; rate?: number }) {
     if (!this.enabled || !this.ctx) return;

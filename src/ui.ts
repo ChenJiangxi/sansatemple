@@ -186,7 +186,7 @@ export class UI {
     const dock = el('nav', 'pill dock');
     for (const k of ['hapjang', 'bow', 'moktak', 'rosary'] as DockKind[]) {
       const b = el('button', 'dock-btn');
-      b.innerHTML = `${ICON[k]}<span></span><kbd>${{ hapjang: '3', bow: '1', moktak: '5', rosary: '2' }[k]}</kbd>`;
+      b.innerHTML = `${ICON[k]}<span></span><kbd>${{ hapjang: '1', bow: '2', moktak: '3', rosary: '4' }[k]}</kbd>`;
       b.onclick = () => this.h.dock(k);
       dock.appendChild(b);
       this.dockBtns.set(k, b);
