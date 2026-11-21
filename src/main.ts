@@ -37,7 +37,7 @@ import { releaseProps } from './world/glb';
 import { TeaUI } from './tea-ui';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
-import { Monk, DANCES, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
+import { Monk, DANCES, STATION_BPM, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
 import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
@@ -2083,7 +2083,8 @@ async function start() {
     if (dbgDance && DANCES.includes(dbgDance)) danceMove = dbgDance;
     if (dbgRadio && ['lofi', 'disco', 'rain', 'qin'].includes(dbgRadio)) {
       me.setHeadphones(dbgRadio);
-      me.beatClock = () => radio.beats();
+      // 直接打开链接时浏览器不让自动出声，电台开不起来：拍子改用页面时钟，人照样跟着跳
+      me.beatClock = () => (radio.station ? radio.beats() : (performance.now() / 1000) * (STATION_BPM[dbgRadio] / 60));
       radio.start(dbgRadio).catch(() => {});
     }
     if (sp.has('offernow')) setTimeout(() => me.offer(), Number(sp.get('offernow')) || 3000);
