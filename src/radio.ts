@@ -2,12 +2,14 @@
 //   lofi  山间 lo-fi：76 拍，电钢琴七和弦、软底鼓、轻军鼓、摇摆的踩镲、贝斯，偶尔一句五声音阶的小旋律，底下一层黑胶噪声
 //   rain  雨天钢琴：一直下着的雨声，钢琴慢慢分解和弦，偶尔屋檐滴水
 //   qin   古琴夜话：拨弦（Karplus–Strong 合成）走五声音阶，偶尔滑音，低音持续，远处几声虫鸣
+//   disco 半山夜场：124 拍的 house，静音蹦迪用。四四拍底鼓、二四拍拍手、反拍开镲，贝斯走八分反拍，和弦切分着打，
+//         其余声部跟着底鼓往下压一下（有呼吸感）；每八小节的后四小节加一串琶音，第八小节末尾一串军鼓
 // 拍子用 AudioContext 的时钟排：每 25 毫秒看一眼，把接下来 0.15 秒里的音符排进去
 import type { AudioEngine } from './audio';
 import { STATION_BPM } from './monk';
 
-export type StationId = 'lofi' | 'rain' | 'qin';
-export const STATIONS: StationId[] = ['lofi', 'rain', 'qin'];
+export type StationId = 'lofi' | 'disco' | 'rain' | 'qin';
+export const STATIONS: StationId[] = ['lofi', 'disco', 'rain', 'qin'];
 
 const midi = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
 
@@ -17,6 +19,8 @@ export class Radio {
   private out: GainNode | null = null;
   private tone: BiquadFilterNode | null = null;
   private delay: DelayNode | null = null;
+  // 夜场台：除底鼓以外的声部都接在这里，底鼓一响就压一下
+  private pump: GainNode | null = null;
   private t0 = 0;
   private stepT = 0;
   private step = 0;
@@ -54,17 +58,22 @@ export class Radio {
     this.out.gain.setTargetAtTime(1, ctx.currentTime, 0.4);
     this.tone = ctx.createBiquadFilter();
     this.tone.type = 'lowpass';
-    this.tone.frequency.value = id === 'lofi' ? 3200 : id === 'rain' ? 6000 : 7000;
+    this.tone.frequency.value = id === 'lofi' ? 3200 : id === 'rain' ? 6000 : id === 'disco' ? 9000 : 7000;
     this.delay = ctx.createDelay(1);
     this.delay.delayTime.value = (60 / STATION_BPM[id]) * 0.75;
     const fb = ctx.createGain();
     fb.gain.value = 0.28;
     const wet = ctx.createGain();
-    wet.gain.value = id === 'lofi' ? 0.12 : 0.26;
+    wet.gain.value = id === 'lofi' ? 0.12 : id === 'disco' ? 0.1 : 0.26;
     this.out.connect(this.tone).connect(bus);
     this.out.connect(this.delay);
     this.delay.connect(fb).connect(this.delay);
     this.delay.connect(wet).connect(this.tone);
+    this.pump = null;
+    if (id === 'disco') {
+      this.pump = ctx.createGain();
+      this.pump.connect(this.out);
+    }
     this.beds = [];
     if (id === 'lofi') this.beds.push(this.crackle());
     if (id === 'rain') this.beds.push(this.rainBed());
@@ -97,6 +106,7 @@ export class Radio {
       setTimeout(() => out.disconnect(), 900);
     }
     this.out = null;
+    this.pump = null;
   }
 
   private emit() {
@@ -115,6 +125,7 @@ export class Radio {
     }
     while (this.stepT < ctx.currentTime + 0.15) {
       if (this.station === 'lofi') this.lofi(this.step, this.stepT, sixteenth);
+      else if (this.station === 'disco') this.disco(this.step, this.stepT, sixteenth);
       else if (this.station === 'rain') this.rain(this.step, this.stepT, sixteenth);
       else this.qin(this.step, this.stepT, sixteenth);
       this.step++;
@@ -152,6 +163,36 @@ export class Radio {
     }
     // 黑胶的「噼啪」
     if (Math.random() < 0.06) this.click(t + Math.random() * s16);
+  }
+
+  // —— 半山夜场 ——
+  private disco(step: number, t: number, s16: number) {
+    const bar = Math.floor(step / 16), k = step % 16;
+    const phrase = bar % 8;
+    // 两小节一个和弦：Am7 → Fmaj7 → Dm7 → Em7
+    const chords = [
+      [57, 60, 64, 67],
+      [53, 57, 60, 64],
+      [50, 53, 57, 60],
+      [52, 55, 59, 62],
+    ];
+    const ch = chords[Math.floor(bar / 2) % 4];
+    // 鼓
+    if (k % 4 === 0) this.discoKick(t);
+    if (k === 4 || k === 12) this.clap(t);
+    if (k % 4 === 2) this.noiseHit(t, 0.1, 'highpass', 8000, 0.7, 0.13, this.pump ?? undefined);
+    else if (k % 2 === 1) this.hat(t, 0.018 + Math.random() * 0.01);
+    if (phrase === 7 && k >= 12) this.snare(t, 0.06 + (k - 12) * 0.035);
+    // 贝斯：八分反拍上弹根音，单数小节最后一下跳八度
+    if (k % 4 === 2) this.discoBass(midi(ch[0] - 24 + (k === 14 && bar % 2 === 1 ? 12 : 0)), t, s16 * 1.7);
+    // 和弦：切分着打
+    const stabs = bar % 2 === 0 ? [3, 6, 10] : [3, 6, 11, 14];
+    if (stabs.includes(k)) ch.forEach((n) => this.stab(midi(n), t, k === 3 ? 0.045 : 0.035));
+    // 后四小节：十六分音符的琶音，高一个八度
+    if (phrase >= 4 && (k % 2 === 0 || Math.random() < 0.45)) {
+      const order = [0, 1, 2, 3, 2, 1, 3, 2];
+      this.pluck(midi(ch[order[k % 8]] + 12), t, 0.16, 0.03);
+    }
   }
 
   // —— 雨天钢琴 ——
@@ -277,8 +318,8 @@ export class Radio {
     o.start(t);
     o.stop(t + 0.4);
   }
-  private noiseHit(t: number, v: number, type: BiquadFilterType, f: number, q: number, dur: number) {
-    const ctx = this.ctx!, out = this.out!;
+  private noiseHit(t: number, v: number, type: BiquadFilterType, f: number, q: number, dur: number, to?: AudioNode) {
+    const ctx = this.ctx!, out = to ?? this.out!;
     const n = ctx.createBufferSource();
     n.buffer = this.audio.noiseBuffer();
     const bp = ctx.createBiquadFilter();
@@ -301,6 +342,73 @@ export class Radio {
     o.connect(g).connect(out);
     o.start(t);
     o.stop(t + 0.15);
+  }
+  // 夜场的底鼓：更紧更低，顺带把其余声部压一下
+  private discoKick(t: number) {
+    const ctx = this.ctx!, out = this.out!;
+    const o = ctx.createOscillator();
+    o.frequency.setValueAtTime(150, t);
+    o.frequency.exponentialRampToValueAtTime(46, t + 0.12);
+    const g = ctx.createGain();
+    this.env(g, t, 0.002, 0.6, 0.3);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.36);
+    if (this.pump) {
+      this.pump.gain.setValueAtTime(0.45, t);
+      this.pump.gain.linearRampToValueAtTime(1, t + 0.2);
+    }
+  }
+  // 拍手：三下很快的噪声叠在一起，再拖一点尾巴
+  private clap(t: number) {
+    const to = this.pump ?? undefined;
+    for (let i = 0; i < 3; i++) this.noiseHit(t + i * 0.011, 0.16, 'bandpass', 1500, 1.2, 0.03, to);
+    this.noiseHit(t + 0.033, 0.12, 'bandpass', 1300, 0.9, 0.16, to);
+  }
+  // 夜场贝斯：锯齿波走低通，滤波器一下一下收起来，底下垫一个正弦
+  private discoBass(f: number, t: number, dur: number) {
+    const ctx = this.ctx!, out = this.pump ?? this.out!;
+    const g = ctx.createGain();
+    this.env(g, t, 0.004, 0.22, dur);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.Q.value = 4;
+    lp.frequency.setValueAtTime(1100, t);
+    lp.frequency.exponentialRampToValueAtTime(260, t + dur);
+    const saw = ctx.createOscillator();
+    saw.type = 'sawtooth';
+    saw.frequency.value = f;
+    const sub = ctx.createOscillator();
+    sub.frequency.value = f;
+    const sg = ctx.createGain();
+    sg.gain.value = 0.7;
+    saw.connect(lp).connect(g);
+    sub.connect(sg).connect(g);
+    g.connect(out);
+    for (const o of [saw, sub]) {
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    }
+  }
+  // 和弦短音：两只略微错开音高的锯齿波，低通从亮收到暗
+  private stab(f: number, t: number, v: number) {
+    const ctx = this.ctx!, out = this.pump ?? this.out!;
+    const g = ctx.createGain();
+    this.env(g, t, 0.004, v, 0.22);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(3000, t);
+    lp.frequency.exponentialRampToValueAtTime(700, t + 0.18);
+    lp.connect(g).connect(out);
+    for (const d of [-7, 7]) {
+      const o = ctx.createOscillator();
+      o.type = 'sawtooth';
+      o.frequency.value = f;
+      o.detune.value = d;
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + 0.3);
+    }
   }
   private hat(t: number, v: number) {
     this.noiseHit(t, v * 3, 'highpass', 7000, 0.7, 0.045);

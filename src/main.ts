@@ -24,6 +24,8 @@ import { Reader } from './reader';
 import { buildLife } from './world/life';
 import { buildShrines } from './world/shrines';
 import { buildCafe } from './world/cafe';
+import { buildDisco } from './world/disco';
+import { DanceUI } from './dance-ui';
 import { buildGarden } from './world/garden';
 import { WishUI, wishStore, assignHooks, newWishId, type Wish } from './wishes';
 import { CafeUI, parseCup, cupCode, SIPS, BREW_MS, DRINK_BY_ID, type DrinkId } from './coffee';
@@ -35,12 +37,12 @@ import { releaseProps } from './world/glb';
 import { TeaUI } from './tea-ui';
 import { buildResidents, type Role } from './residents';
 import { preloadTextures, setMaxAnisotropy, loadTexture } from './world/pbr';
-import { Monk, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
+import { Monk, DANCES, type Action, HANG_DURATION, HAPJANG_DURATION, INCENSE_DURATION, LANTERN_DURATION, FEED_DURATION, FORTUNE_DURATION } from './monk';
 import { progress, today as localToday, type SealId } from './progress';
 import { sealPop, showFortune, titleCard, loadUiFonts, serviceChip } from './ui-extra';
 import { LOTS } from './fortune';
 import { getLang } from './i18n';
-import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY, cafeLocal } from './layout';
+import { CAFE, CAFE_STAND, CAFE_BIN, CAFE_BIN_STAND, WISH_DESK_STAND, PERSIMMON_STAND, WISH_ALLEY, cafeLocal, onDanceFloor } from './layout';
 import { HALL, SPAWN, INCENSE, CUSHIONS, SEAT_BY_ID, TEA_SEATS, ALTAR_SPOT, ALTAR_BURNER, LANTERN_STAND, FORTUNE, POND, BRIDGE, BELL, COURT, HALLS, PAGODAS, type Seat, heightAt, canStep, planRoute, setSideHallOpen, sideHallOpen } from './layout';
 import { audio } from './audio';
 import { Net, type IncenseItem, type IncensePlace, type LanternMsg } from './net';
@@ -177,6 +179,7 @@ async function start() {
   const life = buildLife(scene);
   const shrines = buildShrines(scene);
   const cafe = buildCafe(scene);
+  const disco = buildDisco(scene);
   const garden = buildGarden(scene, { lite: isTouch });
   const tea = buildTea(scene);
   const distGain = (x: number, z: number) => THREE.MathUtils.clamp(1 - Math.hypot(x - player.x, z - player.z) / 110, 0.15, 1);
@@ -189,6 +192,7 @@ async function start() {
   const altarIncense = new IncenseSpot(hall.group, ALTAR_BURNER.x, hall.altarSandY, ALTAR_BURNER.z, 0.27, 18, 0.3);
   props.setLanternLevel(env.lanternLevel);
   cafe.setLanternLevel(env.lanternLevel);
+  disco.setLevel(env.lanternLevel);
   garden.setLanternLevel(env.lanternLevel);
   placeStatues(hall.group, hall.statueSlots, roomEnv);
   // 金身佛像用室内环境光反射
@@ -300,6 +304,7 @@ async function start() {
       env.setMode(m as TimeMode);
       props.setLanternLevel(env.lanternLevel);
       cafe.setLanternLevel(env.lanternLevel);
+      disco.setLevel(env.lanternLevel);
       garden.setLanternLevel(env.lanternLevel);
     },
     getTime: () => env.mode,
@@ -1086,7 +1091,34 @@ async function start() {
     me.setHeadphones(st);
     me.beatClock = st ? () => radio.beats() : null;
     if (st) ui.toast(t('radioOn', { x: t(`station_${st}` as Key) }));
+    // 第一次开夜场台、人又不在舞池里：告诉 TA 舞池在哪
+    if (st === 'disco' && !onDanceFloor(player.x, player.z) && !localStorage.getItem('sansa.discoHint')) {
+      localStorage.setItem('sansa.discoHint', '1');
+      setTimeout(() => ui.toast(t('discoGoFloor'), 4200), 2600);
+    }
   }, { slot: ui.dockExtra, chant: ui.chantBtn });
+
+  // —— 半山夜场：戴着耳机站在舞池里就跟着拍子跳；底部出现舞步条，点哪个换哪个 ——
+  let danceMove: Action = 'groove';
+  let onFloor = false;
+  let floorHintAt = -1e9;
+  const danceUI = new DanceUI(ui.root, (m) => {
+    danceMove = m;
+    if (DANCES.includes(me.action)) me.setAction(m);
+  });
+  function updateDance(moving: boolean) {
+    const here = !player.seat && onDanceFloor(player.x, player.z);
+    // 天黑以后刚走进舞池、没戴耳机：提示一下（舞池也是去吧台的过道，十分钟最多说一次）
+    if (here && !onFloor && !me.headphones && env.lanternLevel > 1 && performance.now() - floorHintAt > 600000) {
+      floorHintAt = performance.now();
+      ui.toast(t('discoNeedPhones'), 3600);
+    }
+    onFloor = here;
+    const want = here && !moving && me.headphones && (me.action === 'idle' || DANCES.includes(me.action));
+    if (want && !DANCES.includes(me.action)) me.setAction(danceMove);
+    else if (!want && DANCES.includes(me.action)) me.setAction(moving ? 'walk' : 'idle');
+    danceUI.set(DANCES.includes(me.action), danceMove);
+  }
 
   const cafeUI = new CafeUI(ui.root, {
     choose: (d) => brewCoffee(d),
@@ -2045,9 +2077,11 @@ async function start() {
     const dbgCup = sp.get('coffee');
     if (dbgCup && DRINK_BY_ID.has(dbgCup as DrinkId)) setTimeout(() => setCup({ d: dbgCup as DrinkId, sips: Number(sp.get('sips') ?? SIPS) }), 1000);
     if (sp.has('sipnow')) setTimeout(() => me.sip(), Number(sp.get('sipnow')) || 3000);
-    // 调试：&radio=lofi|rain|qin 直接戴上耳机开台
+    // 调试：&radio=lofi|disco|rain|qin 直接戴上耳机开台；&dance=groove|clap|jump|spin 选舞步
     const dbgRadio = sp.get('radio') as StationId | null;
-    if (dbgRadio && ['lofi', 'rain', 'qin'].includes(dbgRadio)) {
+    const dbgDance = sp.get('dance') as Action | null;
+    if (dbgDance && DANCES.includes(dbgDance)) danceMove = dbgDance;
+    if (dbgRadio && ['lofi', 'disco', 'rain', 'qin'].includes(dbgRadio)) {
       me.setHeadphones(dbgRadio);
       me.beatClock = () => radio.beats();
       radio.start(dbgRadio).catch(() => {});
@@ -2636,6 +2670,7 @@ async function start() {
     } else if (me.action === 'walk') {
       me.setAction(baseAction());
     }
+    updateDance(moving);
     const ty = player.seat ? seatY(player.seat) : heightAt(player.x, player.z);
     player.y += (ty - player.y) * Math.min(1, dt * 14);
     me.root.position.set(player.x, player.y, player.z);
@@ -2783,6 +2818,7 @@ async function start() {
     props.update(dt, elapsed);
     altarIncense.update(dt, elapsed);
     cafe.update(dt, elapsed);
+    disco.update(dt, elapsed);
     garden.update(dt, elapsed);
     buildings.bell.update(dt);
     env.follow(player.x, player.z);
@@ -2799,6 +2835,7 @@ async function start() {
       env.update();
       props.setLanternLevel(env.lanternLevel);
       cafe.setLanternLevel(env.lanternLevel);
+      disco.setLevel(env.lanternLevel);
       garden.setLanternLevel(env.lanternLevel);
     }
     env.tick(dt, camera.position);

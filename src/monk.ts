@@ -11,7 +11,10 @@ export type Action =
   // 常住僧人的日常：坐着读经、喝茶、讲经；站着浇水、擦拭、奉茶；跪着打水；提壶走、端茶走、拨念珠走
   | 'read' | 'tea' | 'teach' | 'water' | 'wipe' | 'serve' | 'fill' | 'canwalk' | 'tray' | 'beadwalk'
   // 咖啡师父在柜台后做咖啡；祈福灯廊里举灯挂上去
-  | 'brew' | 'hang';
+  | 'brew' | 'hang'
+  // 半山夜场的四种舞步：摇摆、拍手、蹦、转圈（戴着耳机站上舞池时跳）
+  | 'groove' | 'clap' | 'jump' | 'spin';
+export const DANCES: Action[] = ['groove', 'clap', 'jump', 'spin'];
 // 会移动脚步的动作（走路的几种样子）
 export const GAITS: Action[] = ['walk', 'canwalk', 'tray', 'beadwalk'];
 
@@ -336,7 +339,19 @@ const HEAD_R = new THREE.Vector3(0.28, 0.27, 0.272);
 
 // —— 头戴耳机（耳机电台）：奶白头梁、焦糖色耳罩、深色海绵垫，按 Q 版大头的尺寸做 ——
 // 各电台的拍速：戴着耳机的人跟着点头（别人看到的是同一个拍速，不一定同一拍）
-export const STATION_BPM: Record<string, number> = { lofi: 76, rain: 60, qin: 54 };
+export const STATION_BPM: Record<string, number> = { lofi: 76, disco: 124, rain: 60, qin: 54 };
+// 耳罩外圈的灯按电台亮不同颜色（静音蹦迪的耳机就是这样分台的），别人一眼看出谁在听哪个台
+export const STATION_GLOW: Record<string, string> = { lofi: '#ffb347', disco: '#ff4fd8', rain: '#58b8ff', qin: '#5fe0a0' };
+const glowMats = new Map<string, THREE.Material>();
+function stationGlow(station: string) {
+  let m = glowMats.get(station);
+  if (!m) {
+    const c = STATION_GLOW[station] ?? '#ffffff';
+    m = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.4, roughness: 0.4 });
+    glowMats.set(station, m);
+  }
+  return m;
+}
 const NOD_ACTIONS = new Set(['idle', 'bench', 'sit', 'walk']);
 let phonesKit: { band: THREE.BufferGeometry; cups: THREE.BufferGeometry; pads: THREE.BufferGeometry; rims: THREE.BufferGeometry; mats: THREE.Material[] } | null = null;
 function phonesGeo() {
@@ -351,7 +366,7 @@ function phonesGeo() {
   const cupProfile = [[0, -0.03], [0.064, -0.03], [0.074, -0.022], [0.078, 0], [0.074, 0.022], [0.064, 0.03], [0, 0.03]].map(([r, y]) => new THREE.Vector2(r, y));
   const cup = new THREE.LatheGeometry(cupProfile, 28).rotateZ(Math.PI / 2);
   const pad = new THREE.TorusGeometry(0.058, 0.022, 10, 28).rotateY(Math.PI / 2);
-  const rim = new THREE.TorusGeometry(0.075, 0.005, 6, 28).rotateY(Math.PI / 2);
+  const rim = new THREE.TorusGeometry(0.076, 0.008, 6, 28).rotateY(Math.PI / 2);
   const side = (g: THREE.BufferGeometry, x: number) => [g.clone().translate(x, 0.205, -0.015), g.clone().translate(-x, 0.205, -0.015)];
   phonesKit = {
     band,
@@ -664,6 +679,7 @@ export class Monk {
   private torso = new THREE.Group();
   private headG = new THREE.Group();
   private phones: THREE.Group | null = null;
+  private phonesRim: THREE.Mesh | null = null;
   private phonesBpm = 0;
   // 本机戴耳机时由电台给出准确的拍子（几拍了），别人的用本地时钟按拍速估
   beatClock: (() => number) | null = null;
@@ -1066,6 +1082,46 @@ export class Monk {
     arm(p.armRp, p.armRy, p.armRr, this.armR, this.elbowR, this.handR);
   }
 
+  // —— 跳舞：跟着耳机里的拍子（别人看到的用同一个拍速、自己的钟） ——
+  private twist = 0; // 胯部以上绕竖轴转的角度（转圈、摇摆时扭身）
+  private dancePose(): Pose {
+    const bpm = this.phonesBpm || 110;
+    const beats = this.beatClock ? this.beatClock() : (performance.now() / 1000) * (bpm / 60);
+    const ph = beats - Math.floor(beats);
+    const hit = Math.pow(Math.max(0, Math.cos(ph * Math.PI * 2)), 2); // 正拍上是 1
+    const side = Math.sin(beats * Math.PI); // 两拍一个来回
+    const inBar = beats % 4;
+    switch (this.action) {
+      case 'clap': {
+        // 前两拍在胸前拍，后两拍举到脸前拍；正拍上两手合拢
+        const high = inBar >= 2 ? 1 : 0;
+        const lift = -1.45 - high * 0.55 + hit * 0.12;
+        this.twist = side * 0.08;
+        return mk({ drop: -0.025 * hit, head: 0.08 * hit - high * 0.12, torso: 0.03, armLp: lift, armRp: lift, armLy: -0.2 - hit * 0.65, armRy: 0.2 + hit * 0.65, armLr: 0.1, armRr: -0.1, wrist: -1.3, sway: side * 0.04 });
+      }
+      case 'jump': {
+        // 每拍蹦一下，落地在正拍上；左右手轮流往上举
+        const air = Math.sin(ph * Math.PI);
+        const odd = Math.floor(beats) % 2 === 1;
+        this.twist = 0;
+        return mk({ bob: air * 0.1, drop: -0.03 * hit, legL: -0.22 * air, legR: -0.22 * air, head: -0.08 * air + 0.06 * hit, armLp: odd ? -2.5 : -0.9, armRp: odd ? -0.9 : -2.5, armLy: -0.25, armRy: 0.25, armLr: odd ? 0.25 : 0, armRr: odd ? 0 : -0.25, wrist: -0.2 });
+      }
+      case 'spin': {
+        // 前两拍原地摇摆，后两拍张开手臂转一圈
+        const k = inBar >= 2 ? (inBar - 2) / 2 : 0;
+        const e = k * k * (3 - 2 * k);
+        this.twist = e * Math.PI * 2;
+        const open = Math.sin(k * Math.PI);
+        return mk({ drop: -0.02 * hit, sway: side * 0.05 + open * 0.06, head: 0.06 * hit, armLp: -1.1 - open * 0.3 + side * 0.15, armRp: -1.1 - open * 0.3 - side * 0.15, armLy: -0.35 + open * 0.3, armRy: 0.35 - open * 0.3, armLr: open * 1.0, armRr: -open * 1.0, wrist: -0.5 });
+      }
+      default: {
+        // 摇摆：膝盖跟拍子往下一沉，身子左右扭，两臂弯在胸前一前一后
+        this.twist = side * 0.22;
+        return mk({ drop: -0.03 * hit, sway: side * 0.06, torso: 0.05, head: 0.12 * hit, legL: 0.12 * Math.max(0, side), legR: 0.12 * Math.max(0, -side), armLp: -1.35 + side * 0.28, armRp: -1.35 - side * 0.28, armLy: -0.35, armRy: 0.35, armLr: 0.15, armRr: -0.15, wrist: -0.6 });
+      }
+    }
+  }
+
   setAction(a: Action, restart = false) {
     if (a === this.action && !restart) return;
     this.action = a;
@@ -1095,10 +1151,12 @@ export class Monk {
         const ms = new THREE.Mesh(g, m);
         ms.castShadow = true;
         this.phones.add(ms);
+        if (g === K.rims) this.phonesRim = ms;
       }
       this.headG.add(this.phones);
     }
     this.phones.visible = true;
+    if (this.phonesRim) this.phonesRim.material = stationGlow(station);
     this.phonesBpm = STATION_BPM[station] ?? 70;
   }
   get headphones() {
@@ -1407,9 +1465,17 @@ export class Monk {
       case 'rosary':
         target = mk({ armLp: -1.05, armRp: -1.1, armLy: -0.7, armRy: 0.75, wrist: -0.4, head: 0.28, torso: 0.05, bob: Math.sin(t * 1.4) * 0.006 });
         break;
+      case 'groove':
+      case 'clap':
+      case 'jump':
+      case 'spin':
+        target = this.dancePose();
+        rate = 16;
+        break;
       default:
         target = mk({ bob: Math.sin(t * 1.6) * 0.008 });
     }
+    if (!DANCES.includes(this.action)) this.twist = 0;
 
     this.cupPose(target, dt);
     const k = 1 - Math.exp(-rate * dt);
@@ -1422,6 +1488,7 @@ export class Monk {
     }
     const hipY = HIP + p.drop + p.bob;
     this.hips.position.y = hipY;
+    this.hips.rotation.y = this.twist;
     // 下摆随胯部高度压扁（跪下、坐下时不穿进地面），腿向前伸时也收起来
     const fwd = Math.min(1, Math.max(0, (-(p.legL + p.legR) / 2 - 0.6) / 0.8));
     this.skirt.scale.y = Math.min(1, Math.max(0.18, hipY / HIP)) * (1 - 0.7 * fwd);

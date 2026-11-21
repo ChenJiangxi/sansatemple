@@ -144,6 +144,13 @@ export const CAFE_BIN = cafeWorld(4.95, 7.85); // 空杯回收桶：露台右前
 export const CAFE_BIN_STAND = cafeWorld(4.0, 7.85);
 export const CAFE_FLAG = cafeWorld(-5.15, 8.15); // 布幌子的竹竿：露台左前角
 export const CAFE_MENU = cafeWorld(1.9, 9.0); // 菜单木牌：露台入口旁
+// 半山夜场（静音蹦迪）：露台中间、两排伞桌之间那条过道就是舞池（本地坐标）。
+// 舞池前沿左边一张 DJ 台（台面朝着咖啡馆），前沿两角各一根竹竿，和前檐两根柱子之间拉串灯
+export const DISCO = { lx0: -1.6, lx1: 1.6, lz0: 3.45, lz1: 8.3, boothX0: -1.55, boothX1: -0.45, boothZ0: 7.85, boothZ1: 8.35, poleX: 1.75, poleZ: 8.28 };
+export function onDanceFloor(x: number, z: number) {
+  const { lx, lz } = cafeLocal(x, z);
+  return lx > DISCO.lx0 && lx < DISCO.lx1 && lz > DISCO.lz0 && lz < DISCO.lz1;
+}
 // 露台四张伞桌、厅里两侧窗边各一张；每张两只圆凳，坐下面朝桌子，从前面（露台一侧）走过去坐
 export const CAFE_TABLE_LOCAL: [number, number][] = [[-3.0, 5.0], [3.0, 5.0], [-3.0, 7.3], [3.0, 7.3], [-4.2, 1.2], [4.2, 1.2]];
 export const CAFE_TABLES = CAFE_TABLE_LOCAL.map(([lx, lz]) => cafeWorld(lx, lz));
@@ -256,6 +263,8 @@ circles.push({ x: INCENSE.x, z: INCENSE.z, r: INCENSE.r });
   for (const tb of CAFE_TABLES) circles.push({ ...tb, r: 0.5 });
   for (const sx of [-1, 1]) circles.push({ ...cafeWorld(sx * 5.0, 3.75), r: 0.32 });
   circles.push({ ...CAFE_FLAG, r: 0.16 }, { ...CAFE_MENU, r: 0.42 }, { ...CAFE_BIN, r: 0.44 });
+  box(DISCO.boothX0, DISCO.boothZ0, DISCO.boothX1, DISCO.boothZ1);
+  for (const sx of [-1, 1]) circles.push({ ...cafeWorld(sx * DISCO.poleX, DISCO.poleZ), r: 0.12 });
 }
 // 灯廊的木杆、祈福台、柿饼架
 for (const x of [WISH_ALLEY.xE, WISH_ALLEY.xW]) for (const z of WISH_ALLEY.zs) circles.push({ x, z, r: 0.16 });

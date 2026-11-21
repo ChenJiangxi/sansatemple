@@ -17,14 +17,14 @@ const ROOMS = 5;
 const CAPACITY = 50;
 const TICK_MS = 120;
 const INCENSE_MS = 3 * 60 * 1000;
-const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune', 'hang', 'tea']);
+const ACTIONS = new Set(['idle', 'walk', 'bow', 'hapjang', 'sit', 'bench', 'moktak', 'rosary', 'incense', 'lantern', 'feed', 'fortune', 'hang', 'tea', 'groove', 'clap', 'jump', 'spin']);
 const LANTERN_MS = 8 * 60 * 1000; // 河灯在水上漂 8 分钟
 const LANTERN_MAX = 30;
 const SEAT_RE = /^(c\d{1,3}|b\d{1,2}-\d|k\d{1,2}|t\d)$/;
 // 手里的咖啡：饮品.还剩几口
 const CUP_RE = /^(latte|americano|coldbrew|osmanthus|decaf)\.[0-3]$/;
 // 耳机电台：戴着耳机在听哪个台（空串是没戴）
-const RADIO_RE = /^(lofi|rain|qin)?$/;
+const RADIO_RE = /^(lofi|disco|rain|qin)?$/;
 const LOOK_RE = /^[a-z]{2,10}\.[a-z]{2,10}\.[0-6]$/;
 const PLACES = new Set(['yard', 'altar']);
 
